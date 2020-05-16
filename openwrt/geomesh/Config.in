@@ -1,0 +1,9 @@
+menu "Configuration"
+	depends on PACKAGE_geomesh
+
+config GEOMESH_ENABLE_DEBUG
+	bool "Build in debug mode"
+	depends on PACKAGE_geomesh
+	default n
+
+endmenu

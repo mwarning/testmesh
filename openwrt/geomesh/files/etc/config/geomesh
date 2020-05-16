@@ -1,0 +1,8 @@
+
+config testmesh
+	option enabled 1
+	option protocol 'flood_0'
+	#option control '/var/testmesh.sock'
+	list ifname 'eth0'
+	list ifname 'eth1'
+	list peer 'somepeer.example.com'
