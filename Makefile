@@ -1,7 +1,7 @@
 
 
-main: main.c net.c log.c utils.c unix.c
-	$(CC) $(CFLAGS) -DDEBUG -o main main.c net.c log.c utils.c unix.c
+main: main.c net.c log.c utils.c unix.c other.c
+	$(CC) $(CFLAGS) -DDEBUG -o main main.c net.c log.c utils.c unix.c other.c
 
 clean:
 	rm main

@@ -25,18 +25,21 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <math.h>
 
 #include "log.h"
 #include "utils.h"
 #include "net.h"
 #include "unix.h"
+#include "other.h"
 #include "main.h"
 
 
-/* buffer for reading from tun/tap interface, must be >= 1500 */
-#define BUFSIZE 2000
+//sudo setcap cap_net_admin,cap_net_raw=eip a.out
 
 struct config *gconf = NULL;
+float g_coords[3] = {NAN};
+int g_sock_raw = -1;
 
 struct interface {
   char *ifname;
@@ -47,7 +50,34 @@ struct interface {
   struct interface *next;
 };
 
-struct interface *interfaces = NULL;
+struct neighbor {
+	IP addr; // if set, send to IP address, or just an interface
+	int ifindex; // if set, send multicast packet (or put in scope id?)
+	float coords[3];
+	struct neighbor *next;
+};
+
+/*
+send to neighbor:
+- over the internet (IP address)
+- send to interface
+*/
+
+struct interface *g_interfaces = NULL;
+struct neighbor *g_neighbors = NULL;
+
+void add_neighbor(int ifindex, IP *addr)
+{
+	struct neighbor *neighbor = (struct neighbor *) malloc(sizeof(struct neighbor));
+	neighbor->ifindex = ifindex;
+	memcpy(&neighbor->addr, addr, sizeof(addr));
+	neighbor->coords[0] = NAN;
+	neighbor->coords[1] = NAN;
+	neighbor->coords[2] = NAN;
+
+	neighbor->next = g_neighbors;
+	g_neighbors = neighbor;
+}
 
 void add_interface(const char *ifname)
 {
@@ -55,8 +85,8 @@ void add_interface(const char *ifname)
   memset(interface, 0, sizeof(struct interface));
   interface->ifname = strdup(ifname);
   
-  interface->next = interfaces;
-  interfaces = interface;
+  interface->next = g_interfaces;
+  g_interfaces = interface;
 }
 
 struct in6_addr get_ip_addr(int sockfd, const char *ifname)
@@ -85,7 +115,7 @@ struct in6_addr get_ip_addr(int sockfd, const char *ifname)
 struct in6_addr inet6_addr(const char* s) {
 	struct in6_addr addr;
 	inet_pton(AF_INET6, s, &addr);
-	return addr; //.sin6_addr; //.s6_addr;
+	return addr;
 }
 
 //https://www.tenouk.com/Module41c.html
@@ -160,7 +190,7 @@ int setup_multicast_inbound_sockets6(struct interface *interface)
 	interface->inbound_multicast_socket = fd;
 }
 
-int setup_interface(int sockfd, struct interface *interface)
+int setup_interface(struct interface *interface)
 {
   struct ifreq if_idx;
   struct ifreq if_mac;
@@ -168,7 +198,7 @@ int setup_interface(int sockfd, struct interface *interface)
   /* Get the index of the interface to send on */
   memset(&if_idx, 0, sizeof(struct ifreq));
   strncpy(if_idx.ifr_name, interface->ifname, IFNAMSIZ-1);
-  if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0) {
+  if (ioctl(g_sock_raw, SIOCGIFINDEX, &if_idx) < 0) {
 	  perror("SIOCGIFINDEX");
 	  return 1;
 	}
@@ -176,7 +206,7 @@ int setup_interface(int sockfd, struct interface *interface)
   /* Get the MAC address of the interface to send on */
   memset(&if_mac, 0, sizeof(struct ifreq));
   strncpy(if_mac.ifr_name, interface->ifname, IFNAMSIZ-1);
-  if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0) {
+  if (ioctl(g_sock_raw, SIOCGIFHWADDR, &if_mac) < 0) {
       perror("SIOCGIFHWADDR");
       return 1;
   }
@@ -208,57 +238,6 @@ int setup_tun(int sockfd, const char *ifname)
 	return 0;
 }
 
-//https://stackoverflow.com/questions/12177708/raw-socket-promiscuous-mode-not-sniffing-what-i-write
-int interface_socket(const char *ifname)
-{
-	int fd;
-	struct ifreq ifr;
-	struct sockaddr_ll interfaceAddr;
-	struct packet_mreq mreq;
-
-	if ((fd = socket(PF_PACKET,SOCK_RAW, htons(ETH_P_ALL))) < 0)
-	    return -1;
-
-	memset(&interfaceAddr,0,sizeof(interfaceAddr));
-	memset(&ifr,0,sizeof(ifr));
-	memset(&mreq,0,sizeof(mreq));
-
-	memcpy(&ifr.ifr_name,ifname,IFNAMSIZ);
-	ioctl(fd,SIOCGIFINDEX,&ifr);
-
-	interfaceAddr.sll_ifindex = ifr.ifr_ifindex;
-	interfaceAddr.sll_family = AF_PACKET;
-
-	if (bind(fd, (struct sockaddr *)&interfaceAddr,sizeof(interfaceAddr)) < 0)
-	    return -2;
-
-	mreq.mr_ifindex = ifr.ifr_ifindex;
-	mreq.mr_type = PACKET_MR_PROMISC;
-	mreq.mr_alen = 6;
-
-	if (setsockopt(fd,SOL_PACKET,PACKET_ADD_MEMBERSHIP,
-	     (void*)&mreq,(socklen_t)sizeof(mreq)) < 0)
-	        return -3;
-
-	return fd;
-}
-
-/*
-unsigned char buf[1500];
-struct sockaddr_ll addr;
-socklen_t addr_len = sizeof(addr);
-n = recvfrom(fd, buf, 2000, 0, (struct sockaddr*)&addr, &addr_len);
-if (n <= 0)
-{
-    //Error reading
-}
-else if (addr.sll_pkttype == PACKET_OUTGOING)
-{
-    //The read data are not writing by me.
-    //Use only this data to copy in the other network.
-}
-*/
-
 int tun_alloc(char *dev, int flags) {
 
   struct ifreq ifr;
@@ -287,55 +266,6 @@ int tun_alloc(char *dev, int flags) {
   strcpy(dev, ifr.ifr_name);
 
   return fd;
-}
-
-/**************************************************************************
- * cread: read routine that checks for errors and exits if an error is    *
- *        returned.                                                       *
- **************************************************************************/
-int cread(int fd, char *buf, int n){
-  
-  int nread;
-
-  if((nread=read(fd, buf, n)) < 0){
-    perror("Reading data");
-    exit(1);
-  }
-  return nread;
-}
-
-/**************************************************************************
- * cwrite: write routine that checks for errors and exits if an error is  *
- *         returned.                                                      *
- **************************************************************************/
-int cwrite(int fd, char *buf, int n){
-  
-  int nwrite;
-
-  if((nwrite=write(fd, buf, n)) < 0){
-    perror("Writing data");
-    exit(1);
-  }
-  return nwrite;
-}
-
-/**************************************************************************
- * read_n: ensures we read exactly n bytes, and puts them into "buf".     *
- *         (unless EOF, of course)                                        *
- **************************************************************************/
-int read_n(int fd, char *buf, int n) {
-
-  int nread, left = n;
-
-  while(left > 0) {
-    if ((nread = cread(fd, buf, left)) == 0){
-      return 0 ;      
-    }else {
-      left -= nread;
-      buf += nread;
-    }
-  }
-  return n;  
 }
 
 static int _ioctl_v6 = -1;
@@ -412,8 +342,19 @@ void outbound_multicast(int events, int fd) {
 	inet_pton(AF_INET6, "ff12::1234", &groupSock.sin6_addr);
 	groupSock.sin6_port = htons(4321);
 
-	if (sendto(fd, "hello", 6, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) > 0) {
+	const char *msg = "hello";
+	if (sendto(fd, msg, strlen(msg) + 1, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)) > 0) {
 		printf("send: hello\n");
+	}
+
+	// send raw..
+
+	// let's try to send via raw socket
+	uint8_t dmac[ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+	struct interface* interface = g_interfaces;
+	while (interface) {
+		send_packet(g_sock_raw, interface->ifindex, interface->mac, dmac, msg, strlen(msg) + 1);
+		interface = interface->next;
 	}
 }
 
@@ -430,6 +371,13 @@ void inbound_multicast(int events, int fd) {
 	}
 }
 
+void tap_handle(int events, int fd)
+{
+	if (events <= 0) {
+		return;
+	}
+}
+
 int main(int argc, char *argv[]) {
   struct config config = {0};
   config.is_running = 1;
@@ -442,14 +390,6 @@ int main(int argc, char *argv[]) {
   int tap_fd, option;
   int flags = IFF_TAP; // IFF_TUN;
   char entry_if[IFNAMSIZ] = "tun0";
-  int maxfd;
-  uint16_t nwrite, plength;
-  char buffer[BUFSIZE];
-  struct sockaddr_in local, remote;
-  int sock_fd, net_fd, optval = 1;
-  socklen_t remotelen;
-  int cliserv = -1;    /* must be specified on cmd line */
-  unsigned long int tap2net = 0, net2tap = 0;
 
   /* Check command line options */
   while((option = getopt(argc, argv, "i:h")) > 0) {
@@ -481,19 +421,19 @@ int main(int argc, char *argv[]) {
     usage(argv[0]);
   }
 
-  int sockfd;
+
   //socket(AF_PACKET,SOCK_RAW,htons(ETH_P_ALL));
-  if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
+  if ((g_sock_raw = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
       perror("socket");
       return 1;
   }
 
   unix_signals();
 
-	struct interface *interface = interfaces;
+	struct interface *interface = g_interfaces;
 	while (interface) {
 		log_info("setup %s", interface->ifname);
-	  setup_interface(sockfd, interface);
+	  setup_interface(interface);
 	  net_add_handler(interface->outbound_multicast_socket, &outbound_multicast);
 	  net_add_handler(interface->inbound_multicast_socket, &inbound_multicast);
 	  interface = interface->next;
@@ -508,6 +448,8 @@ int main(int argc, char *argv[]) {
   _set_base_tunnel_up(entry_if);
 
   log_debug("Successfully connected to interface %s", entry_if);
+
+  net_add_handler(tap_fd, &tap_handle);
 
   net_loop();
 
