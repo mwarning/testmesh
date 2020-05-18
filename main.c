@@ -72,6 +72,22 @@ struct neighbor {
 struct interface *g_interfaces = NULL;
 struct neighbor *g_neighbors = NULL;
 
+int neighbor_equal(const struct neighbor * neigh, const struct in6_addr *addr, int port) {
+    return (0 == memcmp(&neigh->addr.sin6_addr, addr, 16) && port == ntohs(neigh->addr.sin6_port));
+}
+
+int neighbor_exists(const struct in6_addr *addr, int port)
+{
+    struct neighbor *neighbor = g_neighbors;
+    while (neighbor) {
+        if (neighbor_equal(neighbor, addr, port)) {
+            return 1;
+        }
+        neighbor = neighbor->next;
+    }
+    return 0;
+}
+
 void add_neighbor(const struct in6_addr *addr, int port)
 {
     // neighbor UDP address
@@ -335,7 +351,7 @@ int tun_alloc(char *dev, int flags) {
 
 static int _ioctl_v6 = -1;
 
-static int _set_base_tunnel_up(const char* name) {
+static int set_base_tunnel_up(const char* name) {
     struct ifreq ifr;
     int oldflags;
 
@@ -372,33 +388,28 @@ static int _set_base_tunnel_up(const char* name) {
     return 0;
 }
 
-/**************************************************************************
- * usage: prints usage and exits.                                         *
- **************************************************************************/
-void usage(const char *progname) {
-  fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "%s -i <ifacename> [-s|-c <serverIP>] [-p <port>] [-u|-a] [-d]\n", progname);
-  fprintf(stderr, "%s -h\n", progname);
-  fprintf(stderr, "\n");
-  fprintf(stderr, "-i <ifacename>: Name of interface to use (mandatory)\n");
-  fprintf(stderr, "-s|-c <serverIP>: run in server mode (-s), or specify server address (-c <serverIP>) (mandatory)\n");
-  fprintf(stderr, "-p <port>: port to listen on (if run in server mode) or to connect to (in client mode), default 55555\n");
-  fprintf(stderr, "-u|-a: use TUN (-u, default) or TAP (-a)\n");
-  fprintf(stderr, "-d: outputs debug information while running\n");
-  fprintf(stderr, "-h: prints this help text\n");
-  exit(1);
+void usage(const char *pname) {
+    fprintf(stderr,
+        "Usage:\n"
+        "%s -i <ifacename>\n"
+        "%s -h\n"
+        "\n"
+        "-i <ifacename>: Name of interface to use (at least one needed)\n"
+        "-h: prints this help text\n",
+        pname,
+        pname
+    );
 }
 
 void periodic_handler(int _events, int _fd) {
     char msg[20];
 
     static time_t last = 0;
-    if ((last + 3) < gconf->time_now) {
+    if (last > 0 && (last + 3) < gconf->time_now) {
         return;
     } else {
         last = gconf->time_now;
     }
-
 
     struct interface *interface = g_interfaces;
     while (interface) {
@@ -430,7 +441,9 @@ void mcast_handler(int events, int fd)
     buffer[recv_len] = '\0';
     int port = atoi(buffer);
 
-    add_neighbor(&si_other.sin6_addr, port);
+    if (!neighbor_exists(&si_other.sin6_addr, port)) {
+        add_neighbor(&si_other.sin6_addr, port);
+    }
 }
 
 void ucast_handler(int events, int fd)
@@ -544,7 +557,7 @@ int main(int argc, char *argv[]) {
         switch(option) {
           case 'h':
             usage(argv[0]);
-            break;
+            return 0;
           case 'i':
             log_debug("add interface: %s\n", optarg);
             add_interface(optarg);
@@ -603,7 +616,7 @@ int main(int argc, char *argv[]) {
         interface = interface->next;
     }
 
-    _set_base_tunnel_up(entry_if);
+    set_base_tunnel_up(entry_if);
 
     log_debug("Successfully connected to interface %s", entry_if);
 
