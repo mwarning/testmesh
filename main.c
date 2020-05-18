@@ -41,7 +41,6 @@
 
 //sudo setcap cap_net_admin,cap_net_raw=eip a.out
 
-#define UDP_PORT 1244
 #define MULTICAST_ADDR "ff12::1234"
 #define MULTICAST_PORT 4321
 
@@ -60,7 +59,7 @@ struct interface {
     int mcast_receive_socket;
     int mcast_send_socket;
     int ucast_receive_socket;
-    struct in6_addr addr;
+    struct sockaddr_in6 addr;
     struct interface *next;
 };
 
@@ -104,43 +103,47 @@ void add_interface(const char *ifname)
 }
 
 //https://www.tenouk.com/Module41c.html
-void setup_multicast_outbound_sockets6(struct interface *interface)
+int setup_mcast_send_socket(int *sock, int ifindex)
 {
     struct in6_addr localInterface;
 
     int fd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (fd < 0) {
-        log_error("Opening datagram socket error");
-        exit(1);
+        log_error("socket() %s", strerror(errno));
+        return 1;
     }
 
     int loopch = 0;
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, (char *)&loopch, sizeof(loopch)) < 0) {
-        perror("Setting IP_MULTICAST_LOOP error");
+        log_error("IPV6_MULTICAST_LOOP %s", strerror(errno));
         close(fd);
-        exit(1);
+        return 1;
     }
 
     /* Set local interface for outbound multicast datagrams. */
     /* The IP address specified must be associated with a local, */
     /* multicast capable interface. */
-
-    int ifindex = interface->ifindex;
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &ifindex, sizeof(ifindex)) < 0) {
-      perror("Setting local interface error");
-      exit(1);
+        log_error("IPV6_MULTICAST_IF %s", strerror(errno));
+        return 1;
     }
 
-    interface->mcast_send_socket = fd;
+    *sock = fd;
+
+    return 0;
 }
 
-int setup_multicast_inbound_sockets6(struct interface *interface)
+int setup_mcast_receive_socket(int *sock, int ifindex)
 {
     int fd = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        log_error("socket() %s", strerror(errno));
+        return 1;
+    }
 
     int reuse = 1;
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse)) < 0) {
-        perror("Setting SO_REUSEADDR error");
+        log_error("SO_REUSEADDR: %s", strerror(errno));
         close(fd);
         return 1;
     }
@@ -151,7 +154,7 @@ int setup_multicast_inbound_sockets6(struct interface *interface)
     address.sin6_port = g_mcast_addr.sin6_port;
 
     if (bind(fd, (struct sockaddr*)&address, sizeof address) < 0) {
-        log_error("Binding datagram socket error");
+        log_error("bind(): %s", strerror(errno));
         close(fd);
         return 1;
     }
@@ -159,16 +162,17 @@ int setup_multicast_inbound_sockets6(struct interface *interface)
     // JOIN MEMBERSHIP
     struct ipv6_mreq group;
     //group.ipv6mr_multiaddr = get_ip_addr(fd, interface->ifname);
-    group.ipv6mr_interface = interface->ifindex;
+    group.ipv6mr_interface = ifindex;
     memcpy(&group.ipv6mr_multiaddr, &g_mcast_addr.sin6_addr, sizeof(struct in6_addr));
 
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &group, sizeof group) < 0) {
-        log_error("Adding multicast group error");
+        log_error("IPV6_ADD_MEMBERSHIP: %s", strerror(errno));
         close(fd);
         return 1;
     }
 
-    interface->mcast_receive_socket = fd;
+    *sock = fd;
+
     return 0;
 }
 
@@ -182,15 +186,18 @@ int setup_unicast_socket6(struct interface *interface)
         return 1;
     }
 
+/*
     struct sockaddr_in6 si_me = {0};
     si_me.sin6_family = AF_INET6;
-    si_me.sin6_port = htons(UDP_PORT);
-    memcpy(&si_me.sin6_addr, &interface->addr, sizeof(struct in6_addr));
+    si_me.sin6_port = htons(port_random());
+    memcpy(&si_me.sin6_addr, &interface->addr.sin6_addr, sizeof(struct in6_addr));
+*/
 
-    printf("bind to udp: %s (%s)\n", sockaddr6_str(&si_me), interface->ifname);
+    printf("bind to udp: %s (%s)\n", sockaddr6_str(&interface->addr), interface->ifname);
 
     // bind socket to port
-    if (bind(sock, (struct sockaddr*)&si_me, sizeof(si_me)) == -1) {
+    //if (bind(sock, (struct sockaddr*)&si_me, sizeof(si_me)) == -1) {
+    if (bind(sock, (struct sockaddr*)&interface->addr, sizeof(struct sockaddr_in6)) == -1) {
         perror("bind()");
         close(sock);
         return 1;
@@ -206,10 +213,8 @@ int setup_ipv6_address2(struct interface* interface)
     struct if_nameindex *if_nidxs, *intf;
 
     if_nidxs = if_nameindex();
-    if ( if_nidxs != NULL )
-    {
-        for (intf = if_nidxs; intf->if_index != 0 || intf->if_name != NULL; intf++)
-        {
+    if (if_nidxs != NULL) {
+        for (intf = if_nidxs; intf->if_index != 0 || intf->if_name != NULL; intf++) {
             printf("%s\n", intf->if_name);
         }
 
@@ -218,7 +223,7 @@ int setup_ipv6_address2(struct interface* interface)
     return 0;
 }
 
-int setup_ipv6_address(struct interface* interface)
+int setup_ipv6_address(struct sockaddr_in6 *addr, const char *ifname) //struct interface* interface)
 {
     struct ifaddrs *addrs;
     struct ifaddrs *cur;
@@ -234,21 +239,15 @@ int setup_ipv6_address(struct interface* interface)
         if (cur->ifa_addr && cur->ifa_addr->sa_family == AF_INET6) {
             struct sockaddr_in6 *in6 = (struct sockaddr_in6*) cur->ifa_addr;
 
-            if (strcmp(cur->ifa_name, interface->ifname) == 0) {
+            if (strcmp(cur->ifa_name, ifname) == 0) {
                 if (scope_id > in6->sin6_scope_id) {
                     continue;
                 }
 
-                scope_id = in6->sin6_scope_id;
-                memcpy(&interface->addr, &in6->sin6_addr, sizeof(struct in6_addr));
-                {
-                    char b[50];
-                    inet_ntop(AF_INET6, &in6->sin6_addr, b, sizeof(b));
-                    printf("set %s scope: %d, ifname: %s\n", b, in6->sin6_scope_id, interface->ifname);
-                }
+                memcpy(addr, in6, sizeof(struct sockaddr_in6));
+                addr->sin6_port = htons(port_random());
             }
         }
-        //ifa_addr
         cur = cur->ifa_next;
     }
 
@@ -256,14 +255,14 @@ int setup_ipv6_address(struct interface* interface)
 }
 
 
-int setup_interface(struct interface *interface)
+int setup_interface(struct interface *ifce)
 {
     struct ifreq if_idx;
     struct ifreq if_mac;
 
     /* Get the index of the interface to send on */
     memset(&if_idx, 0, sizeof(struct ifreq));
-    strncpy(if_idx.ifr_name, interface->ifname, IFNAMSIZ-1);
+    strncpy(if_idx.ifr_name, ifce->ifname, IFNAMSIZ-1);
     if (ioctl(g_sock_help, SIOCGIFINDEX, &if_idx) < 0) {
         log_error("SIOCGIFINDEX: %s", strerror(errno));
         return 1;
@@ -271,21 +270,23 @@ int setup_interface(struct interface *interface)
 
     /* Get the MAC address of the interface to send on */
     memset(&if_mac, 0, sizeof(struct ifreq));
-    strncpy(if_mac.ifr_name, interface->ifname, IFNAMSIZ-1);
+    strncpy(if_mac.ifr_name, ifce->ifname, IFNAMSIZ-1);
     if (ioctl(g_sock_help, SIOCGIFHWADDR, &if_mac) < 0) {
         log_error("SIOCGIFHWADDR: %s", strerror(errno));
         return 1;
     }
 
-    interface->ifindex = if_idx.ifr_ifindex;
-    memcpy(&interface->mac, (uint8_t *)&if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
+    ifce->ifindex = if_idx.ifr_ifindex;
+    memcpy(&ifce->mac, (uint8_t *)&if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
 
-    setup_multicast_outbound_sockets6(interface);
-    setup_multicast_inbound_sockets6(interface);
-    setup_ipv6_address(interface);
-    setup_unicast_socket6(interface);
+    setup_mcast_send_socket(&ifce->mcast_send_socket, ifce->ifindex);
+    setup_mcast_receive_socket(&ifce->mcast_receive_socket, ifce->ifindex);
+    setup_ipv6_address(&ifce->addr, ifce->ifname);
+    setup_unicast_socket6(ifce);
 
-  return 0;
+    log_info("interface %s: %s", ifce->ifname, sockaddr6_str(&ifce->addr));
+
+    return 0;
 }
 
 int setup_tun(int sockfd, const char *ifname)
@@ -389,43 +390,24 @@ void usage(const char *progname) {
 }
 
 void periodic_handler(int _events, int _fd) {
-    //printf("outbound_multicast %d\n", events);
+    char msg[20];
 
     static time_t last = 0;
-    if (gconf->time_now == last) {
+    if ((last + 3) < gconf->time_now) {
         return;
     } else {
         last = gconf->time_now;
     }
 
-    char msg[20];
-    sprintf(msg, "%d", UDP_PORT); 
 
     struct interface *interface = g_interfaces;
     while (interface) {
+        sprintf(msg, "%d", htons(interface->addr.sin6_port));
         if (sendto(interface->mcast_send_socket, msg, strlen(msg) + 1, 0, (struct sockaddr*)&g_mcast_addr, sizeof(g_mcast_addr)) > 0) {
-            printf("multicast send: %s\n", msg);
+            log_debug("multicast send: %s (%s)", msg, interface->ifname);
         }
         interface = interface->next;
     }
-
-    // send raw..
-
-/*
-
-  if ((g_sock_raw = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
-      perror("socket");
-      return 1;
-  }
-
-    // let's try to send via raw socket
-    uint8_t dmac[ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    struct interface* interface = g_interfaces;
-    while (interface) {
-        send_packet(g_sock_raw, interface->ifindex, interface->mac, dmac, msg, strlen(msg) + 1);
-        interface = interface->next;
-    }
-*/
 }
 
 // receive annoucements from neighbors
@@ -488,10 +470,11 @@ void tap_handler(int events, int fd)
       }
 
     //hexDump (NULL, buffer, len);
+    int ip_version = (buffer[0] >> 4) & 0xff;
 
     // IPv6 packet
-    if (((buffer[0] >> 4) & 0xff) != 6) {
-        log_warning("Not an IPv6 packet");
+    if (ip_version != 6) {
+        log_warning("not an IPv6 packet => drop");
         return;
     }
 
@@ -500,14 +483,20 @@ void tap_handler(int events, int fd)
     int payload_len = ntohs(*((uint16_t*) &buffer[4]));
     uint8_t *payload = (uint8_t*) &buffer[40];
     uint8_t next_header = buffer[7];
-    char srcip[INET6_ADDRSTRLEN];
-    char dstip[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &buffer[8], srcip, sizeof(srcip));
-    inet_ntop(AF_INET6, &buffer[24], dstip, sizeof(dstip));
-    log_info("%s => %s (%d)", srcip, dstip, payload_len);
+    struct in6_addr *saddr = (struct in6_addr *) &buffer[8];
+    struct in6_addr *daddr = (struct in6_addr *) &buffer[24];
+
+    char *tmp = strdup(addr6_str(saddr));
+    log_info("received on tap: %s => %s (%d)", tmp, addr6_str(daddr), payload_len);
+    free(tmp);
 
     if (40 + payload_len != read_len) {
-        log_warning("size mismatch\n");
+        log_warning("size mismatch => drop");
+        return;
+    }
+
+    if (IN6_IS_ADDR_MULTICAST(daddr)) {
+        log_warning("got multicast => drop");
         return;
     }
 
@@ -515,10 +504,8 @@ void tap_handler(int events, int fd)
     // add header..
     struct neighbor *neighbor = g_neighbors;
     if (neighbor == NULL) {
-        log_warning("drop packet, no neighbors known.");
-    }
-
-    while (neighbor) {
+        log_warning("drop packet, no neighbors known => drop");
+    } else while (neighbor) {
         // send to all neihgbors..
         //now reply the client with the same data
         int slen = sizeof(struct sockaddr_in6);
