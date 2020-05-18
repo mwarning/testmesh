@@ -26,6 +26,9 @@
 #define time_now_sec() (gconf->time_now)
 
 
+const char* addr6_str(const struct in6_addr *addr);
+const char* sockaddr6_str(const struct sockaddr_in6 *addr);
+
 void hexDump(const char * desc, const void * addr, const int len);
 
 int port_random(void);

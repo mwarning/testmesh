@@ -29,7 +29,7 @@
 #include "log.h"
 
 
-void parse_ip(uint8_t *buf, int len)
+void parse_ip(const uint8_t *buf, int len)
 {
   if (len <= 40) {
     printf("packet too small: %d", len);

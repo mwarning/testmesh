@@ -15,6 +15,20 @@
 #include "utils.h"
 
 
+const char* addr6_str(const struct in6_addr *addr)
+{
+    static char buf[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, addr, buf, sizeof(buf));
+    return buf;
+}
+
+const char* sockaddr6_str(const struct sockaddr_in6 *addr)
+{
+    static char buf[INET6_ADDRSTRLEN+8];
+    sprintf(buf, "[%s]:%d", addr6_str(&addr->sin6_addr), (int) ntohs(addr->sin6_port));
+    return buf;
+}
+
 void hexDump (const char * desc, const void * addr, const int len) {
     int i;
     unsigned char buff[17];
