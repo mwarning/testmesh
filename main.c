@@ -18,7 +18,6 @@
 #include "utils.h"
 #include "net.h"
 #include "unix.h"
-#include "other.h"
 #include "main.h"
 
 #define MULTICAST_ADDR "ff12::1234"
@@ -246,12 +245,12 @@ int tun_alloc(const char *dev)
     int err;
 
     if ((fd = open(clonedev, O_RDWR)) < 0 ) {
-        log_error("open /dev/net/tun %s", strerror(errno));
+        log_error("open %s: %s", clonedev, strerror(errno));
         return -1;
     }
 
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strncpy(ifr.ifr_name, dev, strlen(dev));
+    strcpy(ifr.ifr_name, dev);
 
     if ((err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0 ) {
         log_error("ioctl(TUNSETIFF) %s", strerror(errno));
@@ -476,7 +475,8 @@ void usage(const char *pname) {
     );
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     struct config config = {
         .dev = "tun0",
         .is_running = 1,

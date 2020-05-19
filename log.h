@@ -2,8 +2,9 @@
 #ifndef _LOG_H_
 #define _LOG_H_
 
-
 #include <syslog.h>
+#include "main.h"
+
 
 // Verbosity levels
 enum {

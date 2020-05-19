@@ -14,21 +14,6 @@
 #include "log.h"
 #include "utils.h"
 
-
-const char* addr6_str(const struct in6_addr *addr)
-{
-    static char buf[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, addr, buf, sizeof(buf));
-    return buf;
-}
-
-const char* sockaddr6_str(const struct sockaddr_in6 *addr)
-{
-    static char buf[INET6_ADDRSTRLEN+8];
-    sprintf(buf, "[%s]:%d", addr6_str(&addr->sin6_addr), (int) ntohs(addr->sin6_port));
-    return buf;
-}
-
 void hexDump(const char * desc, const void * addr, const int len) {
     const unsigned char * pc = (const unsigned char *)addr;
     unsigned char buff[17];
@@ -149,22 +134,9 @@ int bytes_random(uint8_t buffer[], size_t size)
 	return rc;
 }
 
-const char *str_af(int af) {
-	switch (af) {
-	case AF_INET:
-		return "IPv4";
-	case AF_INET6:
-		return "IPv6";
-	case AF_UNSPEC:
-		return "IPv4+IPv6";
-	default:
-		return "<invalid>";
-	}
-}
-
 const char *str_addr(const struct sockaddr_storage *addr)
 {
-	static char addrbuf[FULL_ADDSTRLEN];
+	static char addrbuf[INET6_ADDRSTRLEN + 8];
 	char buf[INET6_ADDRSTRLEN];
 	const char *fmt;
 	int port;
@@ -363,25 +335,4 @@ int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_stora
 	} else {
 		return 0;
 	}
-}
-
-int socket_addr(int sock, struct sockaddr_storage *addr)
-{
-	socklen_t len = sizeof(struct sockaddr_storage);
-	return getsockname(sock, (struct sockaddr *) addr, &len);
-}
-
-time_t time_add_secs(uint32_t seconds)
-{
-	return gconf->time_now + seconds;
-}
-
-time_t time_add_mins(uint32_t minutes)
-{
-	return gconf->time_now + (60 * minutes);
-}
-
-time_t time_add_hours(uint32_t hours)
-{
-	return gconf->time_now + (60 * 60 * hours);
 }
