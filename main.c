@@ -311,7 +311,7 @@ void usage(const char *pname) {
         "Usage:\n"
         "  %s -i eth0 -i wlan0\n"
         "\n"
-        "-i <interface>  Name of interface to use (at least one needed).\n"
+        "-i <interface>  Name of interface to use.\n"
         "-p <address>    Add a peer mnually by address.\n"
         "-h              Prints this help text.\n",
         pname
@@ -333,7 +333,7 @@ void periodic_handler(int _events, int _fd) {
 
     struct interface *ife = g_interfaces;
     while (ife) {
-        if (sendto(ife->mcast_send_socket, msg, strlen(msg) + 1, 0, (struct sockaddr*)&g_mcast_addr, sizeof(g_mcast_addr)) < 0) {
+        if (sendto(ife->mcast_send_socket, msg, strlen(msg) + 1, 0, (struct sockaddr*) &g_mcast_addr, sizeof(g_mcast_addr)) < 0) {
             log_warning("sendto() %s", strerror(errno));
         } else {
             log_debug("multicast send: %s (%s)", msg, ife->ifname);
@@ -368,6 +368,7 @@ void mcast_handler(int events, int fd)
     }
 }
 
+// forward incoming traffic from peers to tun0
 void ucast_handler(int events, int fd)
 {
     uint8_t buffer[2000];
@@ -384,13 +385,19 @@ void ucast_handler(int events, int fd)
         return;
     }
 
-    // send out of tap interface
-    if (write(g_tap_fd, buffer, recv_len) != recv_len) {
-        log_error("write() %s", strerror(errno));
-        return;
+    struct peer *peer = find_peer(&addr);
+    if (peer) {
+        // send out of tap interface
+        if (write(g_tap_fd, buffer, recv_len) != recv_len) {
+            log_error("write() %s", strerror(errno));
+            return;
+        }
+    } else {
+        log_warning("ignore packet from unknown peer: %s", str_addr(&addr));
     }
 }
 
+// forward incoming traffic from tun0 to peers
 void tap_handler(int events, int fd)
 {
     if (events <= 0) {
@@ -438,19 +445,12 @@ void tap_handler(int events, int fd)
         log_warning("got packet on tun0, no peers known => drop");
     }
 
-    // get sender
-    struct sockaddr_storage sender_addr = {0};
-    struct peer *sender = find_peer(&sender_addr);
-
     struct peer *peer = g_peers;
     while (peer) {
-        // do not send packet back to sending peer!
-        if (peer != sender) {
-            // send to all peers
-            socklen_t slen = sizeof(struct sockaddr_in6);
-            if (sendto(g_unicast_send_socket, buffer, read_len, 0, (struct sockaddr*) &peer->addr, slen) == -1) {
-                log_error("Failed forward packet to %s: %s", str_addr(&peer->addr), strerror(errno));
-            }
+        // send to all peers
+        socklen_t slen = sizeof(struct sockaddr_in6);
+        if (sendto(g_unicast_send_socket, buffer, read_len, 0, (struct sockaddr*) &peer->addr, slen) == -1) {
+            log_error("Failed forward packet to %s: %s", str_addr(&peer->addr), strerror(errno));
         }
         peer = peer->next;
     }
