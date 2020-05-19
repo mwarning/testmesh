@@ -6,23 +6,6 @@
 // Callback for event loop
 typedef void net_callback(int revents, int fd);
 
-// Create a socket and bind to interface
-int net_socket(
-	const char name[],
-	const char ifname[],
-	const int protocol,
-	const int af
-);
-
-// Create a socket and bind to address/interface
-int net_bind(
-	const char name[],
-	const char addr[],
-	const int port,
-	const char ifname[],
-	const int protocol
-);
-
 // Add callback with file descriptor to listen for packets
 void net_add_handler(int fd, net_callback *callback);
 

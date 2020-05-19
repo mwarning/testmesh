@@ -45,6 +45,8 @@ struct interface {
 
 struct peer {
     struct sockaddr_storage addr;
+    time_t first_contact;
+    time_t last_contact;
     struct peer *next;
 };
 
@@ -64,19 +66,19 @@ struct peer *find_peer(const struct sockaddr_storage *addr)
     return NULL;
 }
 
-void add_peer(const struct sockaddr_storage *addr)
+struct peer *add_peer(const struct sockaddr_storage *addr)
 {
-    if (find_peer(addr)) {
-        return;
-    }
-
     struct peer *peer = (struct peer *) malloc(sizeof(struct peer));
     memcpy(&peer->addr, addr, sizeof(struct sockaddr_storage));
+    peer->first_contact = 0;
+    peer->last_contact = 0;
 
     log_info("Add peer: %s", str_addr(&peer->addr));
 
     peer->next = g_peers;
     g_peers = peer;
+
+    return peer;
 }
 
 struct interface *find_interface(const char *ifname)
@@ -92,20 +94,18 @@ struct interface *find_interface(const char *ifname)
     return NULL;
 }
 
-void add_interface(struct interface *ifce)
+struct interface *add_interface(struct interface *interface)
 {
-    if (find_interface(ifce->ifname)) {
-        return;
-    }
+    struct interface *ifce = (struct interface*) malloc(sizeof(struct interface));
+    memcpy(ifce, interface, sizeof(struct interface));
+    ifce->ifname = strdup(interface->ifname);
 
-    struct interface *interface = (struct interface*) malloc(sizeof(struct interface));
-    memcpy(interface, ifce, sizeof(struct interface));
-    interface->ifname = strdup(interface->ifname);
+    log_info("Add interface: %s", ifce->ifname);
 
-    log_info("Add interface: %s", interface->ifname);
+    ifce->next = g_interfaces;
+    g_interfaces = ifce;
 
-    interface->next = g_interfaces;
-    g_interfaces = interface;
+    return ifce;
 }
 
 int setup_mcast_send_socket(int *sock, int ifindex)
@@ -242,9 +242,8 @@ int tun_alloc(const char *dev)
     const char *clonedev = "/dev/net/tun";
     struct ifreq ifr = {0};
     int fd;
-    int err;
 
-    if ((fd = open(clonedev, O_RDWR)) < 0 ) {
+    if ((fd = open(clonedev, O_RDWR)) < 0) {
         log_error("open %s: %s", clonedev, strerror(errno));
         return -1;
     }
@@ -252,7 +251,7 @@ int tun_alloc(const char *dev)
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
     strcpy(ifr.ifr_name, dev);
 
-    if ((err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0 ) {
+    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
         log_error("ioctl(TUNSETIFF) %s", strerror(errno));
         close(fd);
         return -1;
@@ -292,17 +291,34 @@ static int interface_up(const char* ifname) {
     return 0;
 }
 
-void periodic_handler(int _events, int _fd) {
-    char msg[20];
-
+void periodic_handler(int _events, int _fd)
+{
     static time_t last = 0;
-    if (last > 0 && (last + 3) < gconf->time_now) {
+
+    // every 5 seconds
+    if (last > 0 && (last + 5) < gconf->time_now) {
         return;
     } else {
         last = gconf->time_now;
     }
 
-    // prepare message
+    // timeout peers
+    struct peer *peer = g_peers;
+    g_peers = NULL;
+    while (peer) {
+        struct peer *next = peer->next;
+        if ((gconf->time_now - peer->last_contact) > 10) {
+            log_debug("timeout peer %s", str_addr(&peer->addr));
+            free(peer);
+        } else {
+            peer->next = g_peers;
+            g_peers = peer;
+        }
+        peer = next;
+    }
+
+    // send discovery packet
+    char msg[20];
     sprintf(msg, "%d", (int) ntohs(g_ucast_addr.sin6_port));
 
     struct interface *ife = g_interfaces;
@@ -320,6 +336,7 @@ void periodic_handler(int _events, int _fd) {
 void mcast_handler(int events, int fd)
 {
     struct sockaddr_storage addr;
+    struct peer *peer;
     int recv_len;
     char buffer[200];
 
@@ -338,7 +355,13 @@ void mcast_handler(int events, int fd)
 
     if (port > 0) {
         port_set(&addr, port);
-        add_peer(&addr);
+
+        peer = find_peer(&addr);
+        if (peer == NULL) {
+            peer = add_peer(&addr);
+            peer->first_contact = gconf->time_now;
+        }
+        peer->last_contact = gconf->time_now;
     }
 }
 
@@ -361,11 +384,14 @@ void ucast_handler(int events, int fd)
 
     struct peer *peer = find_peer(&addr);
     if (peer) {
-        // send out of tap interface
+        peer->last_contact = gconf->time_now;
+
+        // send out of tun0 interface
         if (write(g_tap_fd, buffer, recv_len) != recv_len) {
             log_error("write() %s", strerror(errno));
             return;
         }
+        // TODO: or forward traffic...
     } else {
         log_warning("ignore packet from unknown peer: %s", str_addr(&addr));
     }
@@ -446,21 +472,6 @@ void tap_handler(int events, int fd)
     }
 }
 
-/*
-void got_unicast()
-{
-}
-
-void got_multicast(const struct sin6_addr *addr, const char *payload, int payload_len)
-{
-// we have a one hop mapping of mac <=> id + position
-
-  ping ipv6 address
-  1. address to position
-  2. route according to position
-}
-*/
-
 void usage(const char *pname) {
     fprintf(stderr,
         "Usage:\n"
@@ -499,7 +510,9 @@ int main(int argc, char *argv[])
             case 'i': {
                 struct interface ifce = {0};
                 if (interface_parse(&ifce, optarg) == 0) {
-                    add_interface(&ifce);
+                    if (!find_interface(optarg)) {
+                        add_interface(&ifce);
+                    }
                 } else {
                     log_error("Invalid interface: %s", optarg);
                     return 1;
@@ -509,7 +522,9 @@ int main(int argc, char *argv[])
             case 'c': {
                 struct sockaddr_storage addr = {0};
                 if (addr_parse(&addr, optarg, "1234", AF_UNSPEC) == 0) {
-                    add_peer(&addr);
+                    if (!find_peer(&addr)) {
+                        add_peer(&addr);
+                    }
                 } else {
                     log_error("Invalid address: %s", optarg);
                     return 1;
