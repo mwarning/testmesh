@@ -116,14 +116,14 @@ int port_parse(const char pstr[], int err)
 	}
 }
 
-int port_set(IP *addr, uint16_t port)
+int port_set(struct sockaddr_storage *addr, uint16_t port)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
-		((IP4 *)addr)->sin_port = htons(port);
+		((struct sockaddr_in *)addr)->sin_port = htons(port);
 		return EXIT_SUCCESS;
 	case AF_INET6:
-		((IP6 *)addr)->sin6_port = htons(port);
+		((struct sockaddr_in6 *)addr)->sin6_port = htons(port);
 		return EXIT_SUCCESS;
 	default:
 		return EXIT_FAILURE;
@@ -162,7 +162,7 @@ const char *str_af(int af) {
 	}
 }
 
-const char *str_addr(const IP *addr)
+const char *str_addr(const struct sockaddr_storage *addr)
 {
 	static char addrbuf[FULL_ADDSTRLEN];
 	char buf[INET6_ADDRSTRLEN];
@@ -171,13 +171,13 @@ const char *str_addr(const IP *addr)
 
 	switch (addr->ss_family) {
 	case AF_INET6:
-		port = ((IP6 *)addr)->sin6_port;
-		inet_ntop(AF_INET6, &((IP6 *)addr)->sin6_addr, buf, sizeof(buf));
+		port = ((struct sockaddr_in6 *)addr)->sin6_port;
+		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, buf, sizeof(buf));
 		fmt = "[%s]:%d";
 		break;
 	case AF_INET:
-		port = ((IP4 *)addr)->sin_port;
-		inet_ntop(AF_INET, &((IP4 *)addr)->sin_addr, buf, sizeof(buf));
+		port = ((struct sockaddr_in *)addr)->sin_port;
+		inet_ntop(AF_INET, &((struct sockaddr_in *)addr)->sin_addr, buf, sizeof(buf));
 		fmt = "%s:%d";
 		break;
 	default:
@@ -189,58 +189,58 @@ const char *str_addr(const IP *addr)
 	return addrbuf;
 }
 
-int addr_is_localhost(const IP *addr)
+int addr_is_localhost(const struct sockaddr_storage *addr)
 {
 	// 127.0.0.1
 	const uint32_t inaddr_loopback = htonl(INADDR_LOOPBACK);
 
 	switch (addr->ss_family) {
 	case AF_INET:
-		return (memcmp(&((IP4 *)addr)->sin_addr, &inaddr_loopback, 4) == 0);
+		return (memcmp(&((struct sockaddr_in *)addr)->sin_addr, &inaddr_loopback, 4) == 0);
 	case AF_INET6:
-		return (memcmp(&((IP6 *)addr)->sin6_addr, &in6addr_loopback, 16) == 0);
+		return (memcmp(&((struct sockaddr_in6 *)addr)->sin6_addr, &in6addr_loopback, 16) == 0);
 	default:
 		return 0;
 	}
 }
 
-int addr_is_multicast(const IP *addr)
+int addr_is_multicast(const struct sockaddr_storage *addr)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
-		return IN_MULTICAST(ntohl(((IP4*) addr)->sin_addr.s_addr));
+		return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr));
 	case AF_INET6:
-		return IN6_IS_ADDR_MULTICAST(&((IP6*) addr)->sin6_addr);
+		return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr);
 	default:
 		return 0;
 	}
 }
 
-int addr_port(const IP *addr)
+int addr_port(const struct sockaddr_storage *addr)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
-		return ntohs(((IP4 *)addr)->sin_port);
+		return ntohs(((struct sockaddr_in *)addr)->sin_port);
 	case AF_INET6:
-		return ntohs(((IP6 *)addr)->sin6_port);
+		return ntohs(((struct sockaddr_in6 *)addr)->sin6_port);
 	default:
 		return 0;
 	}
 }
 
-int addr_len(const IP *addr)
+int addr_len(const struct sockaddr_storage *addr)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
-		return sizeof(IP4);
+		return sizeof(struct sockaddr_in);
 	case AF_INET6:
-		return sizeof(IP6);
+		return sizeof(struct sockaddr_in6);
 	default:
 		return 0;
 	}
 }
 
-static int addr_parse_internal(IP *ret, const char addr_str[], const char port_str[], int af)
+static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str[], const char port_str[], int af)
 {
     struct addrinfo hints;
     struct addrinfo *info = NULL;
@@ -259,13 +259,13 @@ static int addr_parse_internal(IP *ret, const char addr_str[], const char port_s
     p = info;
     while (p != NULL) {
         if ((af == AF_UNSPEC || af == AF_INET6) && p->ai_family == AF_INET6) {
-            memcpy(ret, p->ai_addr, sizeof(IP6));
+            memcpy(ret, p->ai_addr, sizeof(struct sockaddr_in6));
             rc = EXIT_SUCCESS;
             break;
         }
 
         if ((af == AF_UNSPEC || af == AF_INET) && p->ai_family == AF_INET) {
-            memcpy(ret, p->ai_addr, sizeof(IP4));
+            memcpy(ret, p->ai_addr, sizeof(struct sockaddr_in));
             rc = EXIT_SUCCESS;
             break;
         }
@@ -288,7 +288,7 @@ static int addr_parse_internal(IP *ret, const char addr_str[], const char port_s
 * "[<address>]"
 * "[<address>]:<port>"
 */
-int addr_parse(IP *addr_ret, const char full_addr_str[], const char default_port[], int af)
+int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], const char default_port[], int af)
 {
 	char addr_buf[256];
 	char *addr_beg;
@@ -352,22 +352,22 @@ int addr_parse(IP *addr_ret, const char full_addr_str[], const char default_port
 }
 
 // Compare two ip addresses, ignore port
-int addr_equal(const IP *addr1, const IP *addr2)
+int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2)
 {
 	if (addr1->ss_family != addr2->ss_family) {
 		return 0;
 	} else if (addr1->ss_family == AF_INET) {
-		return 0 == memcmp(&((IP4 *)addr1)->sin_addr, &((IP4 *)addr2)->sin_addr, 4);
+		return 0 == memcmp(&((struct sockaddr_in *)addr1)->sin_addr, &((struct sockaddr_in *)addr2)->sin_addr, 4);
 	} else if (addr1->ss_family == AF_INET6) {
-		return 0 == memcmp(&((IP6 *)addr1)->sin6_addr, &((IP6 *)addr2)->sin6_addr, 16);
+		return 0 == memcmp(&((struct sockaddr_in6 *)addr1)->sin6_addr, &((struct sockaddr_in6 *)addr2)->sin6_addr, 16);
 	} else {
 		return 0;
 	}
 }
 
-int socket_addr(int sock, IP *addr)
+int socket_addr(int sock, struct sockaddr_storage *addr)
 {
-	socklen_t len = sizeof(IP);
+	socklen_t len = sizeof(struct sockaddr_storage);
 	return getsockname(sock, (struct sockaddr *) addr, &len);
 }
 

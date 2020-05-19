@@ -109,11 +109,6 @@ int net_socket(const char name[], const char ifname[], const int protocol, const
 	const int opt_on = 1;
 	int sock = -1;
 
-	// Disable IPv6 or IPv4
-	if (gconf->af != AF_UNSPEC && gconf->af != af) {
-		goto fail;
-	}
-
 	if ((sock = socket(af, (protocol == IPPROTO_TCP) ? SOCK_STREAM : SOCK_DGRAM, protocol)) < 0) {
 		log_error("%s: Failed to create socket: %s", name, strerror(errno));
 		goto fail;
@@ -158,7 +153,7 @@ int net_bind(
 {
 	const int opt_on = 1;
 	socklen_t addrlen;
-	IP sockaddr;
+	struct sockaddr_storage sockaddr;
 	int sock = -1;
 
 	if (addr_parse(&sockaddr, addr, "0", AF_UNSPEC) != EXIT_SUCCESS) {

@@ -33,22 +33,22 @@ void hexDump(const char * desc, const void * addr, const int len);
 
 int port_random(void);
 int port_parse(const char pstr[], int err);
-int port_set(IP *addr, uint16_t port);
+int port_set(struct sockaddr_storage *addr, uint16_t port);
 
 int bytes_random(uint8_t buffer[], size_t size);
 
 const char *str_af(int af);
 const char *str_id(const uint8_t id[]);
-const char *str_addr(const IP *addr);
+const char *str_addr(const struct sockaddr_storage *addr);
 
-int addr_is_localhost(const IP *addr);
-int addr_is_multicast(const IP *addr);
-int addr_parse(IP *addr, const char full_addr_str[], const char default_port[], int af);
-int addr_port(const IP *addr);
-int addr_len(const IP *addr);
-int addr_equal(const IP *addr1, const IP *addr2);
+int addr_is_localhost(const struct sockaddr_storage *addr);
+int addr_is_multicast(const struct sockaddr_storage *addr);
+int addr_parse(struct sockaddr_storage *addr, const char full_addr_str[], const char default_port[], int af);
+int addr_port(const struct sockaddr_storage *addr);
+int addr_len(const struct sockaddr_storage *addr);
+int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2);
 
-int socket_addr(int sock, IP *addr);
+int socket_addr(int sock, struct sockaddr_storage *addr);
 
 time_t time_add_secs(uint32_t seconds);
 time_t time_add_mins(uint32_t minutes);
