@@ -38,9 +38,6 @@
 #include "other.h"
 #include "main.h"
 
-
-//sudo setcap cap_net_admin,cap_net_raw=eip a.out
-
 #define MULTICAST_ADDR "ff12::1234"
 #define MULTICAST_PORT 4321
 
@@ -72,11 +69,11 @@ struct neighbor {
 struct interface *g_interfaces = NULL;
 struct neighbor *g_neighbors = NULL;
 
-int neighbor_equal(const struct neighbor * neigh, const struct in6_addr *addr, int port) {
-    return (0 == memcmp(&neigh->addr.sin6_addr, addr, 16) && port == ntohs(neigh->addr.sin6_port));
+int neighbor_equal(const struct neighbor *neigh, const struct sockaddr_in6 *addr, int port) {
+    return (0 == memcmp(&neigh->addr.sin6_addr, &addr->sin6_addr, 16) && neigh->addr.sin6_scope_id == addr->sin6_scope_id && port == ntohs(neigh->addr.sin6_port));
 }
 
-int neighbor_exists(const struct in6_addr *addr, int port)
+int neighbor_exists(const struct sockaddr_in6 *addr, int port)
 {
     struct neighbor *neighbor = g_neighbors;
     while (neighbor) {
@@ -88,12 +85,12 @@ int neighbor_exists(const struct in6_addr *addr, int port)
     return 0;
 }
 
-void add_neighbor(const struct in6_addr *addr, int port)
+void add_neighbor(const struct sockaddr_in6 *addr, int port)
 {
     // neighbor UDP address
-    struct sockaddr_in6 address = {0};
+    struct sockaddr_in6 address;
+    memcpy(&address, addr, sizeof(struct sockaddr_in6));
     address.sin6_port = htons(port);
-    memcpy(&address.sin6_addr, addr, sizeof(struct in6_addr));
 
     log_info("add neighbor: %s", sockaddr6_str(&address));
 
@@ -319,34 +316,34 @@ int setup_tun(int sockfd, const char *ifname)
     return 0;
 }
 
-int tun_alloc(char *dev, int flags) {
+int tun_alloc(char *dev)
+{
+    struct ifreq ifr = {0};
+    int fd, err;
+    char *clonedev = "/dev/net/tun";
 
-  struct ifreq ifr;
-  int fd, err;
-  char *clonedev = "/dev/net/tun";
+    if ((fd = open(clonedev, O_RDWR)) < 0 ) {
+        log_error("open /dev/net/tun %s", strerror(errno));
+        return fd;
+    }
 
-  if ((fd = open(clonedev, O_RDWR)) < 0 ) {
-    perror("Opening /dev/net/tun");
+    memset(&ifr, 0, sizeof(ifr));
+
+    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+
+    if (*dev) {
+        strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+    }
+
+    if ((err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0 ) {
+        log_error("ioctl(TUNSETIFF) %s", strerror(errno));
+        close(fd);
+        return err;
+    }
+
+    strcpy(dev, ifr.ifr_name);
+
     return fd;
-  }
-
-  memset(&ifr, 0, sizeof(ifr));
-
-  ifr.ifr_flags = flags;
-
-  if (*dev) {
-    strncpy(ifr.ifr_name, dev, IFNAMSIZ);
-  }
-
-  if ((err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0 ) {
-    perror("ioctl(TUNSETIFF)");
-    close(fd);
-    return err;
-  }
-
-  strcpy(dev, ifr.ifr_name);
-
-  return fd;
 }
 
 static int _ioctl_v6 = -1;
@@ -441,8 +438,8 @@ void mcast_handler(int events, int fd)
     buffer[recv_len] = '\0';
     int port = atoi(buffer);
 
-    if (!neighbor_exists(&si_other.sin6_addr, port)) {
-        add_neighbor(&si_other.sin6_addr, port);
+    if (!neighbor_exists(&si_other, port)) {
+        add_neighbor(&si_other, port);
     }
 }
 
@@ -523,6 +520,7 @@ void tap_handler(int events, int fd)
         //now reply the client with the same data
         int slen = sizeof(struct sockaddr_in6);
         if (sendto(g_unicast_send_socket, buffer, read_len, 0, (struct sockaddr*) &neighbor->addr, slen) == -1) {
+            // destination address required...?
             log_error("Failed forward to %s: %s", sockaddr6_str(&neighbor->addr), strerror(errno));
         }
         neighbor = neighbor->next;
@@ -552,8 +550,7 @@ int main(int argc, char *argv[]) {
     int option;
     char entry_if[IFNAMSIZ] = "tun0";
 
-    /* Check command line options */
-    while((option = getopt(argc, argv, "i:h")) > 0) {
+    while ((option = getopt(argc, argv, "i:h")) > 0) {
         switch(option) {
           case 'h':
             usage(argv[0]);
@@ -561,7 +558,6 @@ int main(int argc, char *argv[]) {
           case 'i':
             log_debug("add interface: %s\n", optarg);
             add_interface(optarg);
-            //strncpy(entry_if, optarg, IFNAMSIZ-1);
             break;
           default:
             log_error("Unknown option %c", option);
@@ -600,7 +596,7 @@ int main(int argc, char *argv[]) {
     }
 
     //int flags = IFF_TAP; // IFF_TUN;
-    if ((g_tap_fd = tun_alloc(entry_if, IFF_TUN | IFF_NO_PI)) < 0 ) {
+    if ((g_tap_fd = tun_alloc(entry_if)) < 0 ) {
         log_error("Error connecting to tun/tap interface %s!", entry_if);
         return 1;
     }
