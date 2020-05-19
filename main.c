@@ -43,14 +43,13 @@
 
 
 struct config *gconf = NULL;
-float g_coords[3] = {NAN};
 int g_sock_help = -1;
 int g_unicast_send_socket = -1;
 int g_tap_fd = -1;
 
 // address for automatic local network peering
-struct sockaddr_in6 g_mcast_addr = {0};
-struct sockaddr_in6 g_ucast_addr = {0};
+static struct sockaddr_in6 g_mcast_addr = {0};
+static struct sockaddr_in6 g_ucast_addr = {0};
 
 struct interface {
     const char *ifname;
@@ -439,12 +438,19 @@ void tap_handler(int events, int fd)
         log_warning("got packet on tun0, no peers known => drop");
     }
 
+    // get sender
+    struct sockaddr_storage sender_addr = {0};
+    struct peer *sender = find_peer(&sender_addr);
+
     struct peer *peer = g_peers;
     while (peer) {
-        // send to all peers
-        socklen_t slen = sizeof(struct sockaddr_in6);
-        if (sendto(g_unicast_send_socket, buffer, read_len, 0, (struct sockaddr*) &peer->addr, slen) == -1) {
-            log_error("Failed forward packet to %s: %s", str_addr(&peer->addr), strerror(errno));
+        // do not send packet back to sending peer!
+        if (peer != sender) {
+            // send to all peers
+            socklen_t slen = sizeof(struct sockaddr_in6);
+            if (sendto(g_unicast_send_socket, buffer, read_len, 0, (struct sockaddr*) &peer->addr, slen) == -1) {
+                log_error("Failed forward packet to %s: %s", str_addr(&peer->addr), strerror(errno));
+            }
         }
         peer = peer->next;
     }
@@ -482,11 +488,8 @@ int main(int argc, char *argv[]) {
     }
 
     int option;
-    while ((option = getopt(argc, argv, "i:hp:")) > 0) {
+    while ((option = getopt(argc, argv, "i:c:h")) > 0) {
         switch(option) {
-            case 'h':
-                usage(argv[0]);
-                return 0;
             case 'i': {
                 struct interface ifce = {0};
                 if (interface_parse(&ifce, optarg) == 0) {
@@ -497,7 +500,7 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             }
-            case 'p': {
+            case 'c': {
                 struct sockaddr_storage addr = {0};
                 if (addr_parse(&addr, optarg, "1234", AF_UNSPEC) == 0) {
                     add_peer(&addr);
@@ -507,6 +510,9 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             }
+            case 'h':
+                usage(argv[0]);
+                return 0;
             default:
                 log_error("Unknown option %c", option);
                 usage(argv[0]);
@@ -540,12 +546,12 @@ int main(int argc, char *argv[]) {
 
     unix_signals();
 
-    if ((g_unicast_send_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+    if ((g_unicast_send_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
         log_error("socket() %s", strerror(errno));
         return 1;
     }
 
-    if ((g_tap_fd = tun_alloc(entry_if)) < 0 ) {
+    if ((g_tap_fd = tun_alloc(entry_if)) < 0) {
         log_error("Error connecting to tun interface %s: %s", entry_if, strerror(errno));
         return 1;
     }
