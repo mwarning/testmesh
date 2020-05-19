@@ -29,7 +29,7 @@ const char* sockaddr6_str(const struct sockaddr_in6 *addr)
     return buf;
 }
 
-void hexDump (const char * desc, const void * addr, const int len) {
+void hexDump(const char * desc, const void * addr, const int len) {
     const unsigned char * pc = (const unsigned char *)addr;
     unsigned char buff[17];
     int i;
