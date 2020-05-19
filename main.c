@@ -4,14 +4,11 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <net/if.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
-#include <arpa/inet.h> 
-#include <netinet/in.h>
-#include <netinet/ip6.h>
+#include <arpa/inet.h>
 #include <linux/if_tun.h>
 
 #include "log.h"
@@ -29,9 +26,16 @@ int g_sock_help = -1;
 int g_unicast_send_socket = -1;
 int g_tap_fd = -1;
 
-// address for automatic local network peering
-static struct sockaddr_in6 g_mcast_addr = {0};
-static struct sockaddr_in6 g_ucast_addr = {0};
+
+// header for unicast packets
+struct __attribute__((__packed__)) packet {
+    struct {
+        uint32_t id;
+        uint16_t counter; // what is this used for?
+        uint16_t length;
+    } header;
+    uint8_t payload[2000];
+};
 
 struct interface {
     const char *ifname;
@@ -50,8 +54,17 @@ struct peer {
     struct peer *next;
 };
 
-struct interface *g_interfaces = NULL;
-struct peer *g_peers = NULL;
+// interface to send mutlicast discovery packets to
+static struct interface *g_interfaces = NULL;
+
+// all known neighbors peer
+static struct peer *g_peers = NULL;
+
+// local network discovery address
+static struct sockaddr_in6 g_mcast_addr = {0};
+
+// listen address for unicast packets
+static struct sockaddr_in6 g_ucast_addr = {0};
 
 struct peer *find_peer(const struct sockaddr_storage *addr)
 {
@@ -223,74 +236,6 @@ int interface_parse(struct interface *ifce, const char *ifname)
     return 0;
 }
 
-int setup_tun(int sockfd, const char *ifname)
-{
-    struct ifreq ifr = {0};
-    strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
-    ifr.ifr_mtu = 1500;
-
-    if (ioctl(sockfd, SIOCSIFMTU, &ifr) == -1) {
-      log_error("ioctl(SIOCSIFMTU) %s", strerror(errno));
-      return 1;
-    }
-
-    return 0;
-}
-
-int tun_alloc(const char *dev)
-{
-    const char *clonedev = "/dev/net/tun";
-    struct ifreq ifr = {0};
-    int fd;
-
-    if ((fd = open(clonedev, O_RDWR)) < 0) {
-        log_error("open %s: %s", clonedev, strerror(errno));
-        return -1;
-    }
-
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strcpy(ifr.ifr_name, dev);
-
-    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
-        log_error("ioctl(TUNSETIFF) %s", strerror(errno));
-        close(fd);
-        return -1;
-    }
-
-    if (0 != strcmp(ifr.ifr_name, dev)) {
-        return -1;
-    }
-
-    return fd;
-}
-
-static int interface_up(const char* ifname) {
-    struct ifreq ifr = {0};
-    int oldflags;
-
-    strncpy(ifr.ifr_name, ifname, IF_NAMESIZE);
-
-    if (ioctl(g_sock_help, SIOCGIFFLAGS, &ifr) < 0) {
-        log_error("ioctl(SIOCGIFFLAGS) for %s: %s", ifname, strerror(errno));
-        return 1;
-    }
-
-    oldflags = ifr.ifr_flags;
-    ifr.ifr_flags |= IFF_UP;
-
-    if (oldflags == ifr.ifr_flags) {
-        // interface is already up/down
-        return 0;
-    }
-
-    if (ioctl(g_sock_help, SIOCSIFFLAGS, &ifr) < 0) {
-        log_error("ioctl(SIOCSIFFLAGS) for %s: %s", ifname, strerror(errno));
-        return 1;
-    }
-
-    return 0;
-}
-
 void periodic_handler(int _events, int _fd)
 {
     static time_t last = 0;
@@ -365,11 +310,11 @@ void mcast_handler(int events, int fd)
     }
 }
 
-// forward traffic from peers to tun0
+// read traffic from peers to and write to tun0
 void ucast_handler(int events, int fd)
 {
-    uint8_t buffer[2000];
     struct sockaddr_storage addr;
+    struct packet p;
     int recv_len;
 
     if (events <= 0) {
@@ -377,8 +322,13 @@ void ucast_handler(int events, int fd)
     }
 
     socklen_t slen = sizeof(addr);
-    if ((recv_len = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &addr, &slen)) < 0) {
+    if ((recv_len = recvfrom(fd, &p, sizeof(p), 0, (struct sockaddr *) &addr, &slen)) < 0) {
         log_error("recvfrom() %s", strerror(errno));
+        return;
+    }
+
+    if ((sizeof(p.header) + p.header.length) != recv_len) {
+        log_warning("invalid packet length in header from %s", str_addr(&addr));
         return;
     }
 
@@ -387,7 +337,7 @@ void ucast_handler(int events, int fd)
         peer->last_contact = gconf->time_now;
 
         // send out of tun0 interface
-        if (write(g_tap_fd, buffer, recv_len) != recv_len) {
+        if (write(g_tap_fd, p.payload, p.header.length) != p.header.length) {
             log_error("write() %s", strerror(errno));
             return;
         }
@@ -397,78 +347,87 @@ void ucast_handler(int events, int fd)
     }
 }
 
-// forward traffic from tun0 to peers
-void tap_handler(int events, int fd)
+// read traffic from tun0 and send to peers
+void tun_handler(int events, int fd)
 {
+    struct packet p;
+
     if (events <= 0) {
         return;
     }
 
-    uint8_t buffer[2000];
-    int read_len = read(fd, buffer, sizeof(buffer));
-    if (read_len <= 40) {
-        log_warning("packet too small: %d", read_len);
-        return;
-      }
+    while (1) {
+        int read_len = read(fd, &p.payload, sizeof(p.payload));
+        if (read_len <= 0) {
+            break;
+        }
 
-    int ip_version = (buffer[0] >> 4) & 0xff;
+        p.header.id = gconf->id;
+        p.header.counter = 0;
+        p.header.length = read_len;
 
-    // check if it is a multicast packet
-    if (ip_version == 4) {
-        // IPv4 packet
-        int total_length = ntohs(*((uint16_t*) &buffer[2]));
-        struct in_addr *saddr = (struct in_addr *) &buffer[12];
-        struct in_addr *daddr = (struct in_addr *) &buffer[16];
+        int ip_version = (p.payload[0] >> 4) & 0xff;
 
-        char saddr_str[INET_ADDRSTRLEN];
-        char daddr_str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, saddr, saddr_str, sizeof(saddr_str));
-        inet_ntop(AF_INET, daddr, daddr_str, sizeof(daddr_str));
+        // check if it is a multicast packet
+        if (ip_version == 4) {
+            // IPv4 packet
+            int total_length = ntohs(*((uint16_t*) &p.payload[2]));
+            struct in_addr *saddr = (struct in_addr *) &p.payload[12];
+            struct in_addr *daddr = (struct in_addr *) &p.payload[16];
 
-        log_info("received IPv4 packet on %s: %s => %s (len %d)",
-            gconf->dev, saddr_str, daddr_str, total_length
-        );
+            // print addresses
+            char saddr_str[INET_ADDRSTRLEN];
+            char daddr_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, saddr, saddr_str, sizeof(saddr_str));
+            inet_ntop(AF_INET, daddr, daddr_str, sizeof(daddr_str));
 
-        if (gconf->drop_multicast && IN_MULTICAST(ntohl(daddr->s_addr))) {
-            log_warning("is IPv4 multicast packet => drop");
+            log_info("received IPv4 packet on %s: %s => %s (len %d)",
+                gconf->dev, saddr_str, daddr_str, total_length
+            );
+
+            if (gconf->drop_multicast && IN_MULTICAST(ntohl(daddr->s_addr))) {
+                log_warning("is IPv4 multicast packet => drop");
+                return;
+            }
+        } else if (ip_version == 6) {
+            // IPv6 packet
+            int payload_length = ntohs(*((uint16_t*) &p.payload[4]));
+            struct in6_addr *saddr = (struct in6_addr *) &p.payload[8];
+            struct in6_addr *daddr = (struct in6_addr *) &p.payload[24];
+
+            // print addresses
+            char saddr_str[INET6_ADDRSTRLEN];
+            char daddr_str[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, saddr, saddr_str, sizeof(saddr_str));
+            inet_ntop(AF_INET6, daddr, daddr_str, sizeof(daddr_str));
+
+            log_info("received IPv6 packet on %s: %s => %s (len %d)",
+                gconf->dev, saddr_str, daddr_str, payload_length
+            );
+
+            if (gconf->drop_multicast && IN6_IS_ADDR_MULTICAST(daddr)) {
+                log_warning("is IPv6 multicast packet => drop");
+                return;
+            }
+        } else {
+            log_debug("unknown packet protocol version => drop");
             return;
         }
-    } else if (ip_version == 6) {
-        // IPv6 packet
-        int payload_length = ntohs(*((uint16_t*) &buffer[4]));
-        struct in6_addr *saddr = (struct in6_addr *) &buffer[8];
-        struct in6_addr *daddr = (struct in6_addr *) &buffer[24];
 
-        char saddr_str[INET6_ADDRSTRLEN];
-        char daddr_str[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET6, saddr, saddr_str, sizeof(saddr_str));
-        inet_ntop(AF_INET6, daddr, daddr_str, sizeof(daddr_str));
-
-        log_info("received IPv6 packet on %s: %s => %s (len %d)",
-            gconf->dev, saddr_str, daddr_str, payload_length
-        );
-
-        if (gconf->drop_multicast && IN6_IS_ADDR_MULTICAST(daddr)) {
-            log_warning("is IPv6 multicast packet => drop");
-            return;
+        if (g_peers == NULL) {
+            log_warning("no peers known => drop");
         }
-    } else {
-        log_debug("unknown packet protocol version => drop");
-        return;
-    }
 
-    if (g_peers == NULL) {
-        log_warning("no peers known => drop");
-    }
-
-    struct peer *peer = g_peers;
-    while (peer) {
-        // send to all peers
-        socklen_t slen = sizeof(struct sockaddr_in6);
-        if (sendto(g_unicast_send_socket, buffer, read_len, 0, (struct sockaddr*) &peer->addr, slen) == -1) {
-            log_error("Failed forward packet to %s: %s", str_addr(&peer->addr), strerror(errno));
+        struct peer *peer = g_peers;
+        while (peer) {
+            // send to all peers
+            socklen_t slen = sizeof(struct sockaddr_in6);
+            int packet_len = sizeof(p.header) + p.header.length;
+            if (sendto(g_unicast_send_socket, &p, packet_len, 0, (struct sockaddr*) &peer->addr, slen) == -1) {
+                log_error("Failed forward packet to %s: %s", str_addr(&peer->addr), strerror(errno));
+            }
+            peer = peer->next;
         }
-        peer = peer->next;
     }
 }
 
@@ -479,7 +438,7 @@ void usage(const char *pname) {
         "\n"
         "-i <interface>  Name of interface to use.\n"
         "-p <address>    Add a peer mnually by address.\n"
-        "-m              Allow multicast traffic (Default: 0).\n"
+        "-m              Drop multicast IP traffic (Default: 1).\n"
         "-d              Set entry device (Default: tun0).\n"
         "-h              Prints this help text.\n",
         pname
@@ -495,6 +454,9 @@ int main(int argc, char *argv[])
         .use_syslog = 0,
         .verbosity = VERBOSITY_DEBUG
     };
+
+    // set node identifier
+    bytes_random(&gconf->id, 4);
 
     gconf = &config;
 
@@ -590,10 +552,10 @@ int main(int argc, char *argv[])
         ife = ife->next;
     }
 
-    interface_up(gconf->dev);
+    interface_set_up(g_sock_help, gconf->dev);
 
     net_add_handler(-1, &periodic_handler);
-    net_add_handler(g_tap_fd, &tap_handler);
+    net_add_handler(g_tap_fd, &tun_handler);
 
     log_debug("Started using %s", gconf->dev);
 

@@ -3,10 +3,12 @@
 #define _MAIN_H
 
 #include <time.h>
+#include <stdint.h>
 
 #define MAIN_SRVNAME "main"
 
 struct config {
+	uint32_t id;
 	const char *dev;
 	int is_running;
 	int drop_multicast;

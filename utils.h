@@ -15,7 +15,7 @@ int port_random(void);
 int port_parse(const char pstr[], int err);
 int port_set(struct sockaddr_storage *addr, uint16_t port);
 
-int bytes_random(uint8_t buffer[], size_t size);
+int bytes_random(void *buffer, size_t size);
 
 const char *str_addr(const struct sockaddr_storage *addr);
 
@@ -25,5 +25,9 @@ int addr_parse(struct sockaddr_storage *addr, const char full_addr_str[], const 
 int addr_port(const struct sockaddr_storage *addr);
 int addr_len(const struct sockaddr_storage *addr);
 int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2);
+
+int interface_set_mtu(int fd, const char *ifname, int mtu);
+int interface_set_up(int fd, const char* ifname);
+int tun_alloc(const char *dev);
 
 #endif // _UTILS_H_

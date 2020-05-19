@@ -6,6 +6,9 @@
 // Callback for event loop
 typedef void net_callback(int revents, int fd);
 
+// Set non blocking
+int net_set_nonblocking(int fd);
+
 // Add callback with file descriptor to listen for packets
 void net_add_handler(int fd, net_callback *callback);
 

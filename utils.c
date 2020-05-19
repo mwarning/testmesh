@@ -1,14 +1,17 @@
 
-#include <fcntl.h>
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <ctype.h>
+#include <errno.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <linux/if_tun.h>
 
 #include "main.h"
 #include "log.h"
@@ -82,7 +85,7 @@ int port_random(void)
 	uint16_t port;
 
 	do {
-		bytes_random((uint8_t*) &port, sizeof(port));
+		bytes_random(&port, sizeof(port));
 	} while (port == 0);
 
 	return port;
@@ -116,7 +119,7 @@ int port_set(struct sockaddr_storage *addr, uint16_t port)
 }
 
 // Fill buffer with random bytes
-int bytes_random(uint8_t buffer[], size_t size)
+int bytes_random(void *buffer, size_t size)
 {
 	int fd;
 	int rc;
@@ -335,4 +338,72 @@ int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_stora
 	} else {
 		return 0;
 	}
+}
+
+int interface_set_mtu(int fd, const char *ifname, int mtu)
+{
+    struct ifreq ifr = {0};
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
+    ifr.ifr_mtu = mtu;
+
+    if (ioctl(fd, SIOCSIFMTU, &ifr) == -1) {
+      log_error("ioctl(SIOCSIFMTU) %s", strerror(errno));
+      return 1;
+    }
+
+    return 0;
+}
+
+int tun_alloc(const char *dev)
+{
+    const char *clonedev = "/dev/net/tun";
+    struct ifreq ifr = {0};
+    int fd;
+
+    if ((fd = open(clonedev, O_RDWR)) < 0) {
+        log_error("open %s: %s", clonedev, strerror(errno));
+        return -1;
+    }
+
+    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+    strcpy(ifr.ifr_name, dev);
+
+    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
+        log_error("ioctl(TUNSETIFF) %s", strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    if (0 != strcmp(ifr.ifr_name, dev)) {
+        return -1;
+    }
+
+    return fd;
+}
+
+int interface_set_up(int fd, const char* ifname) {
+    struct ifreq ifr = {0};
+    int oldflags;
+
+    strncpy(ifr.ifr_name, ifname, IF_NAMESIZE);
+
+    if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0) {
+        log_error("ioctl(SIOCGIFFLAGS) for %s: %s", ifname, strerror(errno));
+        return 1;
+    }
+
+    oldflags = ifr.ifr_flags;
+    ifr.ifr_flags |= IFF_UP;
+
+    if (oldflags == ifr.ifr_flags) {
+        // interface is already up/down
+        return 0;
+    }
+
+    if (ioctl(fd, SIOCSIFFLAGS, &ifr) < 0) {
+        log_error("ioctl(SIOCSIFFLAGS) for %s: %s", ifname, strerror(errno));
+        return 1;
+    }
+
+    return 0;
 }
