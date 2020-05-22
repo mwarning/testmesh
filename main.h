@@ -4,8 +4,14 @@
 
 #include <time.h>
 #include <stdint.h>
+#include <netinet/in.h>
 
 #define MAIN_SRVNAME "main"
+
+struct address {
+	struct sockaddr_in ipv4;
+	struct sockaddr_in6 ipv6;
+};
 
 struct config {
 	uint32_t id;

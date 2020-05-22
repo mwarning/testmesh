@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <linux/if_tun.h>
+#include <stddef.h>
 
 #include "log.h"
 #include "utils.h"
@@ -25,15 +25,54 @@ struct config *gconf = NULL;
 int g_sock_help = -1;
 int g_unicast_send_socket = -1;
 int g_tap_fd = -1;
+int g_route_request_seq = 0;
+uint8_t g_tun_mac[ETH_ALEN] = {0};
 
+enum {
+    PACKET_TYPE_DATA_PACKET,
+    PACKET_TYPE_ROUTE_REPLY,
+    PACKET_TYPE_ROUTE_REQUEST
+};
+
+struct entry {
+    uint8_t dst_mac[ETH_ALEN];
+    uint8_t next_hop_mac[ETH_ALEN];
+    int dst_seq;
+    //struct sockaddr_storage addr; //only set when it is a one hop neighbor
+    int life_time; //updated when entry is used, expire else
+    //list of precursor nodes?
+    struct entry *next;
+};
+
+// what happens when we sort by 
+struct __attribute__((__packed__)) MulticastPacket {
+    uint8_t mac[ETH_ALEN];
+    uint16_t port;
+};
+
+struct __attribute__((__packed__)) RouteRequest {
+    uint8_t type;
+    uint8_t src_mac[ETH_ALEN];
+    uint16_t seq;
+    uint8_t dst_mac[ETH_ALEN];
+    uint16_t hop_count;
+};
+
+struct __attribute__((__packed__)) RouteReply {
+    uint8_t type;
+    uint8_t src_mac[ETH_ALEN];
+    uint16_t src_seq;
+    uint8_t dst_mac[ETH_ALEN];
+    uint16_t dst_seq;
+    uint16_t hop_count;
+};
 
 // header for unicast packets
-struct __attribute__((__packed__)) packet {
-    struct {
-        uint32_t id;
-        uint16_t counter; // what is this used for?
-        uint16_t length;
-    } header;
+struct __attribute__((__packed__)) DataPacket {
+    uint8_t type;
+    uint8_t dst_mac[ETH_ALEN];
+    uint16_t hop_count;
+    uint16_t length;
     uint8_t payload[2000];
 };
 
@@ -48,14 +87,22 @@ struct interface {
 };
 
 struct peer {
+    uint8_t mac[ETH_ALEN]; // <= next_hop_mac
     struct sockaddr_storage addr;
-    time_t first_contact;
-    time_t last_contact;
     struct peer *next;
 };
 
+/*
+--peer 128.2.2.1:222 (internet)
+- multicast discovery (local peer ip)
+- interface
+
+*/
+
 // interface to send mutlicast discovery packets to
 static struct interface *g_interfaces = NULL;
+
+static struct entry *g_entries = NULL;
 
 // all known neighbors peer
 static struct peer *g_peers = NULL;
@@ -66,7 +113,27 @@ static struct sockaddr_in6 g_mcast_addr = {0};
 // listen address for unicast packets
 static struct sockaddr_in6 g_ucast_addr = {0};
 
-struct peer *find_peer(const struct sockaddr_storage *addr)
+struct entry* find_entry(const uint8_t *dst_mac)
+{
+    struct entry *entry;
+
+    entry = g_entries;
+    while (entry) {
+        if (0 == memcmp(entry->dst_mac, dst_mac, ETH_ALEN)) {
+            return entry;
+        }
+        entry = entry->next;
+    }
+    return NULL;
+}
+
+void add_entry(struct entry* entry)
+{
+    entry->next = g_entries;
+    g_entries = entry;
+}
+
+struct peer *find_peer_by_addr(const struct sockaddr_storage *addr)
 {
     struct peer *peer = g_peers;
     while (peer) {
@@ -79,12 +146,25 @@ struct peer *find_peer(const struct sockaddr_storage *addr)
     return NULL;
 }
 
-struct peer *add_peer(const struct sockaddr_storage *addr)
+struct peer *find_peer_by_mac(const uint8_t *mac)
+{
+    struct peer *peer = g_peers;
+    while (peer) {
+        if (0 == memcmp(&peer->mac[0], mac, ETH_ALEN)) {
+            return peer;
+        }
+        peer = peer->next;
+    }
+    return NULL;
+}
+
+struct peer *add_peer(const struct sockaddr_storage *addr, const uint8_t *mac)
 {
     struct peer *peer = (struct peer *) malloc(sizeof(struct peer));
     memcpy(&peer->addr, addr, sizeof(struct sockaddr_storage));
-    peer->first_contact = 0;
-    peer->last_contact = 0;
+    memcpy(&peer->mac, mac, ETH_ALEN);
+    //peer->first_contact = 0;
+    //peer->last_contact = 0;
 
     log_info("Add peer: %s", str_addr(&peer->addr));
 
@@ -210,28 +290,9 @@ int setup_unicast_socket(int *sock)
 
 int interface_parse(struct interface *ifce, const char *ifname)
 {
-    struct ifreq if_idx;
-    struct ifreq if_mac;
-
-    // get the index of the interface to send on
-    memset(&if_idx, 0, sizeof(struct ifreq));
-    strncpy(if_idx.ifr_name, ifname, IFNAMSIZ-1);
-    if (ioctl(g_sock_help, SIOCGIFINDEX, &if_idx) < 0) {
-        log_error("ioctl(SIOCGIFINDEX) %s", strerror(errno));
-        return 1;
-    }
-
-    // get the MAC address of the interface to send on
-    memset(&if_mac, 0, sizeof(struct ifreq));
-    strncpy(if_mac.ifr_name, ifname, IFNAMSIZ-1);
-    if (ioctl(g_sock_help, SIOCGIFHWADDR, &if_mac) < 0) {
-        log_error("ioctl(SIOCGIFHWADDR) %s", strerror(errno));
-        return 1;
-    }
-
-    ifce->ifindex = if_idx.ifr_ifindex;
     ifce->ifname = ifname;
-    memcpy(&ifce->mac, (uint8_t *)&if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
+    interface_get_ifindex(&ifce->ifindex, g_sock_help, ifname);
+    interface_get_mac(&ifce->mac[0], g_sock_help, ifname);
 
     return 0;
 }
@@ -246,7 +307,7 @@ void periodic_handler(int _events, int _fd)
     } else {
         last = gconf->time_now;
     }
-
+/*
     // timeout peers
     struct peer *peer = g_peers;
     g_peers = NULL;
@@ -261,17 +322,18 @@ void periodic_handler(int _events, int _fd)
         }
         peer = next;
     }
-
+*/
     // send discovery packet
-    char msg[20];
-    sprintf(msg, "%d", (int) ntohs(g_ucast_addr.sin6_port));
+    struct MulticastPacket p;
+    p.port = g_ucast_addr.sin6_port;
+    memcpy(&p.mac, &g_tun_mac, ETH_ALEN);
 
     struct interface *ife = g_interfaces;
     while (ife) {
-        if (sendto(ife->mcast_send_socket, msg, strlen(msg) + 1, 0, (struct sockaddr*) &g_mcast_addr, sizeof(g_mcast_addr)) < 0) {
+        if (sendto(ife->mcast_send_socket, &p, sizeof(p), 0, (struct sockaddr*) &g_mcast_addr, sizeof(g_mcast_addr)) < 0) {
             log_warning("sendto() %s", strerror(errno));
         } else {
-            log_debug("multicast discovery send: %s (%s)", msg, ife->ifname);
+            log_debug("multicast discovery send on %s", ife->ifname);
         }
         ife = ife->next;
     }
@@ -281,6 +343,7 @@ void periodic_handler(int _events, int _fd)
 void mcast_handler(int events, int fd)
 {
     struct sockaddr_storage addr;
+    struct Entry *entry;
     struct peer *peer;
     int recv_len;
     char buffer[200];
@@ -295,26 +358,37 @@ void mcast_handler(int events, int fd)
         return;
     }
 
-    buffer[recv_len] = '\0';
-    int port = port_parse(buffer, -1);
+    if (recv_len != sizeof(struct MulticastPacket)) {
+        return;
+    }
 
-    if (port > 0) {
-        port_set(&addr, port);
+    struct MulticastPacket *p = (struct MulticastPacket*) &buffer[0];
 
-        peer = find_peer(&addr);
+    if (p->port > 0) {
+        struct peer *peer = find_peer_by_addr(&addr);
         if (peer == NULL) {
-            peer = add_peer(&addr);
-            peer->first_contact = gconf->time_now;
+            port_set(&addr, ntohs(p->port));
+            add_peer(&addr, &p->mac[0]);
+            //peer->first_contact = gconf->time_now;
         }
-        peer->last_contact = gconf->time_now;
+        //peer->last_contact = gconf->time_now;
     }
 }
 
-// read traffic from peers to and write to tun0
+void send_packet(const struct sockaddr_storage *addr, const void *data, int data_len)
+{
+    socklen_t slen = addr_len(addr); // sizeof(struct sockaddr_in6);
+    if (sendto(g_unicast_send_socket, data, data_len, 0, (struct sockaddr*) addr, slen) == -1) {
+        log_error("Failed send packet to %s: %s", str_addr(addr), strerror(errno));
+    }
+}
+
+// read traffic from peers and write to tun0
 void ucast_handler(int events, int fd)
 {
+    struct entry *entry;
     struct sockaddr_storage addr;
-    struct packet p;
+    uint8_t buffer[2000];
     int recv_len;
 
     if (events <= 0) {
@@ -322,113 +396,197 @@ void ucast_handler(int events, int fd)
     }
 
     socklen_t slen = sizeof(addr);
-    if ((recv_len = recvfrom(fd, &p, sizeof(p), 0, (struct sockaddr *) &addr, &slen)) < 0) {
+    if ((recv_len = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &addr, &slen)) <= 0) {
         log_error("recvfrom() %s", strerror(errno));
         return;
     }
 
-    if ((sizeof(p.header) + p.header.length) != recv_len) {
-        log_warning("invalid packet length in header from %s", str_addr(&addr));
-        return;
+/*
+    {
+        struct peer *peer = g_peers;
+        while (peer) {
+            if (addr_equal(&peer->addr, &addr)) {
+                memcpypeer->mac
+                break;
+            }
+            peer = peer->next;
+        }
+    }
+*/
+
+    if (buffer[0] == PACKET_TYPE_DATA_PACKET) {
+        log_debug("got PACKET_TYPE_DATA_PACKET");
+        struct DataPacket *p = (struct DataPacket*) buffer;
+
+        if (0 == memcmp(p->dst_mac, g_tun_mac, ETH_ALEN)) {
+            // write to tun0
+            if (write(g_tap_fd, p->payload, p->length) != p->length) {
+                log_error("write() %s", strerror(errno));
+                return;
+            }
+        } else if ((entry = find_entry(p->dst_mac)) != NULL) {
+            struct peer *peer = find_peer_by_mac(&entry->next_hop_mac[0]);
+            memcpy(&p->dst_mac, &entry->next_hop_mac, ETH_ALEN);
+            p->hop_count += 1;
+            int p_len = offsetof(struct DataPacket, payload) + p->length;
+
+            // forward packet
+            if (p_len != recv_len) {
+                log_warning("invalid packet length in header from %s", str_addr(&addr));
+                return;
+            }
+
+            if (peer) {
+                send_packet(&peer->addr, p, p_len);
+            } else {
+                log_error("No address for next_hop_mac!");
+            }
+        } else {
+            // drop packet
+        }
     }
 
-    struct peer *peer = find_peer(&addr);
-    if (peer) {
-        peer->last_contact = gconf->time_now;
-
-        // send out of tun0 interface
-        if (write(g_tap_fd, p.payload, p.header.length) != p.header.length) {
-            log_error("write() %s", strerror(errno));
-            return;
+    else if (buffer[0] == PACKET_TYPE_ROUTE_REPLY) {
+        log_debug("got PACKET_TYPE_ROUTE_REPLY");
+        struct RouteReply *p = (struct RouteReply*) buffer;
+        if ((entry = find_entry(p->dst_mac)) != NULL) {
+            struct peer *peer = find_peer_by_mac(&entry->next_hop_mac[0]);
+            send_packet(&peer->addr, p, sizeof(struct RouteReply));
+        } else {
+            // drop packet 
         }
-        // TODO: or forward traffic...
+    }
+
+    else if (buffer[0] == PACKET_TYPE_ROUTE_REQUEST) {
+        log_debug("got PACKET_TYPE_ROUTE_REQUEST");
+        struct RouteRequest *p = (struct RouteRequest*) buffer;
+
+        if (0 == memcmp(&p->dst_mac, g_tun_mac, ETH_ALEN)) {
+            struct RouteReply reply = {.type = PACKET_TYPE_ROUTE_REPLY};
+
+            // send reply back
+            send_packet(&addr, &reply, sizeof(struct RouteReply));
+        } else if ((entry = find_entry(&p->dst_mac[0])) != NULL) {
+            struct peer *peer = find_peer_by_mac(&entry->next_hop_mac[0]);
+            // compare seq number 
+            if (p->seq > entry->dst_seq) {
+                entry->dst_seq = p->seq;
+                p->hop_count += 1;
+                send_packet(&peer->addr, p, sizeof(struct RouteRequest));
+            } else {
+                // drop packet
+            }
+        } else {
+            /*
+            entry = (struct entry*) malloc(sizeof(struct entry));
+            memcpy(&entry->dst_mac[0], p-> ETH_ALEN);
+            memcpy(&entry->next_hop_mac[0], ETH_ALEN);
+            entry->dst_seq = p->seq;
+    //struct sockaddr_storage addr; //only set when it is a one hop neighbor
+
+            add_entry(entry);
+            */
+
+            p->hop_count += 1;
+
+            // send to all neighbors
+            struct peer *peer = g_peers;
+            while (peer) {
+                send_packet(&peer->addr, p, sizeof(struct RouteRequest));
+                peer = peer->next;
+            }
+        }
     } else {
-        log_warning("ignore packet from unknown peer: %s", str_addr(&addr));
+        log_debug("got unknown packet");
     }
 }
 
 // read traffic from tun0 and send to peers
 void tun_handler(int events, int fd)
 {
-    struct packet p;
+    uint8_t buffer[2000];
 
     if (events <= 0) {
         return;
     }
 
     while (1) {
-        int read_len = read(fd, &p.payload, sizeof(p.payload));
+        int read_len = read(fd, buffer, sizeof(buffer));
         if (read_len <= 0) {
             break;
         }
 
-        p.header.id = gconf->id;
-        p.header.counter = 0;
-        p.header.length = read_len;
-
-        int ip_version = (p.payload[0] >> 4) & 0xff;
+        int ip_version = (buffer[0] >> 4) & 0xff;
 
         // check if it is a multicast packet
-        if (ip_version == 4) {
-            // IPv4 packet
-            int total_length = ntohs(*((uint16_t*) &p.payload[2]));
-            struct in_addr *saddr = (struct in_addr *) &p.payload[12];
-            struct in_addr *daddr = (struct in_addr *) &p.payload[16];
-
-            // print addresses
-            char saddr_str[INET_ADDRSTRLEN];
-            char daddr_str[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, saddr, saddr_str, sizeof(saddr_str));
-            inet_ntop(AF_INET, daddr, daddr_str, sizeof(daddr_str));
-
-            log_info("received IPv4 packet on %s: %s => %s (len %d)",
-                gconf->dev, saddr_str, daddr_str, total_length
-            );
-
-            if (gconf->drop_multicast && IN_MULTICAST(ntohl(daddr->s_addr))) {
-                log_warning("is IPv4 multicast packet => drop");
-                return;
-            }
-        } else if (ip_version == 6) {
-            // IPv6 packet
-            int payload_length = ntohs(*((uint16_t*) &p.payload[4]));
-            struct in6_addr *saddr = (struct in6_addr *) &p.payload[8];
-            struct in6_addr *daddr = (struct in6_addr *) &p.payload[24];
-
-            // print addresses
-            char saddr_str[INET6_ADDRSTRLEN];
-            char daddr_str[INET6_ADDRSTRLEN];
-            inet_ntop(AF_INET6, saddr, saddr_str, sizeof(saddr_str));
-            inet_ntop(AF_INET6, daddr, daddr_str, sizeof(daddr_str));
-
-            log_info("received IPv6 packet on %s: %s => %s (len %d)",
-                gconf->dev, saddr_str, daddr_str, payload_length
-            );
-
-            if (gconf->drop_multicast && IN6_IS_ADDR_MULTICAST(daddr)) {
-                log_warning("is IPv6 multicast packet => drop");
-                return;
-            }
-        } else {
+        if (ip_version != 6) {
             log_debug("unknown packet protocol version => drop");
             return;
         }
 
-        if (g_peers == NULL) {
-            log_warning("no peers known => drop");
+        // IPv6 packet
+        int payload_length = ntohs(*((uint16_t*) &buffer[4]));
+        struct in6_addr *saddr = (struct in6_addr *) &buffer[8];
+        struct in6_addr *daddr = (struct in6_addr *) &buffer[24];
+/*
+        // print addresses
+        char saddr_str[INET6_ADDRSTRLEN];
+        char daddr_str[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, saddr, saddr_str, sizeof(saddr_str));
+        inet_ntop(AF_INET6, daddr, daddr_str, sizeof(daddr_str));
+
+        log_info("received IPv6 packet on %s: %s => %s (len %d)",
+            gconf->dev, saddr_str, daddr_str, payload_length
+        );
+*/
+        if (gconf->drop_multicast && IN6_IS_ADDR_MULTICAST(daddr)) {
+            log_warning("is IPv6 multicast packet => drop");
+            return;
         }
 
-        struct peer *peer = g_peers;
-        while (peer) {
-            // send to all peers
-            socklen_t slen = sizeof(struct sockaddr_in6);
-            int packet_len = sizeof(p.header) + p.header.length;
-            if (sendto(g_unicast_send_socket, &p, packet_len, 0, (struct sockaddr*) &peer->addr, slen) == -1) {
-                log_error("Failed forward packet to %s: %s", str_addr(&peer->addr), strerror(errno));
+        log_debug("read %d from %s", read_len, gconf->dev);
+
+        struct entry* entry;
+        uint8_t dmac[ETH_ALEN];
+        extract_mac_from_eui64(dmac, daddr);
+        if ((entry = find_entry(dmac)) != NULL) {
+            struct peer *peer = find_peer_by_mac(&entry->next_hop_mac[0]);
+
+            // send to peer
+            struct DataPacket p = {
+                .type = PACKET_TYPE_DATA_PACKET,
+                .hop_count = 0,
+                .length = read_len
+            };
+
+            memcpy(&p.dst_mac, dmac, ETH_ALEN);
+            memcpy(&p.payload, buffer, read_len);
+
+            log_debug("forward DataPacket to %s", str_addr(&peer->addr));
+            int p_len = offsetof(struct DataPacket, payload) + p.length;
+            send_packet(&peer->addr, &p, p_len);
+        } else {
+            struct RouteRequest p = {
+                .type = PACKET_TYPE_ROUTE_REQUEST,
+                .seq = g_route_request_seq++,
+                .hop_count = 0
+            };
+            memcpy(&p.src_mac, g_tun_mac, ETH_ALEN); // source
+            memcpy(&p.dst_mac, dmac, ETH_ALEN); // target
+
+            struct peer *peer = g_peers;
+            while (peer) {
+                log_debug("send RouteRequest to %s", str_addr(&peer->addr));
+                send_packet(&peer->addr, &p, sizeof(struct RouteRequest));
+                peer = peer->next;
             }
-            peer = peer->next;
         }
+        //memcpy(&rreq.src, &saddr, struct(struct in6_addr));
+        //memcpy(&rreq.dst, &daddr, struct(struct in6_addr));
     }
+
+    //send_all_peers(&rreq, sizeof(rreq));
+    //send_all_peers(&p, sizeof(p.header) + p.header.length);
 }
 
 void usage(const char *pname) {
@@ -484,8 +642,9 @@ int main(int argc, char *argv[])
             case 'c': {
                 struct sockaddr_storage addr = {0};
                 if (addr_parse(&addr, optarg, "1234", AF_UNSPEC) == 0) {
-                    if (!find_peer(&addr)) {
-                        add_peer(&addr);
+                    if (!find_peer_by_addr(&addr)) {
+                        uint8_t mac[ETH_ALEN] = {0};
+                        add_peer(&addr, mac);
                     }
                 } else {
                     log_error("Invalid address: %s", optarg);
@@ -525,7 +684,11 @@ int main(int argc, char *argv[])
 
     // setup unicast address for bind
     g_ucast_addr.sin6_family = AF_INET6;
+    inet_pton(AF_INET6, "::", &g_ucast_addr.sin6_addr);
     g_ucast_addr.sin6_port = htons(port_random());
+
+    log_info("Listen on multicast: %s", str_addr((struct sockaddr_storage*) &g_mcast_addr));
+    log_info("Listen on unicast: %s", str_addr((struct sockaddr_storage*) &g_ucast_addr));
 
     unix_signals();
 
@@ -538,6 +701,8 @@ int main(int argc, char *argv[])
         log_error("Error connecting to %s interface: %s", gconf->dev, strerror(errno));
         return 1;
     }
+
+    interface_get_mac(&g_tun_mac[0], g_sock_help, gconf->dev);
 
     struct interface *ife = g_interfaces;
     while (ife) {

@@ -11,6 +11,8 @@
 
 void hexDump(const char * desc, const void * addr, const int len);
 
+void extract_mac_from_eui64(uint8_t *mac, const struct in6_addr *addr);
+
 int port_random(void);
 int port_parse(const char pstr[], int err);
 int port_set(struct sockaddr_storage *addr, uint16_t port);
@@ -28,6 +30,9 @@ int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_stora
 
 int interface_set_mtu(int fd, const char *ifname, int mtu);
 int interface_set_up(int fd, const char* ifname);
+int interface_get_ifindex(int* ifindex, int fd, const char *ifname);
+int interface_get_mac(uint8_t *mac, int fd, const char *ifname);
 int tun_alloc(const char *dev);
+
 
 #endif // _UTILS_H_

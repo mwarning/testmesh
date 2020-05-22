@@ -79,6 +79,17 @@ void hexDump(const char * desc, const void * addr, const int len) {
     printf("  %s\n", buff);
 }
 
+void extract_mac_from_eui64(uint8_t *mac, const struct in6_addr *addr)
+{
+	//fe80::604f:4ff:fe33:af43
+	mac[0] = addr->s6_addr[8];
+	mac[1] = addr->s6_addr[9] ^ 2;
+	mac[2] = addr->s6_addr[10];
+	mac[3] = addr->s6_addr[13];
+	mac[4] = addr->s6_addr[14];
+	mac[5] = addr->s6_addr[15];
+}
+
 // Create a random port != 0
 int port_random(void)
 {
@@ -350,6 +361,38 @@ int interface_set_mtu(int fd, const char *ifname, int mtu)
       log_error("ioctl(SIOCSIFMTU) %s", strerror(errno));
       return 1;
     }
+
+    return 0;
+}
+
+int interface_get_ifindex(int* ifindex, int fd, const char *ifname)
+{
+    struct ifreq if_idx;
+
+    memset(&if_idx, 0, sizeof(struct ifreq));
+    strncpy(if_idx.ifr_name, ifname, IFNAMSIZ-1);
+    if (ioctl(fd, SIOCGIFINDEX, &if_idx) < 0) {
+        log_error("ioctl(SIOCGIFINDEX) %s", strerror(errno));
+        return 1;
+    }
+
+    *ifindex = if_idx.ifr_ifindex;
+
+    return 0;
+}
+
+int interface_get_mac(uint8_t *mac, int fd, const char *ifname)
+{
+    struct ifreq if_mac;
+
+    memset(&if_mac, 0, sizeof(struct ifreq));
+    strncpy(if_mac.ifr_name, ifname, IFNAMSIZ-1);
+    if (ioctl(fd, SIOCGIFHWADDR, &if_mac) < 0) {
+        log_error("ioctl(SIOCGIFHWADDR) %s", strerror(errno));
+        return 1;
+    }
+
+    memcpy(mac, (uint8_t*) &if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
 
     return 0;
 }
