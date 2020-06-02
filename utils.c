@@ -12,10 +12,12 @@
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <linux/if_tun.h>
+#include <ifaddrs.h>
 
 #include "main.h"
 #include "log.h"
 #include "utils.h"
+
 
 void hexDump(const char * desc, const void * addr, const int len) {
     const unsigned char * pc = (const unsigned char *)addr;
@@ -115,7 +117,7 @@ int port_parse(const char pstr[], int err)
 	}
 }
 
-int port_set(struct sockaddr_storage *addr, uint16_t port)
+int port_set(struct address *addr, uint16_t port)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
@@ -148,7 +150,7 @@ int bytes_random(void *buffer, size_t size)
 	return rc;
 }
 
-const char *str_addr(const struct sockaddr_storage *addr)
+const char *str_addr(const struct address *addr)
 {
 	static char addrbuf[INET6_ADDRSTRLEN + 8];
 	char buf[INET6_ADDRSTRLEN];
@@ -175,7 +177,7 @@ const char *str_addr(const struct sockaddr_storage *addr)
 	return addrbuf;
 }
 
-int addr_is_localhost(const struct sockaddr_storage *addr)
+int addr_is_localhost(const struct address *addr)
 {
 	// 127.0.0.1
 	const uint32_t inaddr_loopback = htonl(INADDR_LOOPBACK);
@@ -190,7 +192,7 @@ int addr_is_localhost(const struct sockaddr_storage *addr)
 	}
 }
 
-int addr_is_multicast(const struct sockaddr_storage *addr)
+int addr_is_multicast(const struct address *addr)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
@@ -202,7 +204,7 @@ int addr_is_multicast(const struct sockaddr_storage *addr)
 	}
 }
 
-int addr_port(const struct sockaddr_storage *addr)
+int addr_port(const struct address *addr)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
@@ -214,7 +216,7 @@ int addr_port(const struct sockaddr_storage *addr)
 	}
 }
 
-int addr_len(const struct sockaddr_storage *addr)
+int addr_len(const struct address *addr)
 {
 	switch (addr->ss_family) {
 	case AF_INET:
@@ -226,7 +228,7 @@ int addr_len(const struct sockaddr_storage *addr)
 	}
 }
 
-static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str[], const char port_str[], int af)
+static int addr_parse_internal(struct address *ret, const char addr_str[], const char port_str[], int af)
 {
     struct addrinfo hints;
     struct addrinfo *info = NULL;
@@ -274,7 +276,7 @@ static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str
 * "[<address>]"
 * "[<address>]:<port>"
 */
-int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], const char default_port[], int af)
+int addr_parse(struct address *addr_ret, const char full_addr_str[], const char default_port[], int af)
 {
 	char addr_buf[256];
 	char *addr_beg;
@@ -338,7 +340,7 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
 }
 
 // Compare two ip addresses, ignore port
-int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2)
+int addr_equal(const struct address *addr1, const struct address *addr2)
 {
 	if (addr1->ss_family != addr2->ss_family) {
 		return 0;
@@ -424,6 +426,40 @@ int tun_alloc(const char *dev)
     return fd;
 }
 
+int interface_get_addr6(struct address *addr, const char *ifname)
+{
+	struct ifaddrs *ifaddr;
+	struct ifaddrs *ifa;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return -1;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+       if (ifa->ifa_addr == NULL) {
+           continue;
+       }
+
+       if (ifa->ifa_addr->sa_family != AF_INET6) {
+           continue;
+       }
+
+       if (strcmp(ifa->ifa_name, ifname) != 0) {
+           continue;
+       }
+
+       memcpy(addr, (struct sockaddr_in6 *)ifa->ifa_addr, sizeof(struct sockaddr_in6));
+       //char buf[100];
+       //printf("%s: %s\n", ifa->ifa_name, inet_ntop(AF_INET6, &((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr, buf, sizeof(buf)));
+       freeifaddrs(ifaddr);
+       return 0;
+    }
+
+    freeifaddrs(ifaddr);
+    return -1;
+}
+
 int interface_set_up(int fd, const char* ifname) {
     struct ifreq ifr = {0};
     int oldflags;
@@ -432,7 +468,7 @@ int interface_set_up(int fd, const char* ifname) {
 
     if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0) {
         log_error("ioctl(SIOCGIFFLAGS) for %s: %s", ifname, strerror(errno));
-        return 1;
+        return -1;
     }
 
     oldflags = ifr.ifr_flags;
@@ -445,8 +481,22 @@ int interface_set_up(int fd, const char* ifname) {
 
     if (ioctl(fd, SIOCSIFFLAGS, &ifr) < 0) {
         log_error("ioctl(SIOCSIFFLAGS) for %s: %s", ifname, strerror(errno));
-        return 1;
+        return -1;
     }
 
     return 0;
+}
+
+int interface_is_up(int fd, const char *ifname)
+{
+    struct ifreq ifr = {0};
+
+    memset(&ifr, 0, sizeof(ifr));
+    strcpy(ifr.ifr_name, ifname);
+    if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0) {
+		log_error("SIOCGIFFLAGS for %s: %s", ifname, strerror(errno));
+		return 0;
+    }
+
+    return !!(ifr.ifr_flags & IFF_UP);
 }

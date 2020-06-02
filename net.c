@@ -41,6 +41,9 @@ void net_add_handler(int fd, net_callback *cb)
 
 	for (i = 0; i < ARRAY_SIZE(g_cbs); i++) {
 		if (g_cbs[i] == NULL) {
+			if (fd >= 0) {
+				net_set_nonblocking(fd);
+			}
 			g_cbs[i] = cb;
 			g_fds[i].fd = fd;
 			g_fds[i].events = POLLIN;

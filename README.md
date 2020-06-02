@@ -15,3 +15,7 @@ Here, automatic discovery for local peers is performed on interfaces `wlan0` and
 If at least two peers are connected, they can send arbitrary IP traffic to each other. IP multicast traffic is filtered out if not enabled.
 
 Packet that are too big might cause problems.
+
+AODV is the routing protocol used in ZigBee.
+
+- RFC3561: [Ad hoc On-Demand Distance Vector (AODV) Routing](https://tools.ietf.org/html/rfc3561)
