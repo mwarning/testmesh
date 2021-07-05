@@ -235,17 +235,10 @@ static void ext_handler(int events, int fd)
         return;
     }
 
-    char from_str[INET6_ADDRSTRLEN + 8];
-    char to_str[INET6_ADDRSTRLEN + 8];
-    char ifname[IF_NAMESIZE] = {0};
-    if_indextoname(ifindex, ifname);
-    str_addr_buf(from_str, &from_addr);
-    str_addr_buf(to_str, &to_addr);
-
     if (fd == gstate.sock_mcast_receive) {
-        log_debug("got mcast %s => %s (%s)", from_str, to_str, ifname);
+        log_debug("got mcast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
     } else {
-        log_debug("got ucast %s => %s (%s)", from_str, to_str, ifname);
+        log_debug("got ucast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
     }
 
     switch (buffer[0]) {
@@ -253,7 +246,7 @@ static void ext_handler(int events, int fd)
         handle_DATA(ifindex, &from_addr, (DATA*) buffer, recv_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr(&from_addr), ifname);
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr(&from_addr),  str_ifindex(ifindex));
     }
 }
 

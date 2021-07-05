@@ -40,10 +40,11 @@ int port_set6(struct sockaddr_in6 *addr, uint16_t port);
 
 int bytes_random(void *buffer, size_t size);
 
-const char *str_addr_buf(char *addrbuf, const struct sockaddr_storage *addr);
 const char *str_addr(const struct sockaddr_storage *addr);
 const char *str_addr6(const struct sockaddr_in6 *addr);
 const char *str_in6(const struct in6_addr *addr);
+
+const char *str_ifindex(int ifindex);
 
 int add_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex);
 int del_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex);
