@@ -26,7 +26,7 @@ typedef struct sockaddr_storage Address;
 #define TIMEOUT_ENTRY 20
 
 typedef struct {
-    uint32_t id;
+    uint32_t src_id;
     uint16_t seq_num;
     uint8_t hop_count;
     time_t last_updated;
@@ -65,30 +65,30 @@ static void entry_timeout()
 
     HASH_ITER(hh, g_entries, cur, tmp) {
         if ((cur->last_updated + TIMEOUT_ENTRY) < gstate.time_now) {
-            log_debug("timeout entry %04x", cur->id);
+            log_debug("timeout entry %04x", cur->src_id);
             HASH_DEL(g_entries, cur);
         }
     }
 }
 
-static Entry *entry_find(uint32_t id)
+static Entry *entry_find(uint32_t src_id)
 {
     Entry *cur = NULL;
-    HASH_FIND_INT(g_entries, &id, cur);
+    HASH_FIND_INT(g_entries, &src_id, cur);
     return cur;
 }
 
-static Entry *entry_add(uint32_t id, uint16_t seq_num, uint8_t hop_count, const struct sockaddr_storage *addr)
+static Entry *entry_add(uint32_t src_id, uint16_t seq_num, uint8_t hop_count, const struct sockaddr_storage *addr)
 {
     Entry *e = (Entry*) malloc(sizeof(Entry));
 
-    e->id = id;
+    e->src_id = src_id;
     e->hop_count = hop_count;
     e->seq_num = seq_num;
     e->last_updated = gstate.time_now;
     memcpy(&e->addr, addr, sizeof(struct sockaddr_storage));
 
-    HASH_ADD_INT(g_entries, id, e);
+    HASH_ADD_INT(g_entries, src_id, e);
 
     return e;
 }
@@ -277,10 +277,10 @@ static int console_handler(FILE* fp, const char* cmd)
         Entry *tmp;
         char buf[64];
 
-        fprintf(fp, "id seq_num hop-count last-updated prev-hop\n");
+        fprintf(fp, "src_id seq_num hop-count last-updated prev-hop\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
             fprintf(fp, "  %04x %u %s\n",
-                cur->id,
+                cur->src_id,
                 (unsigned) cur->seq_num,
                 cur->hop_count,
                 format_duration(buf, gstate.time_started, cur->last_updated),
