@@ -39,7 +39,7 @@ void net_add_handler(int fd, net_callback *cb)
 		exit(1);
 	}
 
-	if (g_count == ARRAY_SIZE(g_cbs)) {
+	if (g_count == ARRAY_NELEMS(g_cbs)) {
 		log_error("No more space for handlers.");
 		exit(1);
 	}
@@ -123,10 +123,9 @@ void net_loop(void)
 
 void net_free(void)
 {
-	int i;
-
-	for (i = 0; i < g_count; i++) {
+	for (int i = 0; i < g_count; i++) {
 		close(g_fds[i].fd);
 	}
+
 	g_count = 0;
 }

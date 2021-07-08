@@ -42,7 +42,7 @@ typedef struct __attribute__((__packed__)) {
 static uint32_t g_own_id = 0; // set from the fe80 addr of tun0
 
 
-static void handle_DATA(int ifindex, Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
 {
     log_debug("got data packet: %s / %04x => %04x",
         str_addr(addr), p->src_id, p->dst_id);
@@ -128,8 +128,8 @@ static void tun_handler(int events, int fd)
 
 static void ext_handler(int events, int fd)
 {
-    struct sockaddr_storage from_addr = {0};
-    struct sockaddr_storage to_addr = {0};
+    Address from_addr = {0};
+    Address to_addr = {0};
     uint8_t buffer[sizeof(DATA)];
     ssize_t recv_len;
     int ifindex = 0;

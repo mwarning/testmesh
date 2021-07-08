@@ -25,7 +25,7 @@ int is_active_entry(const Traffic *tr)
 /*
 void send_introductions()
 {
-    for (int i = 0; i < ARRAY_SIZE(g_traffic); i += 1) {
+    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
         if (count_neighbors() > 10) {
             break;
         }
@@ -51,7 +51,7 @@ int traffic_add_entry(uint16_t from, uint16_t to, uint32_t bytes)
     }
 
     int first_free_entry = -1; //first
-    for (int i = 0; i < ARRAY_SIZE(g_traffic); i += 1) {
+    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
         Traffic *traffic = &g_traffic[i];
         if (traffic->from == 0 && first_free_entry == -1) {
             first_free_entry = i;
@@ -78,7 +78,7 @@ int traffic_add_entry(uint16_t from, uint16_t to, uint32_t bytes)
 uint32_t traffic_get_entry(uint16_t from, uint16_t to)
 {
     uint32_t sum = 0;
-    for (int i = 0; i < ARRAY_SIZE(g_traffic); i += 1) {
+    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
         Traffic *traffic = &g_traffic[i];
         if (from == 0) {
             if (to == 0 || traffic->to == to)  {
@@ -99,7 +99,7 @@ uint32_t traffic_get_entry(uint16_t from, uint16_t to)
 
 void traffic_halving()
 {
-    for (int i = 0; i < ARRAY_SIZE(g_traffic); i += 1) {
+    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
         Traffic *traffic = &g_traffic[i];
         traffic->bytes /= 2;
 
@@ -113,7 +113,7 @@ void traffic_halving()
 
 void traffic_del_entry(uint16_t id)
 {
-    for (int i = 0; i < ARRAY_SIZE(g_traffic); i += 1) {
+    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
         Traffic *traffic = &g_traffic[i];
         if (traffic->from == id || traffic->to == id) {
             memset(traffic, 0, sizeof(Traffic));
@@ -126,7 +126,7 @@ void traffic_debug(FILE* out)
     char buf[64];
     int count = 0;
     fprintf(out, "  from => to (bytes)\n");
-    for (int i = 0; i < ARRAY_SIZE(g_traffic); i += 1) {
+    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
         Traffic *traffic = &g_traffic[i];
         if (traffic->from != 0) {
             fprintf(out, "  %u => %u (%s)\n",

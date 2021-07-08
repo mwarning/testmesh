@@ -88,7 +88,7 @@ static Entry *entry_add(uint32_t id, uint16_t seq_num)
     return e;
 }
 
-static void handle_DATA(int ifindex, Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
 {
     log_debug("data packet: %s / %04x => %04x",
         str_addr(addr), p->src_id, p->dst_id);
@@ -189,8 +189,8 @@ static void tun_handler(int events, int fd)
 
 static void ext_handler(int events, int fd)
 {
-    struct sockaddr_storage from_addr = {0};
-    struct sockaddr_storage to_addr = {0};
+    Address from_addr = {0};
+    Address to_addr = {0};
     uint8_t buffer[sizeof(DATA)];
     ssize_t recv_len;
     int ifindex = 0;

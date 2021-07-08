@@ -8,7 +8,6 @@
 #include <netinet/in.h>
 
 // Number of elements in an array
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define ARRAY_NELEMS(x) (sizeof(x) / sizeof((x)[0]))
 
 // Size of a struct element
