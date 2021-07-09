@@ -26,7 +26,7 @@
 #include "client.h"
 
 #include "dsr-bloom-0/routing.h"
-#include "dsr-bloom-1/routing.h"
+#include "counting-bloom-0/routing.h"
 #include "flood-0/routing.h"
 #include "flood-1/routing.h"
 #include "vivaldi-0/routing.h"
@@ -218,7 +218,7 @@ int main(int argc, char *argv[])
     int rc = 0;
 
     dsr_bloom_0_register();
-    dsr_bloom_1_register();
+    counting_bloom_0_register();
     flood_0_register();
     flood_1_register();
     vivaldi_0_register();

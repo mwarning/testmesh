@@ -17,7 +17,7 @@ FILES := src/main.c \
 
 # add routing protocols
 FILES += $(wildcard src/dsr-bloom-0/*.c)
-FILES += $(wildcard src/dsr-bloom-1/*.c)
+FILES += $(wildcard src/counting-bloom-0/*.c)
 FILES += $(wildcard src/flood-0/*.c)
 FILES += $(wildcard src/flood-1/*.c)
 FILES += $(wildcard src/vivaldi-0/*.c)

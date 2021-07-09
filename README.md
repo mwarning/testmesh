@@ -7,7 +7,7 @@ The goal is to help to develop better mesh routing protocols, so that community 
 
 Implemented Protocols:
 - [dsr-bloom-0](src/dsr-bloom-0)
-- [dsr-bloom-1](src/dsr-bloom-1)
+- [counting-bloom-0](src/counting-bloom-0)
 - [flood-0](src/flood-0)
 - [flood-1](src/flood-1)
 
