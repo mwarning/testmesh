@@ -143,8 +143,8 @@ void send_mcasts(const void* data, int data_len)
     struct interface *ifa = NULL;
     while ((ifa = utarray_next(g_interfaces, ifa))) {
         int rc = send_mcast(ifa->ifindex, data, data_len);
-        log_debug("ifname: %s, rc: %d", ifa->ifname, rc);
-        if (rc) {
+        //log_debug("ifname: %s, rc: %d", ifa->ifname, rc);
+        if (rc != 0) {
         	// disable interface
         	ifa->ifindex = 0;
         }
