@@ -336,9 +336,6 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // sleep up to 1 second
-    usleep(rand() % 1000);
-
     gstate.protocol->init();
 
     log_info("Protocol: %s", gstate.protocol->name);
