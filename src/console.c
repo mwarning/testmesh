@@ -87,8 +87,8 @@ static void print_help(FILE *fp)
 static int console_exec(FILE *fp, const char *request)
 {
     char addr[32];
-    char buf1[64];
-    char buf2[64];
+    char buf_duration1[64];
+    char buf_duration2[64];
     char d; // dummy marker
     int ret = 0;
 
@@ -102,8 +102,8 @@ static int console_exec(FILE *fp, const char *request)
         while (n) {
             uint32_t inbound = traffic_get_entry(0, n->id);
             uint32_t outbound = traffic_get_entry(n->id, 0);
-            char *age = format_duration(buf1, n->time_added, gstate.time_now);
-            char *last = format_duration(buf2, n->time_updated, gstate.time_now);
+            char *age = format_duration(buf_duration1, n->time_added, gstate.time_now);
+            char *last = format_duration(buf_duration2, n->time_updated, gstate.time_now);
             fprintf(fp, "  %u, addr: %s, download: %u, upload: %u, age: %s, last: %s\n",
                 (unsigned) n->id, str_addr(&n->addr),
                 (unsigned) inbound, (unsigned) outbound,
