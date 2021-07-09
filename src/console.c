@@ -72,14 +72,15 @@ static void debug_ip_addresses(FILE *fp, const char *ifname)
 static void print_help(FILE *fp)
 {
     fprintf(fp,
-        "i: show information\n"
+        "i: show general information\n"
         "a: add peer\n"
         "q: close this console\n"
         "v: toggle verbosity\n"
+        "h: show this help\n"
     );
 
     if (gstate.protocol->console) {
-        gstate.protocol->console(fp, "h");
+        gstate.protocol->console(fp, "h\n");
     }
 }
 
@@ -127,13 +128,13 @@ static int console_exec(FILE *fp, const char *request)
     } else if (sscanf(request, " v%c", &d) == 1) {
         gstate.log_verbosity = (gstate.log_verbosity + 1) % 3;
         fprintf(fp, "%s enabled\n", verbosity_str(gstate.log_verbosity));
-    } else if (sscanf(request, " i%c", &d) == 1) {
+    } else if (sscanf(request, " p%c", &d) == 1) {
         fprintf(fp, "  process id: %u\n", (unsigned) getpid());
         fprintf(fp, "  verbosity: %s\n", verbosity_str(gstate.log_verbosity));
-        fprintf(fp, "  device: %s\n", gstate.tun_name);
-        debug_ip_addresses(fp, gstate.tun_name);
+        fprintf(fp, "  tun device: %s\n", gstate.tun_name);
+        //debug_ip_addresses(fp, gstate.tun_name);
         if (gstate.protocol->console) {
-            gstate.protocol->console(fp, "i");
+            gstate.protocol->console(fp, "i\n");
         }
     } else if (gstate.protocol->console) {
         if (0 != gstate.protocol->console(fp, request)) {
