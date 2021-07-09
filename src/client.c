@@ -31,10 +31,12 @@ void client_usage(const char *pname)
 {
     fprintf(stderr,
         "Usage:\n"
-        "  %s -s list\n"
+        "  %s -s /tmp/command.sock [<commands-to-send>]\n"
         "\n"
         "-s <path>       Domain socket to control the instance.\n"
-        "-h              Prints this help text.\n",
+        "-h              Prints this help text.\n"
+        "\n"
+        "If no command is given on the command, then an interactive shell will be started.\n",
         pname
     );
 }
