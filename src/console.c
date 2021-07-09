@@ -150,7 +150,6 @@ static int console_exec(FILE *fp, const char *request)
 void console_client_handler(int rc, int fd)
 {
     char request[256];
-    char *ptr;
     int ret = 0;
     FILE *fp;
 
