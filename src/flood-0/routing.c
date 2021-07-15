@@ -90,6 +90,11 @@ static Entry *entry_add(uint32_t id, uint16_t seq_num)
 
 static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
 {
+    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
+        log_debug("invalid packet size => drop");
+        return;
+    }
+
     log_debug("data packet: %s / %04x => %04x",
         str_addr(addr), p->src_id, p->dst_id);
 

@@ -144,6 +144,11 @@ static Neighbor *neighbor_add(uint32_t sender_id, uint8_t *bloom, const Address 
 
 static void handle_COMM(int ifindex, const Address *addr, COMM *p, unsigned recv_len)
 {
+    if (recv_len != sizeof(COMM)) {
+        log_debug("invalid packet size => drop");
+        return;
+    }
+
     log_debug("got comm packet: %s / %04x", str_addr(addr), p->sender_id);
 
     if (p->sender_id == g_own_id) {
@@ -195,6 +200,11 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
 
 static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
 {
+    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
+        log_debug("invalid packet size => drop");
+        return;
+    }
+
     if (p->sender_id == g_own_id) {
         log_debug("own data packet => drop");
         return;
