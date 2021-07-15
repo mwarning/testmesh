@@ -80,32 +80,32 @@ static void bloom_init(uint8_t *bloom, uint32_t id)
 
     // simple linear congruential generator
     uint64_t next = id;
-	for (int i = 0; i < BLOOM_K; i++) {
+    for (int i = 0; i < BLOOM_K; i++) {
         next = next * 1103515245 + 12345;
         uint32_t r = (next / 65536) % 32768;
-		bloom[r % BLOOM_M] = BLOOM_C;
-	}
+        bloom[r % BLOOM_M] = BLOOM_C;
+    }
 }
 
 // add two bloom filters
 static void bloom_add(uint8_t *bloom1, const uint8_t *bloom2)
 {
-	for (int i = 0; i < BLOOM_M; i++) {
-		bloom1[i] = MAX(bloom1[i], bloom2[i]);
-	}
+    for (int i = 0; i < BLOOM_M; i++) {
+        bloom1[i] = MAX(bloom1[i], bloom2[i]);
+    }
 }
 
 // Propability to reach a destination from origin
 // Devide by (BLOOM_M  *BLOOM_C) for a propability in range 0-1.
 static uint32_t bloom_probability(const uint8_t *origin_bloom, const uint8_t *destination_bloom)
 {
-	uint32_t prob = 0;
-	for (int i = 0; i < BLOOM_M; i++) {
-		if (destination_bloom[i] > 0) {
-			prob += origin_bloom[i];
-		}
-	}
-	return prob;
+    uint32_t prob = 0;
+    for (int i = 0; i < BLOOM_M; i++) {
+        if (destination_bloom[i] > 0) {
+            prob += origin_bloom[i];
+        }
+    }
+    return prob;
 }
 
 static void neighbor_timeout()
