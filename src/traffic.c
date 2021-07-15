@@ -1,7 +1,6 @@
 #include <string.h>
 
 #include "utils.h"
-#include "tree/neighbors.h"
 #include "log.h"
 #include "traffic.h"
 

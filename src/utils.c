@@ -720,9 +720,7 @@ int is_martian(const struct sockaddr *sa)
 
 static void reverse_bytes(uint8_t *data, int len)
 {
-    int i;
-
-    for (i = 0; i < (len / 2); i++) {
+    for (int i = 0; i < (len / 2); i++) {
         uint8_t tmp = data[i];
         data[i] = data[len - i - 1];
         data[len - i - 1] = tmp;

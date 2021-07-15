@@ -1,4 +1,3 @@
-PROTOCOLS ?= dsr-bloom-0 dsr-bloom-1 flood-0 flood-1
 DEBUG := 1
 
 #########
@@ -15,12 +14,8 @@ FILES := src/main.c \
 
 .PHONY: all clean
 
-# add routing protocols
-FILES += $(wildcard src/dsr-bloom-0/*.c)
-FILES += $(wildcard src/counting-bloom-0/*.c)
-FILES += $(wildcard src/flood-0/*.c)
-FILES += $(wildcard src/flood-1/*.c)
-FILES += $(wildcard src/vivaldi-0/*.c)
+# add all routing protocols
+FILES += $(wildcard src/*/*.c)
 
 ifdef DEBUG
   CFLAGS += -g -O0 -DDEBUG

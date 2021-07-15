@@ -16,6 +16,8 @@
 
 #include "routing.h"
 
+#define BLOOM_M 8   // size of the bloom filter (in bytes)
+
 #define BLOOM_BITSET(bv, idx) (bv[(idx)/8U] |= (1U << ((idx)%8U)))
 #define BLOOM_BITTEST(bv, idx) (bv[(idx)/8U] & (1U << ((idx)%8U)))
 #define BLOOM_ADD(filter, hashv)                                                \
@@ -34,7 +36,7 @@ typedef struct __attribute__((__packed__)) {
     uint8_t type;
     uint32_t src_id; //needed for the IP header that is contructed on the other end
     uint32_t dst_id;
-    uint8_t bloom[8];
+    uint8_t bloom[BLOOM_M];
     uint16_t length; // might not be needed
     uint8_t payload[2000];
 } DATA;

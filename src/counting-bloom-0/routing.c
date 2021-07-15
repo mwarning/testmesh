@@ -195,7 +195,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
         }
     }
 
-    log_debug("forward data packet to %u neighbors.", send_counter);
+    log_debug("forward data packet to %u neighbors", send_counter);
 }
 
 static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
