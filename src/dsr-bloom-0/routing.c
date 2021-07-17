@@ -17,14 +17,10 @@
 #include "routing.h"
 
 #define BLOOM_M 8   // size of the bloom filter (in bytes)
+#define BLOOM_K 1   // hash methods / bits to be set per item
 
 #define BLOOM_BITSET(bv, idx) (bv[(idx)/8U] |= (1U << ((idx)%8U)))
 #define BLOOM_BITTEST(bv, idx) (bv[(idx)/8U] & (1U << ((idx)%8U)))
-#define BLOOM_ADD(filter, hashv)                                                \
-  BLOOM_BITSET(((uint8_t*) filter), ((hashv) & (uint32_t)((1UL << sizeof(*filter)) - 1U)))
-
-#define BLOOM_TEST(filter, hashv)                                               \
-  BLOOM_BITTEST(((uint8_t*) filter), ((hashv) & (uint32_t)((1UL << sizeof(*filter)) - 1U)))
 
 enum {
     TYPE_DATA
@@ -44,8 +40,54 @@ typedef struct __attribute__((__packed__)) {
 static uint32_t g_own_id = 0; // set from the fe80 addr of tun0
 
 
+static void bloom_init(uint8_t *bloom, uint32_t id)
+{
+    memset(bloom, 0, BLOOM_M);
+
+    uint64_t next = id;
+    for (int i = 0; i < BLOOM_K; i++) {
+        next = next * 1103515245 + 12345;
+        uint32_t r = (next / 65536) % 32768;
+        uint32_t j = r % (BLOOM_M * 8);
+        BLOOM_BITSET(bloom, j);
+    }
+}
+
+static int bloom_test(const uint8_t *bloom, uint32_t id)
+{
+    uint8_t bloom_id[BLOOM_M];
+    bloom_init(&bloom_id[0], id);
+
+    for (int i = 0; i < BLOOM_M; i++) {
+        if ((bloom_id[i] & bloom[i]) != bloom_id[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
+{
+    for (int i = 0; i < BLOOM_M; i++) {
+        bloom1[i] |= bloom2[i];
+    }
+}
+
+static void bloom_add(uint8_t *bloom, uint32_t id)
+{
+    uint8_t bloom_id[BLOOM_M];
+    bloom_init(&bloom_id[0], id);
+    bloom_merge(bloom, &bloom_id[0]);
+}
+
 static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
 {
+    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
+        log_debug("invalid packet size => drop");
+        return;
+    }
+
     log_debug("got data packet: %s / %04x => %04x",
         str_addr(addr), p->src_id, p->dst_id);
 
@@ -61,8 +103,8 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
         if (write(gstate.tun_fd, p->payload, p->length) != p->length) {
             log_error("write() %s", strerror(errno));
         }
-    } else if (!BLOOM_TEST(&p->bloom, g_own_id)) {
-        BLOOM_ADD(&p->bloom, g_own_id);
+    } else if (!bloom_test(&p->bloom[0], g_own_id)) {
+        bloom_add(&p->bloom[0], g_own_id);
         send_mcasts(p, recv_len);
     } else {
         // drop packet
