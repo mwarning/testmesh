@@ -49,8 +49,8 @@ int add_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex);
 int del_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex);
 
 int addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, int subnet_len);
-int addr_is_localhost(const struct in6_addr *addr);
-int addr_is_multicast(const struct in6_addr *addr);
+int addr_is_localhost(const struct sockaddr_storage *addr);
+int addr_is_multicast(const struct sockaddr_storage *addr);
 int addr_is_link_local(const struct sockaddr_storage *addr);
 int addr_parse(struct sockaddr_storage *addr, const char full_addr_str[], const char default_port[], int af);
 int addr_port(const struct sockaddr_in6 *addr);

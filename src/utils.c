@@ -282,20 +282,19 @@ const char *str_addr(const struct sockaddr_storage *addr)
 {
     static char addrbuf[INET6_ADDRSTRLEN + 8][2];
     static unsigned addrbuf_i = 0;
-    return str_addr_buf(addrbuf[addrbuf_i++ % 2], addr);
+    return str_addr_buf(addrbuf[++addrbuf_i % 2], addr);
 }
 
 const char *str_ifindex(int ifindex)
 {
     static char ifnamebuf[IF_NAMESIZE][2];
     static unsigned ifname_i = 0;
-    return if_indextoname(ifindex, ifnamebuf[ifname_i++ % 2]);
+    return if_indextoname(ifindex, ifnamebuf[++ifname_i % 2]);
 }
 
-int addr_is_localhost(const struct in6_addr *addr)
+int addr_is_localhost(const struct sockaddr_storage *addr)
 {
-    return (memcmp(addr, &in6addr_loopback, 16) == 0);
-    /*
+    //return (memcmp(addr, &in6addr_loopback, 16) == 0);
 	// 127.0.0.1
 	const uint32_t inaddr_loopback = htonl(INADDR_LOOPBACK);
 
@@ -306,21 +305,19 @@ int addr_is_localhost(const struct in6_addr *addr)
 		return (memcmp(&((struct sockaddr_in6 *)addr)->sin6_addr, &in6addr_loopback, 16) == 0);
 	default:
 		return 0;
-	}*/
+	}
 }
 
-int addr_is_multicast(const struct in6_addr *addr)
+int addr_is_multicast(const struct sockaddr_storage *addr)
 {
-    return IN6_IS_ADDR_MULTICAST(addr);
-    /*
-	switch (addr->ss_family) {
-	case AF_INET:
-		return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr));
-	case AF_INET6:
-		return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr);
-	default:
-		return 0;
-	}*/
+    switch (addr->ss_family) {
+    case AF_INET:
+        return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr));
+    case AF_INET6:
+        return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr);
+    default:
+        return 0;
+    }
 }
 
 int addr_is_link_local(const struct sockaddr_storage *addr)
