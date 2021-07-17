@@ -23,6 +23,7 @@
 #include "main.h"
 #include "traffic.h"
 
+
 static int g_console_socket = -1;
 
 // output log messages to console as well
@@ -92,28 +93,6 @@ static int console_exec(FILE *fp, const char *request)
     char d; // dummy marker
     int ret = 0;
 
-    if (0) {
-
-    } else
-#ifdef get_neighbors
-    if (sscanf(request, " n%c", &d) == 1) {
-        int count = 0;
-        struct neighbor *n = get_neighbors();
-        while (n) {
-            uint32_t inbound = traffic_get_entry(0, n->id);
-            uint32_t outbound = traffic_get_entry(n->id, 0);
-            char *age = format_duration(buf_duration1, n->time_added, gstate.time_now);
-            char *last = format_duration(buf_duration2, n->time_updated, gstate.time_now);
-            fprintf(fp, "  %u, addr: %s, download: %u, upload: %u, age: %s, last: %s\n",
-                (unsigned) n->id, str_addr(&n->addr),
-                (unsigned) inbound, (unsigned) outbound,
-                age, last
-            );
-            count += 1;
-            n = n->next;
-        }
-        fprintf(fp, "%d neighbors\n", count);
-#endif
     if (sscanf(request, " t%c", &d) == 1) {
         traffic_debug(fp);
     } else if (sscanf(request, " a %s %c", addr, &d) == 2) {
