@@ -50,6 +50,23 @@ Notes:
 Since multiple protocols are available, a protocol must be specified at startup.
 Otherwise a list of available protocols is printed.
 
+Use the `tun0` interface to exchange packets with other instances.
+
+```
+$ ./build/geomesh -h
+Usage:  ./build/geomesh -i eth0 -i wlan0
+
+  -a              Routing algorithm.
+  -d              Run as daemon.
+  -i <interface>  Limit to given interfaces.
+  -l <path>       Write log output to file.
+  -p <peer>       Add a peer manually by address.
+  -s <path>       Domain socket to control the instance.
+  -d              Set route device (Default: tun0).
+  -v              Set verbosity (QUIET, VERBOSE, DEBUG).
+  -h              Prints this help text.
+```
+
 ## Daemon Control
 
 If geomesh is started as daemon (`-d`), a control socket can be used `./geomesh ... -s /tmp/geomesh.sock` to inspect the state.
