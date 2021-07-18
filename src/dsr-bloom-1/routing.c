@@ -20,8 +20,9 @@
 #define TIMEOUT_ENTRY_SEC 60
 
 // Bloom Filter
-#define BLOOM_M 8   // size of the bloom filter (in bytes)
-#define BLOOM_K 2   // number of hash functions
+#define BLOOM_M      8  // size of the bloom filter (in bytes)
+#define BLOOM_K      2  // number of hash functions
+#define BLOOM_LIMIT 50  // limit for the bloom filter (in percent)
 
 #define BLOOM_BITSET(bv, idx) (bv[(idx)/8U] |= (1U << ((idx)%8U)))
 #define BLOOM_BITTEST(bv, idx) (bv[(idx)/8U] & (1U << ((idx)%8U)))
@@ -46,7 +47,7 @@ typedef struct __attribute__((__packed__)) {
     uint32_t sender_id; // not needed, but useful for debugging
     uint32_t dst_id;
     uint8_t bloom[BLOOM_M];
-    uint8_t hop_cnt; // not needed, but useful for debugging
+    uint8_t hop_cnt; // we usually want a bandwidth metric here
     uint16_t seq_num; // not needed, but useful for debugging
     uint16_t length;
     uint8_t payload[2000];
@@ -60,6 +61,7 @@ static void bloom_init(uint8_t *bloom, uint64_t id)
 {
     memset(bloom, 0, BLOOM_M);
 
+    // linear congruential generator
     uint64_t next = id;
     for (int i = 0; i < BLOOM_K; i++) {
         next = next * 1103515245 + 12345;
@@ -183,14 +185,25 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
     log_debug("data packet from neighbor %04x => %04x (seq_num: %d, hop_cnt: %d, %s)",
         p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, is_mcast ? "multicast" : "unicast");
 
+    if (p->dst_id == g_own_id) {
+        log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
+
+        // destination is the local tun0 interface => write packet to tun0
+        if (write(gstate.tun_fd, p->payload, p->length) != p->length) {
+            log_error("write() %s", strerror(errno));
+        }
+
+        return;
+    }
+
     if (bloom_test(&p->bloom[0], g_own_id)) {
         log_debug("own id in packets bloom filter => drop");
         return;
     }
 
-    // assume 50% is the limit
-    if (bloom_ones(&p->bloom[0]) > ((BLOOM_M * 8) / 2)) {
-        log_debug("bloom filter capacity reached => drop");
+    // limit how much we allow the bloom filter to be occupied
+    if (bloom_ones(&p->bloom[0]) > (int) ((BLOOM_M * 8) * BLOOM_LIMIT) / 100) {
+        log_debug("bloom filter occupancy reached => drop");
         return;
     }
 
@@ -202,21 +215,12 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
         entry_add(p->sender_id, p->hop_cnt, &p->bloom[0], addr);
     }
 
-    if (p->dst_id == g_own_id) {
-        log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
+    // add own id
+    bloom_add(&p->bloom[0], g_own_id);
 
-        // destination is the local tun0 interface => write packet to tun0
-        if (write(gstate.tun_fd, p->payload, p->length) != p->length) {
-            log_error("write() %s", strerror(errno));
-        }
-    } else {
-        // add own id
-        bloom_add(&p->bloom[0], g_own_id);
+    p->hop_cnt += 1;
 
-        p->hop_cnt += 1;
-
-        forward_DATA(p, recv_len);
-    }
+    forward_DATA(p, recv_len);
 }
 
 // read traffic from tun0 and send to peers
