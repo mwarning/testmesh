@@ -40,6 +40,7 @@ const char *log_time()
 void log_print(int priority, const char format[], ...)
 {
 	char buf[1024];
+	char buf2[1024];
 	const char *time;
 	va_list vlist;
 
@@ -66,8 +67,12 @@ void log_print(int priority, const char format[], ...)
 	}
 
 	if (gstate.log_to_socket) {
-		char buf2[1024];
 		snprintf(buf2, sizeof(buf2), "%s%s\n", time, buf);
 		console_log_message(buf2);
+	}
+
+	if (gstate.log_to_file) {
+		fprintf(gstate.log_to_file, "%s%s\n", time, buf);
+		fflush(gstate.log_to_file);
 	}
 }

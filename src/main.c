@@ -52,6 +52,7 @@ struct state gstate = {
     .tun_addr = {0},
     .tun_fd = 0,
     .log_to_syslog = 0,
+    .log_to_file = NULL,
     .log_to_terminal = 1, // disabled when running as daemon
     .log_to_socket = 1, // output log via domain socket
     .log_timestamp = 1, // log with timestamp
@@ -169,22 +170,40 @@ void usage(const char *pname)
         "  -a              Routing algorithm.\n"
         "  -d              Run as daemon.\n"
         "  -i <interface>  Limit to given interfaces.\n"
+        "  -l <path>       Write log output to file.\n"
         "  -p <peer>       Add a peer manually by address.\n"
         "  -s <path>       Domain socket to control the instance.\n"
         "  -d              Set route device (Default: tun0).\n"
+        "  -v              Set verbosity (QUIET, VERBOSE, DEBUG).\n"
         "  -h              Prints this help text.\n",
         pname
     );
 }
 
+static struct { const char *str; int i; } g_verbosity_map[] = {
+    {"QUIET", VERBOSITY_QUIET},
+    {"VERBOSE", VERBOSITY_VERBOSE},
+    {"DEBUG", VERBOSITY_DEBUG},
+};
+
 const char *verbosity_str(int verbosity)
 {
-    switch (verbosity) {
-        case VERBOSITY_DEBUG: return "DEBUG";
-        case VERBOSITY_QUIET: return "QUIET";
-        case VERBOSITY_VERBOSE: return "VERBOSE";
-        default: return "UNKNOWN";
+    for (int i = 0; i < ARRAY_NELEMS(g_verbosity_map); i++) {
+        if (g_verbosity_map[i].i == verbosity) {
+            return g_verbosity_map[i].str;
+        }
     }
+    return "UNKNOWN";
+}
+
+const int verbosity_int(const char *verbosity)
+{
+    for (int i = 0; i < ARRAY_NELEMS(g_verbosity_map); i++) {
+        if (0 == strcmp(g_verbosity_map[i].str, verbosity)) {
+            return g_verbosity_map[i].i;
+        }
+    }
+    return -1;
 }
 
 // program name ends with -ctl
@@ -236,7 +255,7 @@ int main(int argc, char *argv[])
     }
 
     int option;
-    while ((option = getopt(argc, argv, "di:a:p:s:t:h")) > 0) {
+    while ((option = getopt(argc, argv, "di:a:p:s:l:t:h")) > 0) {
         switch(option) {
             case 'a':
                 gstate.protocol = find_protocol(optarg);
@@ -254,6 +273,20 @@ int main(int argc, char *argv[])
                     return EXIT_FAILURE;
                 }
                 add_interface(optarg);
+                break;
+            case 'v':
+                if (verbosity_int(optarg) < 0) {
+                    log_error("Invalid verbosity: %s", optarg);
+                    return EXIT_FAILURE;
+                }
+                gstate.log_verbosity = verbosity_int(optarg);
+                break;
+            case 'l':
+                gstate.log_to_file = fopen(optarg, "w");
+                if (gstate.log_to_file == NULL) {
+                    log_error("Failed to open file to log: %s (%s)", optarg, strerror(errno));
+                    return EXIT_FAILURE;
+                }
                 break;
             case 'p':
                 if (gstate.protocol == NULL) {
@@ -391,6 +424,10 @@ int main(int argc, char *argv[])
     net_loop();
 
     log_info("Shutting down...");
+
+    if (gstate.log_to_file) {
+        fclose(gstate.log_to_file);
+    }
 
     if (control_socket_path) {
         unix_remove_unix_socket(control_socket_path, gstate.sock_console);

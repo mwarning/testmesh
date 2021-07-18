@@ -52,6 +52,7 @@ struct state {
 	// settings
 	int log_to_syslog;
 	int log_to_terminal;
+	FILE* log_to_file;
 	int log_to_socket;
 	int log_timestamp;
 	int log_verbosity;
