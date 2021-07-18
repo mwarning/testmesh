@@ -25,20 +25,20 @@ Implemented Protocols:
 - [dsr-bloom-1](src/dsr-bloom-1/)
   - reactive
   - Bloom filter in packet
-  - Bloom filters are recorded by neighbbor
+  - nodes store Bloom filters of neighbbors
   - switches between multicast and unicast
 - [counting-bloom-0](src/counting-bloom-0/)
   - proactive
-  - couting Bloom filter
+  - counting Bloom filter
   - degrade filter on every hop
-  - send routing information as one hop multicast to neihgbors
+  - send routing information as one hop multicast to neighbors
   - send payload as unicast along gradient
 - [vivaldi-0](src/vivaldi-0/)
   - proactive
   - incomplete!
 
 Notes:
- - the numbers differentiate between variants
+ - the numbers differentiate between variants / compensate for the lack of creativity
  - DSR stands for Dynamic Source Routing (the path is encoded in the packet)
 
 ## Usage
@@ -90,6 +90,8 @@ To add a new routing protocol, add:
 Just use other protcols as template. For arrays/list/maps, feel free to use the data structures included from [ut_hash](https://troydhanson.github.io/uthash/).
 
 Testing can be done on real hardware (using [OpenWrt](https://openwrt.org/)) or by using a network simulator (e.g. [meshnet-lab](https://github.com/mwarning/meshnet-lab)).
+
+Currently, packets are send/received via UDP only. It will be beneficial to support raw Ethernet frames, with only a MAC addresses as sender/receiver address.
 
 ## TODO
 
