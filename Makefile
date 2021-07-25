@@ -26,9 +26,21 @@ OBJS=$(FILES:.c=.o)
 %.o : %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-all: $(OBJS)
+.PHONY: src/protocols.h
+
+all: src/protocols.h $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -lm -o build/geomesh
 	ln -s geomesh build/geomesh-ctl 2> /dev/null || true
 
+# generate this file
+src/protocols.h:
+	@echo "// this file is generated! Editing is futile!" > src/protocols.h
+	@awk 'FNR == 1{printf("#include \"%s\"\n", substr(FILENAME, 5))}' src/*/routing.h >> src/protocols.h
+	@echo >> src/protocols.h
+	@echo "void register_all_protocols()" >> src/protocols.h
+	@echo "{" >> src/protocols.h
+	@awk '/_register/{printf("    %s\n", $$2)}' src/*/routing.h >> src/protocols.h
+	@echo "}" >> src/protocols.h
+
 clean:
-	rm -f build/* $(OBJS)
+	rm -f build/* $(OBJS) src/protocols.h

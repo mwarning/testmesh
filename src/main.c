@@ -24,13 +24,8 @@
 #include "interfaces.h"
 #include "console.h"
 #include "client.h"
+#include "protocols.h"
 
-#include "dsr-bloom-0/routing.h"
-#include "dsr-bloom-1/routing.h"
-#include "counting-bloom-0/routing.h"
-#include "flood-0/routing.h"
-#include "flood-1/routing.h"
-#include "vivaldi-0/routing.h"
 
 #define MULTICAST_ADDR "ff12::114"
 #define MULTICAST_PORT 4321
@@ -237,12 +232,7 @@ int main(int argc, char *argv[])
     int do_fork = 0;
     int rc = 0;
 
-    dsr_bloom_0_register();
-    dsr_bloom_1_register();
-    counting_bloom_0_register();
-    flood_0_register();
-    flood_1_register();
-    vivaldi_0_register();
+    register_all_protocols();
 
     if (g_protocols_len == 0) {
         log_error("No routing protocol available.");
