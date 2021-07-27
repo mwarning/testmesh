@@ -280,14 +280,14 @@ int addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_
 
 const char *str_addr(const struct sockaddr_storage *addr)
 {
-    static char addrbuf[INET6_ADDRSTRLEN + 8][2];
+    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
     static unsigned addrbuf_i = 0;
     return str_addr_buf(addrbuf[++addrbuf_i % 2], addr);
 }
 
 const char *str_ifindex(int ifindex)
 {
-    static char ifnamebuf[IF_NAMESIZE][2];
+    static char ifnamebuf[2][IF_NAMESIZE];
     static unsigned ifname_i = 0;
     return if_indextoname(ifindex, ifnamebuf[++ifname_i % 2]);
 }
