@@ -9,32 +9,38 @@
 #include <sys/socket.h>
 
 #define MAIN_SRVNAME "mesh"
+#define MULTICAST_ADDR "ff12::114"
+#define MULTICAST_PORT 4321
+#define UNICAST_PORT 654
 
-void send_ucast(const struct sockaddr_storage *addr, const void *data, int data_len);
-const char *verbosity_str(int verbosity);
 
 typedef struct {
     const char *name;
     void (*init)();
     void (*tun_handler)(int events, int fd); // packet from the local virtual interface
-    void (*ext_handler)(int events, int fd); // remove external unicast/multicast packet
+    void (*ext_handler_l2)(int events, int fd); // receive Ethernet frames
+    void (*ext_handler_l3)(int events, int fd); // receive IP frames
     int (*add_peer)(FILE* fp, const char *str);
     int (*console)(FILE* file, const char* cmd);
 } Protocol;
 
 void register_protocol(const Protocol *p);
+const Protocol *find_protocol(const char *protocol);
 
 struct state {
     const Protocol *protocol;
 
 	// sockets
-	int sock_help;
+	int sock_help; // helper socket used to communicate with the kernel
+	int sock_console; // unix socket
 	int sock_udp; // also used to send mcast
 	int sock_mcast_receive;
-	int sock_console;
+	uint16_t ether_type;
 
+	int do_fork;
 	// state
 	int is_running;
+	int disable_stdin;
 	time_t time_now;
 	time_t time_started;
 
@@ -48,6 +54,7 @@ struct state {
 	const char *tun_name;
 	int tun_fd;
 	struct in6_addr tun_addr;
+	const char *control_socket_path;
 
 	// settings
 	int log_to_syslog;

@@ -18,12 +18,15 @@
 #include "log.h"
 #include "utils.h"
 #include "net.h"
+#include "conf.h"
 #include "unix.h"
 #include "console.h"
+#include "interfaces.h"
 #include "main.h"
 #include "traffic.h"
 
 
+// forward console output over console socket / unix domain socket
 static int g_console_socket = -1;
 
 // output log messages to console as well
@@ -74,7 +77,7 @@ static void print_help(FILE *fp)
 {
     fprintf(fp,
         "i: show general information\n"
-        "a: add peer\n"
+        "add-peer <address>\n"
         "q: close this console\n"
         "v: toggle verbosity\n"
         "h: show this help\n"
@@ -88,14 +91,14 @@ static void print_help(FILE *fp)
 static int console_exec(FILE *fp, const char *request)
 {
     char addr[32];
-    char buf_duration1[64];
-    char buf_duration2[64];
+    char ifname[32];
+    char verbosity[32];
     char d; // dummy marker
     int ret = 0;
 
     if (sscanf(request, " t%c", &d) == 1) {
         traffic_debug(fp);
-    } else if (sscanf(request, " a %s %c", addr, &d) == 2) {
+    } else if (sscanf(request, " add-peer %s %c", addr, &d) == 2) {
         if (gstate.protocol->add_peer) {
             gstate.protocol->add_peer(fp, addr);
         } else {
@@ -104,6 +107,18 @@ static int console_exec(FILE *fp, const char *request)
     } else if (sscanf(request, " q%c", &d) == 1) {
         // close console
         ret = 1;
+    } else if (sscanf(request, " interface-add %30s", &ifname[0]) == 1) {
+        interface_add(ifname);
+    } else if (sscanf(request, " interface-del %30s", &ifname[0]) == 1) {
+        interface_del(ifname);
+    } else if (sscanf(request, " interfaces %c", &d) == 1) {
+        interfaces_debug(fp);
+    } else if (sscanf(request, " v %30s %c", &verbosity[0], &d) == 1) {
+        if (verbosity_int(verbosity)) {
+            gstate.log_verbosity = verbosity_int(verbosity);
+        } else {
+            fprintf(fp, "Invalid verbosity\n");
+        }
     } else if (sscanf(request, " v%c", &d) == 1) {
         gstate.log_verbosity = (gstate.log_verbosity + 1) % 3;
         fprintf(fp, "%s enabled\n", verbosity_str(gstate.log_verbosity));

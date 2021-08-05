@@ -1,4 +1,4 @@
-#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,18 +7,13 @@
 #include <netdb.h>
 #include <ctype.h>
 #include <errno.h>
-#include <net/if.h>
-#include <arpa/inet.h>
+#include <net/if.h> // struct ifreq
+#include <arpa/inet.h> // inet_ntop
 #include <sys/time.h>
 #include <sys/ioctl.h>
-#include <linux/if_tun.h>
+#include <linux/if_tun.h> // IFF_TUN, IFF_NO_PI, TUNSETIFF
 #include <ifaddrs.h>
-#include <arpa/inet.h>
-#include <linux/if_tun.h>
-#include <stddef.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/un.h>
+
 #include "main.h"
 #include "log.h"
 #include "utils.h"
@@ -35,6 +30,33 @@ uint32_t adler32(const void *buf, size_t buflength) {
         s2 = (s2 + s1) % 65521;
     }     
     return (s2 << 16) | s1;
+}
+
+void set_macaddr(Address *dst, const uint8_t *addr, int ifindex)
+{
+    dst->mac.family = AF_MAC;
+    memcpy(&dst->mac.addr, addr, 6);
+    dst->mac.ifindex = ifindex;
+}
+
+const char *address_type_str(const Address *addr)
+{
+    static const char *ucast = "unicast";
+    static const char *mcast = "multicast";
+    static const char *bcast = "broadcast";
+    static const uint8_t bmac[6] = {0,0,0,0,0,0};
+
+    switch (addr->family) {
+    case AF_MAC:
+        //TODO: distinguish broadcast/multicast
+        return memcmp(&addr->mac.addr, &bmac[0], sizeof(bmac)) ? ucast : bcast;
+    case AF_INET6:
+        return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr) ? mcast : ucast;
+    case AF_INET:
+        return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr)) ? mcast : ucast;
+    default:
+        exit(1);
+    }
 }
 
 void hexDump(const char * desc, const void * addr, const int len)
@@ -202,20 +224,10 @@ const char *str_addr(const struct in6_addr *sin6_addr)
     return buf;
 }
 */
-const char *str_addr6(const struct sockaddr_in6 *addr)
-{
-    return str_addr((struct sockaddr_storage*) addr);
-}
-
-const char *str_in6(const struct in6_addr *addr)
-{
-    static char addrbuf[INET6_ADDRSTRLEN];
-    return inet_ntop(AF_INET6, addr, addrbuf, sizeof(addrbuf));
-}
 
 static const char *str_addr_buf(char *addrbuf, const struct sockaddr_storage *addr)
 {
-	//static char addrbuf[INET6_ADDRSTRLEN + 8];
+	//static char buf[INET6_ADDRSTRLEN + 8];
 	char buf[INET6_ADDRSTRLEN];
 	int port;
 
@@ -237,6 +249,23 @@ static const char *str_addr_buf(char *addrbuf, const struct sockaddr_storage *ad
 	return addrbuf;
 }
 
+const char *str_addr(const struct sockaddr_storage *addr)
+{
+    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
+    static unsigned addrbuf_i = 0;
+    return str_addr_buf(addrbuf[++addrbuf_i % 2], addr);
+}
+
+const char *str_addr6(const struct sockaddr_in6 *addr)
+{
+    return str_addr((struct sockaddr_storage*) addr);
+}
+
+const char *str_in6(const struct in6_addr *addr)
+{
+    static char addrbuf[INET6_ADDRSTRLEN];
+    return inet_ntop(AF_INET6, addr, addrbuf, sizeof(addrbuf));
+}
 
 static int common_bits(const void *p1, const void* p2, int bits_n)
 {
@@ -276,13 +305,6 @@ int addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_
     }
 
     return common_bits(p1, p2, subnet_len);
-}
-
-const char *str_addr(const struct sockaddr_storage *addr)
-{
-    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
-    static unsigned addrbuf_i = 0;
-    return str_addr_buf(addrbuf[++addrbuf_i % 2], addr);
 }
 
 const char *str_ifindex(int ifindex)
@@ -517,38 +539,6 @@ int interface_set_mtu(int fd, const char *ifname, int mtu)
     return 0;
 }
 
-int interface_get_ifindex(int* ifindex, int fd, const char *ifname)
-{
-    struct ifreq if_idx;
-
-    memset(&if_idx, 0, sizeof(struct ifreq));
-    strncpy(if_idx.ifr_name, ifname, IFNAMSIZ-1);
-    if (ioctl(fd, SIOCGIFINDEX, &if_idx) < 0) {
-        log_error("ioctl(SIOCGIFINDEX) %s", strerror(errno));
-        return 1;
-    }
-
-    *ifindex = if_idx.ifr_ifindex;
-
-    return 0;
-}
-
-int interface_get_mac(uint8_t *mac, int fd, const char *ifname)
-{
-    struct ifreq if_mac;
-
-    memset(&if_mac, 0, sizeof(struct ifreq));
-    strncpy(if_mac.ifr_name, ifname, IFNAMSIZ-1);
-    if (ioctl(fd, SIOCGIFHWADDR, &if_mac) < 0) {
-        log_error("ioctl(SIOCGIFHWADDR) %s", strerror(errno));
-        return 1;
-    }
-
-    memcpy(mac, (uint8_t*) &if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
-
-    return 0;
-}
-
 int tun_alloc(const char *dev)
 {
     const char *clonedev = "/dev/net/tun";
@@ -611,6 +601,7 @@ int interface_get_addr6(struct in6_addr *addr, const char *ifname)
     return -1;
 }
 
+// set interface in an "up" state
 int interface_set_up(int fd, const char* ifname) {
     struct ifreq ifr = {0};
     int oldflags;
@@ -788,7 +779,15 @@ void id_set6(struct in6_addr *addr, const uint32_t *id)
     reverse_bytes((uint8_t*) &addr->s6_addr[16 - sizeof(*id)], sizeof(*id));
 }
 
-char *format_duration(char buf[64], time_t from, time_t to)
+const char *format_mac(char buf[18], const struct mac *addr)
+{
+    sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
+        addr->data[0], addr->data[1], addr->data[2],
+        addr->data[3], addr->data[4], addr->data[5]);
+    return buf;
+}
+
+const char *format_duration(char buf[64], time_t from, time_t to)
 {
     int days, hours, minutes, seconds;
     long long int secs;
@@ -823,7 +822,7 @@ char *format_duration(char buf[64], time_t from, time_t to)
     return buf;
 }
 
-char *format_size(char buf[64], unsigned bytes)
+const char *format_size(char buf[64], unsigned bytes)
 {
     if (bytes < 1000) {
         sprintf(buf, "%u B", bytes);
@@ -840,48 +839,20 @@ char *format_size(char buf[64], unsigned bytes)
     return buf;
 }
 
-ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, int *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
+const char *str_addr2(const Address *addr)
 {
-    struct iovec iov[1];
-    char cmsg6[CMSG_SPACE(sizeof(struct in6_pktinfo))];
-    struct cmsghdr *cmsgptr;
-    struct msghdr msg;
-    ssize_t recv_length;
+    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
+    static unsigned addrbuf_i = 0;
+    char *buf = addrbuf[++addrbuf_i % 2];
 
-    iov[0].iov_base = buf;
-    iov[0].iov_len = len;
-
-    memset(&msg, 0, sizeof(msg));
-    msg.msg_name = (struct sockaddr *)from;
-    msg.msg_namelen = sizeof(struct sockaddr_storage);
-    msg.msg_iov = iov;
-    msg.msg_iovlen = 1;
-    msg.msg_control = &cmsg6;
-    msg.msg_controllen = sizeof(cmsg6);
-
-    recv_length = recvmsg(fd, &msg, flags);
-
-    if (recv_length < 0) {
-        log_error("recvmsg() %s", strerror(errno));
-        return recv_length;
-    }
-
-    for (cmsgptr = CMSG_FIRSTHDR(&msg); cmsgptr != NULL; cmsgptr = CMSG_NXTHDR(&msg, cmsgptr)) {
-        if (cmsgptr->cmsg_level == IPPROTO_IPV6 && cmsgptr->cmsg_type == IPV6_PKTINFO) {
-            //log_debug("set ipv6 socket data");
-            struct in6_pktinfo* info = (struct in6_pktinfo*) CMSG_DATA(cmsgptr);
-            ((struct sockaddr_in6*)to)->sin6_family = AF_INET6;
-            memcpy(&((struct sockaddr_in6*)to)->sin6_addr, &info->ipi6_addr, sizeof(struct in6_addr));
-            ((struct sockaddr_in6*)to)->sin6_port = 0;
-            *ifindex = info->ipi6_ifindex;
-            break;
-        }
-    }
-
-    if (cmsgptr == NULL) {
-        log_error("IPV6_PKTINFO not found!");
-        return 0;
-    } else {
-        return recv_length;
+    switch (addr->family) {
+    case AF_INET6:
+    case AF_INET:
+        return str_addr_buf(buf, (struct sockaddr_storage*) addr);
+    case AF_MAC:
+        return format_mac(buf, &addr->mac.addr);
+    default:
+        return NULL;
     }
 }
+

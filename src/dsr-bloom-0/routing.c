@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <net/if.h>
 #include <sys/time.h>
+#include <linux/if_ether.h>   //ETH_ALEN(6),ETH_HLEN(14),ETH_FRAME_LEN(1514),struct ethhdr
 
 #include "../log.h"
 #include "../utils.h"
@@ -25,8 +26,6 @@
 enum {
     TYPE_DATA
 };
-
-typedef struct sockaddr_storage Address;
 
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
@@ -89,7 +88,7 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
     }
 
     log_debug("got data packet: %s / %04x => %04x",
-        str_addr(addr), p->src_id, p->dst_id);
+        str_addr2(addr), p->src_id, p->dst_id);
 
     if (p->src_id == g_own_id) {
         log_debug("own source id => drop packet");
@@ -105,7 +104,7 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
         }
     } else if (!bloom_test(&p->bloom[0], g_own_id)) {
         bloom_add(&p->bloom[0], g_own_id);
-        send_mcasts(p, recv_len);
+        send_bcasts_l2(p, recv_len);
     } else {
         // drop packet
     }
@@ -166,42 +165,39 @@ static void tun_handler(int events, int fd)
         data.length = read_len;
         memset(&data.bloom, 0, sizeof(data.bloom));
 
-        send_mcasts(&data, offsetof(DATA, payload) + read_len);
+        send_bcasts_l2(&data, offsetof(DATA, payload) + read_len);
     }
 }
 
-static void ext_handler(int events, int fd)
+static void ext_handler_l2(int events, int fd)
 {
-    Address from_addr = {0};
-    Address to_addr = {0};
-    uint8_t buffer[sizeof(DATA)];
-    ssize_t recv_len;
-    int ifindex = 0;
-
     if (events <= 0) {
         return;
     }
 
-    recv_len = recv6_fromto(
-        fd, buffer, sizeof(buffer), 0, &ifindex, &from_addr, &to_addr);
+    uint8_t buffer[ETH_FRAME_LEN];
+    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
-    if (recv_len <= 0) {
-        log_error("recvfrom() %s", strerror(errno));
+    if (numbytes <= sizeof(struct ethhdr)) {
         return;
     }
 
-    if (fd == gstate.sock_mcast_receive) {
-        log_debug("got mcast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    } else {
-        log_debug("got ucast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    }
+    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
+    size_t payload_len = numbytes - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
+    int ifindex = interface_get_ifindex(fd);
 
-    switch (buffer[0]) {
+    Address from_addr;
+    Address to_addr;
+    set_macaddr(&from_addr, &eh->h_source[0], ifindex);
+    set_macaddr(&to_addr, &eh->h_dest[0], ifindex);
+
+    switch (payload[0]) {
     case TYPE_DATA:
-        handle_DATA(ifindex, &from_addr, (DATA*) buffer, recv_len);
+        handle_DATA(ifindex, &from_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr2(&from_addr), str_ifindex(ifindex));
     }
 }
 
@@ -217,7 +213,7 @@ void dsr_bloom_0_register()
         .name = "dsr-bloom-0",
         .init = &init,
         .tun_handler = &tun_handler,
-        .ext_handler = &ext_handler,
+        .ext_handler_l2 = &ext_handler_l2,
     };
 
     register_protocol(&p);

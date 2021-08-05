@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <net/if.h>
 #include <sys/time.h>
+#include <linux/if_ether.h>
 
 #include "../log.h"
 #include "../utils.h"
@@ -20,8 +21,6 @@
 enum {
     TYPE_DATA
 };
-
-typedef struct sockaddr_storage Address;
 
 #define TIMEOUT_ENTRY 20
 
@@ -48,6 +47,7 @@ static uint32_t g_own_id = 0; // set from the fe80 addr of tun0
 static uint16_t g_sequence_number = 0;
 static Entry *g_entries = NULL;
 
+
 // wraps around
 static int is_newer_seq_num(uint16_t cur, uint16_t new)
 {
@@ -55,6 +55,37 @@ static int is_newer_seq_num(uint16_t cur, uint16_t new)
         return (cur - new) > 0x7fff;
     } else {
         return (new - cur) < 0x7fff;
+    }
+}
+
+void send_one(const Address *addr, const void *data, size_t data_len)
+{
+    switch (addr->family) {
+    case AF_MAC:
+        send_ucast_l2(addr->mac.ifindex, &addr->mac.addr.data[0], data, data_len);
+        break;
+    case AF_INET6:
+    case AF_INET:
+        send_ucast_l3((const struct sockaddr_storage *) addr, data, data_len);
+        break;
+    default:
+        exit(1);
+    }
+}
+
+void send_all(const void *data, size_t data_len)
+{
+    // on all configured interfaces
+    send_bcasts_l2(data, data_len);
+
+    Entry *tmp;
+    Entry *cur;
+
+    // all peers
+    HASH_ITER(hh, g_entries, cur, tmp) {
+        if (cur->addr.family != AF_MAC) {
+            send_ucast_l3((struct sockaddr_storage*) &cur->addr, data, data_len);
+        }
     }
 }
 
@@ -78,7 +109,7 @@ static Entry *entry_find(uint32_t src_id)
     return cur;
 }
 
-static Entry *entry_add(uint32_t src_id, uint16_t seq_num, uint8_t hop_count, const struct sockaddr_storage *addr)
+static Entry *entry_add(uint32_t src_id, uint16_t seq_num, uint8_t hop_count, const Address *addr)
 {
     Entry *e = (Entry*) malloc(sizeof(Entry));
 
@@ -86,14 +117,14 @@ static Entry *entry_add(uint32_t src_id, uint16_t seq_num, uint8_t hop_count, co
     e->hop_count = hop_count;
     e->seq_num = seq_num;
     e->last_updated = gstate.time_now;
-    memcpy(&e->addr, addr, sizeof(struct sockaddr_storage));
+    memcpy(&e->addr, addr, sizeof(Address));
 
     HASH_ADD_INT(g_entries, src_id, e);
 
     return e;
 }
 
-static void handle_DATA(int ifindex, const Address *from_addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
         log_debug("invalid packet size => drop");
@@ -101,7 +132,7 @@ static void handle_DATA(int ifindex, const Address *from_addr, DATA *p, unsigned
     }
 
     log_debug("data packet: %s / %04x => %04x",
-        str_addr(from_addr), p->src_id, p->dst_id);
+        str_addr2(from_addr), p->src_id, p->dst_id);
 
     if (p->src_id == g_own_id) {
         log_debug("own source id => drop packet");
@@ -145,11 +176,11 @@ static void handle_DATA(int ifindex, const Address *from_addr, DATA *p, unsigned
     if (entry) {
         log_debug("forward as ucast");
         p->hop_count += 1;
-        send_ucast(&entry->addr, p, recv_len);
+        send_one(&entry->addr, p, recv_len);
     } else {
-        log_debug("forward as mcast");
+        log_debug("forward as bcast");
         p->hop_count += 1;
-        send_mcasts(p, recv_len);
+        send_all(p, recv_len);
     }
 }
 
@@ -165,7 +196,7 @@ static void tun_handler(int events, int fd)
     }
 
     while (1) {
-        int read_len = read(fd, &data.payload[0], sizeof(data.payload));
+        ssize_t read_len = read(fd, &data.payload[0], sizeof(data.payload));
         if (read_len <= 0) {
             break;
         }
@@ -178,7 +209,7 @@ static void tun_handler(int events, int fd)
         }
 
         if (read_len < 24) {
-            log_debug("payload too small (%d) => drop", read_len);
+            log_debug("payload too small (%d) => drop", (int) read_len);
             continue;
         }
 
@@ -196,7 +227,7 @@ static void tun_handler(int events, int fd)
         uint32_t dst_id = 0;
         id_get6(&dst_id, daddr);
 
-        log_debug("read %d from %s for %04x", read_len, gstate.tun_name, dst_id);
+        log_debug("read %d from %s for %04x", (int) read_len, gstate.tun_name, dst_id);
 
         if (dst_id == g_own_id) {
             log_warning("send packet to self => drop packet");
@@ -211,47 +242,81 @@ static void tun_handler(int events, int fd)
 
         Entry *entry = entry_find(data.src_id);
         if (entry) {
-            log_debug("send as ucast");
-            send_ucast(&entry->addr, &data, offsetof(DATA, payload) + read_len);
+            log_debug("send to one");
+            send_one(&entry->addr, &data, offsetof(DATA, payload) + read_len);
         } else {
-            log_debug("send as mcast");
-            send_mcasts(&data, offsetof(DATA, payload) + read_len);
+            log_debug("send to all");
+            send_all(&data, offsetof(DATA, payload) + read_len);
         }
     }
 }
 
-static void ext_handler(int events, int fd)
+static void ext_handler_l3(int events, int fd)
 {
     Address from_addr = {0};
     Address to_addr = {0};
+
     uint8_t buffer[sizeof(DATA)];
-    ssize_t recv_len;
     int ifindex = 0;
 
     if (events <= 0) {
         return;
     }
 
-    recv_len = recv6_fromto(
-        fd, buffer, sizeof(buffer), 0, &ifindex, &from_addr, &to_addr);
+    ssize_t recv_len = recv6_fromto(
+        fd, buffer, sizeof(buffer), 0, &ifindex,
+        (struct sockaddr_storage*) &from_addr,
+        (struct sockaddr_storage*) &to_addr
+    );
 
     if (recv_len <= 0) {
         log_error("recvfrom() %s", strerror(errno));
         return;
     }
 
-    if (fd == gstate.sock_mcast_receive) {
-        log_debug("got mcast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    } else {
-        log_debug("got ucast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    }
+    log_debug("got IP packet %s => %s (%s)", str_addr2(&from_addr), str_addr2(&to_addr), str_ifindex(ifindex));
 
     switch (buffer[0]) {
     case TYPE_DATA:
-        handle_DATA(ifindex, &from_addr, (DATA*) buffer, recv_len);
+        handle_DATA(&from_addr, (DATA*) &buffer[0], recv_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr(&from_addr),  str_ifindex(ifindex));
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr2(&from_addr), str_ifindex(ifindex));
+    }
+}
+
+static void ext_handler_l2(int events, int fd)
+{
+    if (events <= 0) {
+        return;
+    }
+
+    uint8_t buffer[ETH_FRAME_LEN];
+    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
+
+    if (numbytes <= sizeof(struct ethhdr)) {
+        return;
+    }
+
+    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
+    size_t payload_len = numbytes - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
+
+    int ifindex = interface_get_ifindex(fd);
+
+    Address from_addr;
+    Address to_addr;
+    set_macaddr(&from_addr, &eh->h_source[0], ifindex);
+    set_macaddr(&to_addr, &eh->h_dest[0], ifindex);
+
+    log_debug("got Ethernet packet %s => %s (%s)", str_addr2(&from_addr), str_addr2(&to_addr), str_ifindex(ifindex));
+
+    switch (payload[0]) {
+    case TYPE_DATA:
+        handle_DATA(&from_addr, (DATA*) payload, payload_len);
+        break;
+    default:
+        log_warning("unknown packet type %d from %s (%s)", payload[0], str_addr2(&from_addr),  str_ifindex(ifindex));
     }
 }
 
@@ -266,6 +331,22 @@ static void periodic_handler(int _events, int _fd)
     }
 
     entry_timeout();
+}
+
+static int add_peer(FILE* fp, const char *str)
+{
+    Address addr;
+
+    if (EXIT_SUCCESS == addr_parse((struct sockaddr_storage*) &addr, str, STR(UNICAST_PORT), AF_INET6)) {
+        // TODO
+        //uint32_t id = 0;
+        //id_get6(&id, &addr.ip6);
+        //entry_add(id, 0, 1, &addr);
+        return EXIT_SUCCESS;
+    } else {
+        fprintf(fp, "Failed to parse peer address: %s", str);
+        return EXIT_FAILURE;
+    }
 }
 
 static int console_handler(FILE* fp, const char* cmd)
@@ -284,12 +365,12 @@ static int console_handler(FILE* fp, const char* cmd)
 
         fprintf(fp, "src_id seq_num hop-count last-updated prev-hop\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
-            fprintf(fp, "  %04x %u %s\n",
+            fprintf(fp, "  %04x %u %u %s %s\n",
                 cur->src_id,
                 (unsigned) cur->seq_num,
-                cur->hop_count,
+                (unsigned) cur->hop_count,
                 format_duration(buf, gstate.time_started, cur->last_updated),
-                str_addr(&cur->addr)
+                str_addr2(&cur->addr)
             );
         }
     } else {
@@ -314,7 +395,9 @@ void flood_1_register()
         .name = "flood-1",
         .init = &init,
         .tun_handler = &tun_handler,
-        .ext_handler = &ext_handler,
+        .ext_handler_l2 = &ext_handler_l2,
+        .ext_handler_l3 = &ext_handler_l3,
+        .add_peer = &add_peer,
         .console = &console_handler,
     };
 

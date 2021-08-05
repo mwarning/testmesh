@@ -1,8 +1,10 @@
+CFLAGS += -Wall
 DEBUG := 1
 
 #########
 
 FILES := src/main.c \
+		 src/conf.c \
 		 src/log.c \
 		 src/utils.c \
 		 src/traffic.c \
@@ -12,7 +14,7 @@ FILES := src/main.c \
 		 src/client.c \
 		 src/interfaces.c
 
-.PHONY: all clean
+.PHONY: all clean install src/protocols.h
 
 # add all routing protocols
 FILES += $(wildcard src/*/*.c)
@@ -26,15 +28,14 @@ OBJS=$(FILES:.c=.o)
 %.o : %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-.PHONY: src/protocols.h
-
 all: src/protocols.h $(OBJS)
+	mkdir -p build
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -lm -o build/geomesh
 	ln -s geomesh build/geomesh-ctl 2> /dev/null || true
 
 # generate this file
 src/protocols.h:
-	@echo "// this file is generated! Editing is futile!" > src/protocols.h
+	@echo "// this file is auto-generated" > src/protocols.h
 	@awk 'FNR == 1{printf("#include \"%s\"\n", substr(FILENAME, 5))}' src/*/routing.h >> src/protocols.h
 	@echo >> src/protocols.h
 	@echo "void register_all_protocols()" >> src/protocols.h
@@ -44,3 +45,7 @@ src/protocols.h:
 
 clean:
 	rm -f build/* $(OBJS) src/protocols.h
+
+install:
+	cp build/geomesh $(DESTDIR)/usr/bin/ 2> /dev/null || true
+	cp build/geomesh-ctl $(DESTDIR)/usr/bin/ 2> /dev/null || true

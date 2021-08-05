@@ -26,8 +26,6 @@ enum {
     TYPE_COMM,
 };
 
-typedef struct sockaddr_storage Address;
-
 typedef struct {
     uint32_t sender_id;
     Address addr;
@@ -193,14 +191,14 @@ static void vivaldi_update_simple(float *local_pos, const float *remote_pos, flo
     }
 }
 
-static void handle_COMM(int ifindex, const Address *addr, COMM *p, unsigned recv_len)
+static void handle_COMM(const Address *addr, COMM *p, unsigned recv_len)
 {
     if (recv_len != sizeof(COMM)) {
         log_debug("invalid packet size => drop");
         return;
     }
 
-    log_debug("got comm packet: %s / %04x", str_addr(addr), p->sender_id);
+    log_debug("got comm packet: %s / %04x", str_addr2(addr), p->sender_id);
 
     if (p->sender_id == g_own_id) {
         log_debug("own comm packet => drop");
@@ -245,7 +243,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
         const float dist_neighbor = vec_dist(&cur->pos[0], &dst_pos[0]);
         log_debug("dist_neighbor: %.2f", dist_neighbor);
         if (dist_neighbor > dist_own) {
-            send_ucast(&cur->addr, p, recv_len);
+            send_ucast_l2(cur->addr.mac.ifindex, &cur->addr.mac.addr.data[0], p, recv_len);
             send_counter += 1;
         }
     }
@@ -253,7 +251,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
     log_debug("forward data packet to %u neighbors", send_counter);
 }
 
-static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
         log_debug("invalid packet size => drop");
@@ -326,41 +324,38 @@ static void tun_handler(int events, int fd)
     }
 }
 
-static void ext_handler(int events, int fd)
+static void ext_handler_l2(int events, int fd)
 {
-    struct sockaddr_storage from_addr = {0};
-    struct sockaddr_storage to_addr = {0};
-    uint8_t buffer[sizeof(DATA)];
-    ssize_t recv_len;
-    int ifindex = 0;
-
     if (events <= 0) {
         return;
     }
 
-    recv_len = recv6_fromto(
-        fd, buffer, sizeof(buffer), 0, &ifindex, &from_addr, &to_addr);
+    uint8_t buffer[ETH_FRAME_LEN];
+    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
-    if (recv_len <= 0) {
-        log_error("recvfrom() %s", strerror(errno));
+    if (numbytes <= sizeof(struct ethhdr)) {
         return;
     }
 
-    if (fd == gstate.sock_mcast_receive) {
-        log_debug("got mcast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    } else {
-        log_debug("got ucast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    }
+    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
+    size_t payload_len = numbytes - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
+    int ifindex = interface_get_ifindex(fd);
 
-    switch (buffer[0]) {
+    Address from_addr;
+    Address to_addr;
+    set_macaddr(&from_addr, &eh->h_source[0], ifindex);
+    set_macaddr(&to_addr, &eh->h_dest[0], ifindex);
+
+    switch (payload[0]) {
     case TYPE_COMM:
-        handle_COMM(ifindex, &from_addr, (COMM*) buffer, recv_len);
+        handle_COMM(&from_addr, (COMM*) payload, payload_len);
         break;
     case TYPE_DATA:
-        handle_DATA(ifindex, &from_addr, (DATA*) buffer, recv_len);
+        handle_DATA(&from_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr2(&from_addr), str_ifindex(ifindex));
     }
 }
 
@@ -381,7 +376,7 @@ static void send_COMMs()
 
     memcpy(&data.pos[0], &g_own_pos[0], sizeof(data.pos));
 
-    send_mcasts(&data, sizeof(data));
+    send_bcasts_l2(&data, sizeof(data));
 }
 
 static void periodic_handler(int _events, int _fd)
@@ -407,6 +402,7 @@ static char *format_pos(char *buf, const float *pos)
             cur += sprintf(cur, " %f", pos[i]);
         }
     }
+    return buf;
 }
 
 static int console_handler(FILE *fp, const char *cmd)
@@ -417,7 +413,7 @@ static int console_handler(FILE *fp, const char *cmd)
     char d;
 
     if (sscanf(cmd, " h%c", &d) == 1) {
-        fprintf(fp, "  n: print neighbor table\n");
+        fprintf(fp, "n: print neighbor table\n");
     } else if (sscanf(cmd, " i%c", &d) == 1) {
         fprintf(fp, "  own pos: %s\n", format_pos(buf_pos, g_own_pos));
     } else if (sscanf(cmd, " n%c", &d) == 1) {
@@ -429,7 +425,7 @@ static int console_handler(FILE *fp, const char *cmd)
         HASH_ITER(hh, g_neighbors, cur, tmp) {
             fprintf(fp, "  %04x %s %s %s\n",
                 cur->sender_id,
-                str_addr(&cur->addr),
+                str_addr2(&cur->addr),
                 format_duration(buf_duration, cur->last_updated, gstate.time_now),
                 format_pos(buf_pos, cur->pos)
             );
@@ -461,7 +457,7 @@ void vivaldi_0_register()
         .name = "vivaldi-0",
         .init = &init,
         .tun_handler = &tun_handler,
-        .ext_handler = &ext_handler,
+        .ext_handler_l2 = &ext_handler_l2,
         .console = &console_handler,
     };
 

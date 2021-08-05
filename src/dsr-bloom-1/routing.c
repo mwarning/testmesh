@@ -31,8 +31,6 @@ enum {
     TYPE_DATA,
 };
 
-typedef struct sockaddr_storage Address;
-
 typedef struct {
     uint32_t sender_id; // we can use the sender address here instead
     Address addr;
@@ -70,6 +68,50 @@ static void bloom_init(uint8_t *bloom, uint64_t id)
         BLOOM_BITSET(bloom, j);
     }
 }
+
+#if 0
+// create bloom filter that fits into the neighbors
+static void bloom_converge(uint8_t *bloom)
+{
+    uint8_t bloom_count[BLOOM_M * 8];
+    //uint8_t highest[BLOOM_K];
+    //memset(&highest[0], 0, sizeof(highest));
+
+    memset(&bloom_count[0], 0, sizeof(bloom_count));
+
+    // add neighbors
+    Entry *cur;
+    Entry *tmp;
+    HASH_ITER(hh, g_entries, cur, tmp) {
+        for (int i = 0; i < (8 * BLOOM_M); i++) {
+            if (BLOOM_BITTEST(&cur->bloom[0], i)) {
+                bloom_count[i]++;
+            }
+        }
+    }
+
+    // add own id
+    uint8_t bloom_own[BLOOM_M];
+    bloom_init(&bloom_own[0], g_own_id);
+    for (int i = 0; i < (8 * BLOOM_M); i++) {
+        if (BLOOM_BITTEST(&bloom_own[0], i)) {
+            bloom_count[i] = MAX(bloom_count[i], bloom_count[i] + 1);
+        }
+    }
+
+    // get most set BLOOM_K bits
+    memset(&bloom[0], 0, BLOOM_M);
+
+/*
+    -- every item until only BLOOM_K items are set
+    for (int j = 0; j < BLOOM_K; j++) {
+
+    }
+
+    // calculate bloom filter back to id!
+*/
+}
+#endif
 
 static int bloom_ones(const uint8_t *bloom)
 {
@@ -151,6 +193,7 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     Entry *next = NULL;
     Entry *cur;
     Entry *tmp;
+
     HASH_ITER(hh, g_entries, cur, tmp) {
         if (bloom_test(&cur->bloom[0], p->dst_id)) {
             if (next == NULL || cur->hop_cnt < next->hop_cnt) {
@@ -162,15 +205,15 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     if (next) {
         log_debug("send as unicast to %04x (seq_num: %d, hop_cnt: %d)",
             next->sender_id, (int) p->seq_num, (int) p->hop_cnt);
-        send_ucast(&next->addr, p, recv_len);
+        send_ucast_l2(next->addr.mac.ifindex, &next->addr.mac.addr.data[0], p, recv_len);
     } else {
-        log_debug("send as multicast (seq_num: %d, hop_cnt: %d)",
+        log_debug("send as broadcast (seq_num: %d, hop_cnt: %d)",
             (int) p->seq_num, (int) p->hop_cnt);
-        send_mcasts(p, recv_len);
+        send_bcasts_l2(p, recv_len);
     }
 }
 
-static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len, int is_mcast)
+static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
         log_debug("invalid packet size => drop");
@@ -183,7 +226,7 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
     }
 
     log_debug("data packet from neighbor %04x => %04x (seq_num: %d, hop_cnt: %d, %s)",
-        p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, is_mcast ? "multicast" : "unicast");
+        p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, address_type_str(to_addr));
 
     if (p->dst_id == g_own_id) {
         log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
@@ -209,10 +252,10 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
 
     Entry *entry = entry_find(p->sender_id);
     if (entry) {
-        memcpy(&entry->addr, addr, sizeof(entry->addr));
+        memcpy(&entry->addr, from_addr, sizeof(entry->addr));
         bloom_merge(&entry->bloom[0], &p->bloom[0]);
     } else {
-        entry_add(p->sender_id, p->hop_cnt, &p->bloom[0], addr);
+        entry_add(p->sender_id, p->hop_cnt, &p->bloom[0], from_addr);
     }
 
     // add own id
@@ -284,43 +327,35 @@ static void tun_handler(int events, int fd)
     }
 }
 
-static void ext_handler(int events, int fd)
+static void ext_handler_l2(int events, int fd)
 {
-    Address from_addr = {0};
-    Address to_addr = {0};
-    uint8_t buffer[sizeof(DATA)];
-    ssize_t recv_len;
-    int ifindex = 0;
-
     if (events <= 0) {
         return;
     }
 
-    recv_len = recv6_fromto(
-        fd, buffer, sizeof(buffer), 0, &ifindex, &from_addr, &to_addr);
+    uint8_t buffer[ETH_FRAME_LEN];
+    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
-    if (recv_len <= 0) {
-        log_error("recvfrom() %s", strerror(errno));
+    if (numbytes <= sizeof(struct ethhdr)) {
         return;
     }
 
-    // received from multicast socket
-    int is_mcast = (fd == gstate.sock_mcast_receive);
+    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
+    size_t payload_len = numbytes - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
+    int ifindex = interface_get_ifindex(fd);
 
-/*
-    if (fd == gstate.sock_mcast_receive) {
-        log_debug("got ucast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    } else {
-        log_debug("got mcast %s => %s (%s)", str_addr(&from_addr), str_addr(&to_addr), str_ifindex(ifindex));
-    }
-*/
+    Address from_addr;
+    Address to_addr;
+    set_macaddr(&from_addr, &eh->h_source[0], ifindex);
+    set_macaddr(&to_addr, &eh->h_dest[0], ifindex);
 
-    switch (buffer[0]) {
+    switch (payload[0]) {
     case TYPE_DATA:
-        handle_DATA(ifindex, &from_addr, (DATA*) buffer, recv_len, is_mcast);
+        handle_DATA(&from_addr, &to_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr2(&from_addr), str_ifindex(ifindex));
     }
 }
 
@@ -359,7 +394,7 @@ static int console_handler(FILE *fp, const char *cmd)
         HASH_ITER(hh, g_entries, cur, tmp) {
             fprintf(fp, "  %04x %s %s %s %u\n",
                 cur->sender_id,
-                str_addr(&cur->addr),
+                str_addr2(&cur->addr),
                 format_duration(buf_duration, cur->last_updated, gstate.time_now),
                 format_bloom(&cur->bloom[0]),
                 (unsigned) cur->hop_cnt
@@ -401,7 +436,7 @@ void dsr_bloom_1_register()
         .name = "dsr-bloom-1",
         .init = &init,
         .tun_handler = &tun_handler,
-        .ext_handler = &ext_handler,
+        .ext_handler_l2 = &ext_handler_l2,
         .console = &console_handler,
     };
 

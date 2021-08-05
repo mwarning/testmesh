@@ -16,6 +16,7 @@
 #include <math.h>
 
 #include "main.h"
+#include "conf.h"
 #include "log.h"
 #include "utils.h"
 #include "net.h"
@@ -26,25 +27,24 @@
 #include "client.h"
 #include "protocols.h"
 
-
-#define MULTICAST_ADDR "ff12::114"
-#define MULTICAST_PORT 4321
-
-#define UNICAST_PORT 654
-
 struct state gstate = {
     .protocol = NULL,
+    .do_fork = 0,
     .time_now = 0,
     .time_started = 0,
     .sock_help = -1,
     .sock_udp = -1,
     .sock_mcast_receive = -1,
     .sock_console = -1,
+    .ether_type = 0x88b5, // Local Experiment Ethertype 1
+
     .is_running = 1,
+    .control_socket_path = NULL,
+    .disable_stdin = 0,
     .mcast_addr = {0},
     .ucast_addr = {0},
     .tun_name = "tun0",
-    .tun_addr = {0},
+    .tun_addr = {},
     .tun_fd = 0,
     .log_to_syslog = 0,
     .log_to_file = NULL,
@@ -58,20 +58,29 @@ struct state gstate = {
 static const Protocol *g_protocols[32];
 static int g_protocols_len = 0;
 
+
+const Protocol *find_protocol(const char *protocol)
+{
+    for (int i = 0; i < g_protocols_len; i += 1) {
+        if (0 == strcmp(g_protocols[i]->name, protocol)) {
+            return g_protocols[i];
+        }
+    }
+
+    return NULL;
+}
+
 void register_protocol(const Protocol *p)
 {
+    if (find_protocol(p->name)) {
+        log_error("Duplicate protocol: %s", p->name);
+        exit(1);
+    }
+
     g_protocols[g_protocols_len++] = p;
 }
 
-void send_ucast(const struct sockaddr_storage *addr, const void *data, int data_len)
-{
-    socklen_t slen = sizeof(struct sockaddr_storage);
-    if (sendto(gstate.sock_udp, data, data_len, 0, (struct sockaddr*) addr, slen) == -1) {
-        log_error("Failed send packet to %s: %s", str_addr(addr), strerror(errno));
-    }
-}
-
-void setup_mcast_socket_receive(int *sock)
+static void setup_mcast_socket_receive(int *sock)
 {
     int fd = socket(AF_INET6, SOCK_DGRAM, 0);
     if (fd < 0) {
@@ -101,11 +110,6 @@ void setup_mcast_socket_receive(int *sock)
         .sin6_family = AF_INET6,
         .sin6_port = gstate.mcast_addr.sin6_port,
         .sin6_addr = in6addr_any,
-        /*
-        .sin6_addr = {0},
-        .sin6_flowinfo = 0,
-        .sin6_scope_id = 0,
-        */
     };
 
     //gstate.mcast_addr.sin6_scope_id = ifindex;
@@ -127,7 +131,7 @@ void setup_mcast_socket_receive(int *sock)
     *sock = fd;
 }
 
-void setup_unicast_socket(int *sock)
+static void setup_unicast_socket(int *sock)
 {
     int fd;
 
@@ -157,66 +161,11 @@ void setup_unicast_socket(int *sock)
     *sock = fd;
 }
 
-void usage(const char *pname)
-{
-    fprintf(stderr,
-        "Usage:  %s -i eth0 -i wlan0\n"
-        "\n"
-        "  -a              Routing algorithm.\n"
-        "  -d              Run as daemon.\n"
-        "  -i <interface>  Limit to given interfaces.\n"
-        "  -l <path>       Write log output to file.\n"
-        "  -p <peer>       Add a peer manually by address.\n"
-        "  -s <path>       Domain socket to control the instance.\n"
-        "  -d              Set route device (Default: tun0).\n"
-        "  -v              Set verbosity (QUIET, VERBOSE, DEBUG).\n"
-        "  -h              Prints this help text.\n",
-        pname
-    );
-}
-
-static struct { const char *str; int i; } g_verbosity_map[] = {
-    {"QUIET", VERBOSITY_QUIET},
-    {"VERBOSE", VERBOSITY_VERBOSE},
-    {"DEBUG", VERBOSITY_DEBUG},
-};
-
-const char *verbosity_str(int verbosity)
-{
-    for (int i = 0; i < ARRAY_NELEMS(g_verbosity_map); i++) {
-        if (g_verbosity_map[i].i == verbosity) {
-            return g_verbosity_map[i].str;
-        }
-    }
-    return "UNKNOWN";
-}
-
-const int verbosity_int(const char *verbosity)
-{
-    for (int i = 0; i < ARRAY_NELEMS(g_verbosity_map); i++) {
-        if (0 == strcmp(g_verbosity_map[i].str, verbosity)) {
-            return g_verbosity_map[i].i;
-        }
-    }
-    return -1;
-}
-
-// program name ends with -ctl
-int is_client(const char *cmd)
+// program name matches *-ctl
+static int is_client(const char *cmd)
 {
     const char *sep = strrchr(cmd, '-');
     return sep && (strcmp(sep + 1, "ctl") == 0);
-}
-
-const Protocol *find_protocol(const char *protocol)
-{
-    for (int i = 0; i < g_protocols_len; i += 1) {
-        if (0 == strcmp(g_protocols[i]->name, protocol)) {
-            return g_protocols[i];
-        }
-    }
-
-    return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -228,11 +177,11 @@ int main(int argc, char *argv[])
         return client_main(argc, argv);
     }
 
-    const char *control_socket_path = NULL;
-    int do_fork = 0;
-    int rc = 0;
-
     register_all_protocols();
+
+    if (conf_setup(argc, argv) == EXIT_FAILURE) {
+        return EXIT_FAILURE;
+    }
 
     if (g_protocols_len == 0) {
         log_error("No routing protocol available.");
@@ -244,84 +193,13 @@ int main(int argc, char *argv[])
         gstate.protocol = g_protocols[0];
     }
 
-    int option;
-    while ((option = getopt(argc, argv, "di:a:p:s:l:t:h")) > 0) {
-        switch(option) {
-            case 'a':
-                gstate.protocol = find_protocol(optarg);
-                if (!gstate.protocol) {
-                    log_error("Protocol not found: %s", optarg);
-                    return EXIT_FAILURE;
-                }
-                break;
-            case 'd':
-                do_fork = 1;
-                break;
-            case 'i':
-                if (gstate.protocol == NULL) {
-                    log_error("Please set protocol first!");
-                    return EXIT_FAILURE;
-                }
-                add_interface(optarg);
-                break;
-            case 'v':
-                if (verbosity_int(optarg) < 0) {
-                    log_error("Invalid verbosity: %s", optarg);
-                    return EXIT_FAILURE;
-                }
-                gstate.log_verbosity = verbosity_int(optarg);
-                break;
-            case 'l':
-                gstate.log_to_file = fopen(optarg, "w");
-                if (gstate.log_to_file == NULL) {
-                    log_error("Failed to open file to log: %s (%s)", optarg, strerror(errno));
-                    return EXIT_FAILURE;
-                }
-                break;
-            case 'p':
-                if (gstate.protocol == NULL) {
-                    log_error("Please set protocol first!");
-                    return EXIT_FAILURE;
-                }
-                if (gstate.protocol->add_peer == NULL) {
-                    log_error("Protocol %s does not support peers!", gstate.protocol->name);
-                    return EXIT_FAILURE;
-                }
-                rc = gstate.protocol->add_peer(stdout, optarg);
-                break;
-            case 's':
-                control_socket_path = optarg;
-                break;
-            case 't':
-                gstate.tun_name = strdup(optarg);
-                break;
-            case 'h':
-                usage(argv[0]);
-                return 0;
-            default:
-                log_error("Unknown option %c", option);
-                usage(argv[0]);
-                return EXIT_FAILURE;
-        }
-    }
-
-    if (rc != 0) {
-        return EXIT_FAILURE;
-    }
-
-    if (argc > optind) {
-        log_error("Too many options!");
-        usage(argv[0]);
-        return EXIT_FAILURE;
-    }
-
     if (getuid() != 0) {
         printf("Must run as root: %s\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     if (gstate.protocol == NULL) {
-        fprintf(stderr, "No protocol selected (-a):\n");
+        fprintf(stderr, "No protocol selected (-p):\n");
         for (int i = 0; i < g_protocols_len; i += 1) {
             fprintf(stderr, "%s\n", g_protocols[i]->name);
         }
@@ -361,36 +239,42 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    gstate.protocol->init();
+    if (gstate.protocol->init) {
+        gstate.protocol->init();
+    }
 
     log_info("Protocol: %s", gstate.protocol->name);
     log_info("Entry device: %s", gstate.tun_name);
+    log_info("Ethertype: 0x%04x", gstate.ether_type);
     log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
     log_info("Listen on multicast: %s", str_addr6(&gstate.mcast_addr));
     log_info("Listen on unicast: %s", str_addr6(&gstate.ucast_addr));
     log_info("Address of %s: %s", gstate.tun_name, str_in6(&gstate.tun_addr));
 
-    if (control_socket_path) {
-        log_info("Control socket: %s", control_socket_path);
+    if (gstate.control_socket_path) {
+        log_info("Control socket: %s", gstate.control_socket_path);
     }
 
-    setup_unicast_socket(&gstate.sock_udp); // send to various devices
-    setup_mcast_socket_receive(&gstate.sock_mcast_receive);
+    if (gstate.protocol->ext_handler_l3) {
+        setup_unicast_socket(&gstate.sock_udp);
+        setup_mcast_socket_receive(&gstate.sock_mcast_receive);
 
-    net_add_handler(gstate.sock_udp, gstate.protocol->ext_handler);
-    net_add_handler(gstate.sock_mcast_receive, gstate.protocol->ext_handler);
+        net_add_handler(gstate.sock_udp, gstate.protocol->ext_handler_l3);
+        net_add_handler(gstate.sock_mcast_receive, gstate.protocol->ext_handler_l3);
+    }
 
-    //net_add_handler(-1, &periodic_handler);
-    net_add_handler(gstate.tun_fd, gstate.protocol->tun_handler);
+    if (gstate.protocol->tun_handler) {
+        net_add_handler(gstate.tun_fd, gstate.protocol->tun_handler);
+    }
 
     interfaces_init();
 
-    if (control_socket_path) {
-        unix_create_unix_socket(control_socket_path, &gstate.sock_console);
+    if (gstate.control_socket_path) {
+        unix_create_unix_socket(gstate.control_socket_path, &gstate.sock_console);
         net_add_handler(gstate.sock_console, &console_server_handler);
     }
 
-    if (do_fork) {
+    if (gstate.do_fork) {
         if (chdir("/") != 0) {
             log_error("Changing working directory to '/' failed: %s", strerror(errno));
             exit(1);
@@ -407,8 +291,10 @@ int main(int argc, char *argv[])
 
         unix_fork();
     } else {
-        printf("Press Enter for help.\n");
-        net_add_handler(STDIN_FILENO, &console_client_handler);
+        if (gstate.disable_stdin == 0) {
+            printf("Press Enter for help.\n");
+            net_add_handler(STDIN_FILENO, &console_client_handler);
+        }
     }
 
     net_loop();
@@ -419,8 +305,8 @@ int main(int argc, char *argv[])
         fclose(gstate.log_to_file);
     }
 
-    if (control_socket_path) {
-        unix_remove_unix_socket(control_socket_path, gstate.sock_console);
+    if (gstate.control_socket_path) {
+        unix_remove_unix_socket(gstate.control_socket_path, gstate.sock_console);
     }
 
     return EXIT_SUCCESS;
