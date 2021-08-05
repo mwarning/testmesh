@@ -7,7 +7,7 @@ OPTS=""
 
 xappend() {
 	local name="$2" value="$1"
-	OPTS="$OPTS--${name//_/-} ${value//'/\\'}
+	OPTS="$OPTS --${name//_/-} ${value//'/\\'}
 "
 }
 
@@ -17,15 +17,19 @@ section_enabled() {
 }
 
 start_instance() {
-	local cfg="$1" protocol
+	local cfg="$1" option value
 
 	section_enabled "$cfg" || return
 
 	OPTS=""
 
 	# set protocol
-	config_get protocol "$cfg" "protocol"
-	[ -n "$protocol" ] && xappend "$protocol" "p"
+	for option in "protocol" "disable_stdin" "control_socket"; do
+		config_get value "$cfg" "$option"
+		if [ -n "$value" ]; then
+			xappend "$value" "$option"
+		fi
+	done
 
 	config_list_foreach "$cfg" "peer" xappend "peer"
 	config_list_foreach "$cfg" "ifname" xappend "ifname"
@@ -41,9 +45,4 @@ start_instance() {
 start_service() {
 	config_load 'geomesh'
 	config_foreach start_instance 'geomesh'
-}
-
-stop_service() {
-	config_load 'geomesh'
-	config_foreach stop_instance 'geomesh'
 }

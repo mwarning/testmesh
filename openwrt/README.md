@@ -16,15 +16,16 @@ cd openwrt
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-# link the source code into the package
-ln -s ~/geomesh/openwrt/geomesh package/geomesh
+# copy GeoMesh package and source
+cp -r ~/geomesh/openwrt/geomesh package/geomesh
+mkdir package/geomesh/src
+cp -r ~/geomesh/Makefile ~/geomesh/src package/geomesh/src
 
 make menuconfig
 ```
 
-At this point select the appropiate "Target System" and "Target Profile"
-depending on what target chipset/router you want to build for.
-Also mark the TestMesh package under "Network" => "IP Addresses and Names".
+At this point select the appropiate "Target System" and "Target Profile" depending on what target chipset/router you want to build for.
+And mark the GeoMesh package under "Network" => "Routing and Redirection", of course.
 
 Now compile/build everything:
 
@@ -33,51 +34,8 @@ make
 ```
 
 The images and all \*.ipk packages are now inside the bin/ folder.
-You can install the testmesh .ipk using "opkg install \<ipkg-file\>" on the router.
+You can install the geomesh-1.0.0.ipk using "opkg install \<ipkg-file\>" on the router or just use the entire image to flash OpenWrt with the package already installed.
 
-For details please check the OpenWrt documentation.
+## Setup Mesh Interface
 
-## Build Notes
-
-You might want to use your own source location and not the remote respository.
-To do this you need to checkout the repository yourself and commit your changes locally:
-
-```
-git clone https://github.com/mwarning/TestMesh.git
-cd TestMesh
-... apply your changes
-git commit -am "my change"
-```
-
-Now create a symbolic link in the testmesh package folder using the abolute path:
-
-```
-ln -s /my/own/project/folder/TestMesh/.git openwrt/package/testmesh/git-src
-```
-
-Also make sure to enable
-
-```
-"Advanced configuration options (for developers)" => "Enable package source tree override"
-```
-
-In the menu when you do `make menuconfig` and use the "git add" command
-to add your local changes. Then build the entire image or just the TestMesh package:
-
-```
-make package/testmesh/{clean,compile} V=s
-```
-
-## Configuration Notes
-
-The OpenWrt package enables CMD and DNS support. Name Service Switch (NSS) support is not available on OpenWrt.
-
-To use the DNS interface you can hook up TestMesh with the dnsmasq DNS server:
-
-```
-uci add_list dhcp.@dnsmasq[0].server='/p2p/::1#3535'
-uci commit dhcp
-```
-
-This configures dnsmasq to forward the domain *p2p* (as for myname.p2p)
-to TestMesh to be resolved.
+To mesh, you need to configure a WiFi mesh interface in `/etc/conifg/wireless`.

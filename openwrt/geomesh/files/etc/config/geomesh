@@ -1,8 +1,7 @@
 
-config testmesh
+config geomesh
 	option enabled 1
-	option protocol 'flood_0'
-	#option control '/var/testmesh.sock'
-	list ifname 'eth0'
-	list ifname 'eth1'
-	list peer 'somepeer.example.com'
+	option protocol 'flood-1'
+	option control '/var/geomesh.sock'
+	list ifname 'wlan0'
+	#list peer 'somepeer.example.com'

@@ -1,0 +1,58 @@
+#!/bin/sh
+
+exec >/root/setup.log 2>&1
+
+. /lib/functions.sh
+
+
+echo "(I) Start Setup"
+
+mac=$(cat /sys/class/ieee80211/phy0/macaddress)
+
+# Delete all wifi interfaces
+while uci -q delete wireless.@wifi-iface[0]; do :; done
+
+# Create an AP and mesh interface for each wifi device
+config_wifi() {
+	local ds="$1" #device section
+	local wifi_device=`uci -q get wireless.$ds.device`
+	local wifi_path=`uci -q get wireless.$ds.path`
+
+	[ -z "$wifi_device" ] && wifi_device="$ds"
+
+	echo "(I) Configure wifi device: '$wifi_device'"
+
+	if [ `uci get wireless.$ds.channel` -gt 35 ]; then
+		uci set wireless.$ds.channel=36
+	else
+		uci set wireless.$ds.channel=1
+	fi
+
+	uci set wireless.$ds.country='DE'
+	uci set wireless.$ds.disabled='0'
+	# Not a valid value, but will be ignored otherwise (for web ui)
+	#uci set wireless.$ds.txpower='auto'
+
+	# Mesh interface
+	h="wireless.${wifi_device}_mesh"
+	uci set $h="wifi-iface"
+	uci set $h.device="$wifi_device"
+	uci set $h.mode="mesh"
+	uci set $h.network="${wifi_device}_mesh"
+	uci set $h.mesh_id="mesh-id"
+	uci set $h.mesh_fwding=0
+
+	# AP interface
+	p="wireless.${wifi_device}_ap"
+	uci set $p="wifi-iface"
+	uci set $p.device="$wifi_device"
+	uci set $p.mode=ap
+	uci set $p.network=lan
+	uci set $p.ssid="mesh-test-${mac:15}"
+	uci set $p.encryption="none"
+}
+
+config_load wireless
+config_foreach config_wifi wifi-device
+
+/etc/init.d/geomesh enable

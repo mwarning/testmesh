@@ -18,6 +18,7 @@ define Package/geomesh
 	CATEGORY:=Network
 	SUBMENU:=Routing and Redirection
 	MENU:=1
+	DEPENDS:=+kmod-tun @IPV6
 endef
 
 define Package/geomesh/description
@@ -33,10 +34,8 @@ define Package/geomesh/config
 endef
 
 ifeq ($(CONFIG_GEOMESH_ENABLE_DEBUG),y)
-	MAKE_FLAGS += ENABLE
+	MAKE_FLAGS += DEBUG=1
 endif
-
-MAKE_FLAGS += PROTOCOLS="$(PROTOCOLS)"
 
 # clean beforehand, since this is a package for in
 # development software and might contain artifacts
