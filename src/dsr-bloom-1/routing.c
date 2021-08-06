@@ -370,29 +370,27 @@ static char *format_bloom(const uint8_t *bloom)
     return buf;
 }
 
-static int console_handler(FILE *fp, const char *cmd)
+static int console_handler(FILE *fp, int argc, char *argv[])
 {
     char buf_duration[64];
-    int ret = 0;
-    char d;
 
-    if (sscanf(cmd, " h%c", &d) == 1) {
+    if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "n: print routing table\n");
-    } else if (sscanf(cmd, " i%c", &d) == 1) {
+    } else if (argc == 1 && !strcmp(argv[0], "i")) {
         uint8_t own_bloom[BLOOM_M];
         bloom_init(&own_bloom[0], g_own_id);
 
-        fprintf(fp, "  id: %04x\n", g_own_id);
-        fprintf(fp, "  bloom-size: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_K);
-        fprintf(fp, "  bloom: %s\n", format_bloom(&own_bloom[0]));
-    } else if (sscanf(cmd, " n%c", &d) == 1) {
+        fprintf(fp, "id: %04x\n", g_own_id);
+        fprintf(fp, "bloom-size: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_K);
+        fprintf(fp, "bloom: %s\n", format_bloom(&own_bloom[0]));
+    } else if (argc == 1 && !strcmp(argv[0], "n")) {
         unsigned counter = 0;
         Entry *cur;
         Entry *tmp;
 
-        fprintf(fp, "  sender-id addr updated bloom hop-count\n");
+        fprintf(fp, "sender-id addr updated bloom hop-count\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
-            fprintf(fp, "  %04x %s %s %s %u\n",
+            fprintf(fp, "%04x %s %s %s %u\n",
                 cur->sender_id,
                 str_addr2(&cur->addr),
                 format_duration(buf_duration, cur->last_updated, gstate.time_now),
@@ -403,10 +401,10 @@ static int console_handler(FILE *fp, const char *cmd)
         }
         fprintf(fp, "%u entries\n", counter);
     } else {
-        ret = 1;
+        return 1;
     }
 
-    return ret;
+    return 0;
 }
 
 static void periodic_handler(int _events, int _fd)

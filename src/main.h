@@ -21,7 +21,7 @@ typedef struct {
     void (*ext_handler_l2)(int events, int fd); // receive Ethernet frames
     void (*ext_handler_l3)(int events, int fd); // receive IP frames
     int (*add_peer)(FILE* fp, const char *str);
-    int (*console)(FILE* file, const char* cmd);
+    int (*console)(FILE* file, int argc, char *argv[]);
 } Protocol;
 
 void register_protocol(const Protocol *p);

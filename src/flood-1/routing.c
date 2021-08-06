@@ -349,23 +349,20 @@ static int add_peer(FILE* fp, const char *str)
     }
 }
 
-static int console_handler(FILE* fp, const char* cmd)
+static int console_handler(FILE* fp, int argc, char *argv[])
 {
-    int ret = 0;
-    char d;
-
-    if (sscanf(cmd, " h%c", &d) == 1) {
-        fprintf(fp, "  n: print routing table\n");
-    } else if (sscanf(cmd, " i%c", &d) == 1) {
-        fprintf(fp, "  entry timeout: %ds\n", TIMEOUT_ENTRY);
-    } else if (sscanf(cmd, " n%c", &d) == 1) {
+    if (argc == 1 && !strcmp(argv[0], "h")) {
+        fprintf(fp, "n: print routing table\n");
+    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+        fprintf(fp, "entry timeout: %ds\n", TIMEOUT_ENTRY);
+    } else if (argc == 1 && !strcmp(argv[0], "n")) {
         Entry *cur;
         Entry *tmp;
         char buf[64];
 
         fprintf(fp, "src_id seq_num hop-count last-updated prev-hop\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
-            fprintf(fp, "  %04x %u %u %s %s\n",
+            fprintf(fp, "%04x %u %u %s %s\n",
                 cur->src_id,
                 (unsigned) cur->seq_num,
                 (unsigned) cur->hop_count,
@@ -374,10 +371,10 @@ static int console_handler(FILE* fp, const char* cmd)
             );
         }
     } else {
-        ret = 1;
+        return 1;
     }
 
-    return ret;
+    return 0;
 }
 
 static void init()

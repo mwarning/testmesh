@@ -236,33 +236,30 @@ static void periodic_handler(int _events, int _fd)
     entry_timeout();
 }
 
-static int console_handler(FILE* fp, const char* cmd)
+static int console_handler(FILE* fp, int argc, char *argv[])
 {
-    int ret = 0;
-    char d;
-
-    if (sscanf(cmd, " h%c", &d) == 1) {
-        fprintf(fp, "  n: print routing table\n");
-    } else if (sscanf(cmd, " i%c", &d) == 1) {
-        fprintf(fp, "  entry timeout: %ds\n", TIMEOUT_ENTRY);
-    } else if (sscanf(cmd, " n%c", &d) == 1) {
+    if (argc == 1 && !strcmp(argv[0], "h")) {
+        fprintf(fp, "n: print routing table\n");
+    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+        fprintf(fp, "entry timeout: %ds\n", TIMEOUT_ENTRY);
+    } else if (argc == 1 && !strcmp(argv[0], "n")) {
         Entry *cur;
         Entry *tmp;
         char buf[64];
 
         fprintf(fp, "id seq_num last_updated\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
-            fprintf(fp, "  %04x %u %s\n",
+            fprintf(fp, "%04x %u %s\n",
                 cur->id,
                 (unsigned) cur->seq_num,
                 format_duration(buf, gstate.time_started, cur->last_updated)
             );
         }
     } else {
-        ret = 1;
+        return 1;
     }
 
-    return ret;
+    return 0;
 }
 
 static void init()

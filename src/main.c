@@ -245,14 +245,15 @@ int main(int argc, char *argv[])
 
     log_info("Protocol: %s", gstate.protocol->name);
     log_info("Entry device: %s", gstate.tun_name);
-    log_info("Ethertype: 0x%04x", gstate.ether_type);
     log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
-    log_info("Listen on multicast: %s", str_addr6(&gstate.mcast_addr));
-    log_info("Listen on unicast: %s", str_addr6(&gstate.ucast_addr));
     log_info("Address of %s: %s", gstate.tun_name, str_in6(&gstate.tun_addr));
 
     if (gstate.control_socket_path) {
         log_info("Control socket: %s", gstate.control_socket_path);
+    }
+
+    if (gstate.protocol->ext_handler_l2) {
+        log_info("Ethertype: 0x%04x", gstate.ether_type);
     }
 
     if (gstate.protocol->ext_handler_l3) {
@@ -261,6 +262,9 @@ int main(int argc, char *argv[])
 
         net_add_handler(gstate.sock_udp, gstate.protocol->ext_handler_l3);
         net_add_handler(gstate.sock_mcast_receive, gstate.protocol->ext_handler_l3);
+
+        log_info("Listen on multicast: %s", str_addr6(&gstate.mcast_addr));
+        log_info("Listen on unicast: %s", str_addr6(&gstate.ucast_addr));
     }
 
     if (gstate.protocol->tun_handler) {

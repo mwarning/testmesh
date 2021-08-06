@@ -37,106 +37,103 @@ void console_log_message(const char *message)
     }
 }
 
-static void debug_ip_addresses(FILE *fp, const char *ifname)
+static int tokenizer(char *argv[], int argc_max, char *input)
 {
-    struct ifaddrs *ifa;
-    struct ifaddrs *ifaddrs;
-    char addr[INET6_ADDRSTRLEN];
+    int argc = 0;
 
-    if (getifaddrs(&ifaddrs) == -1) {
-        log_error("getifaddrs() %s", strerror(errno));
-        exit(1);
-    }
-
-    ifa = ifaddrs;
-    while (ifa) {
-        if (ifa->ifa_addr && 0 == strcmp(ifa->ifa_name, ifname)) {
-            int sa_family = ifa->ifa_addr->sa_family;
-
-            if (sa_family == AF_INET) {
-                // create IPv4 string
-                struct sockaddr_in *in = (struct sockaddr_in*) ifa->ifa_addr;
-                inet_ntop(AF_INET, &in->sin_addr, addr, sizeof(addr));
-                fprintf(fp, "     %s\n", addr);
+    char *p = NULL;
+    const int len = strlen(input);
+    for (int i = 0; i < len; i++) {
+        if (input[i] <= ' ') {
+            if (p) {
+                if (argc == argc_max) {
+                    log_warning("too many tokens\n");
+                    return 0;
+                }
+                argv[argc++] = p;
+                p = NULL;
             }
-
-            if (sa_family == AF_INET6) {
-                // create IPv6 string
-                struct sockaddr_in6 *in6 = (struct sockaddr_in6*) ifa->ifa_addr;
-                inet_ntop(AF_INET6, &in6->sin6_addr, addr, sizeof(addr));
-                fprintf(fp, "    %s\n", addr);
-            }
+            input[i] = 0;
+        } else if (p == NULL) {
+            p = &input[i];
         }
-        ifa = ifa->ifa_next;
     }
 
-    freeifaddrs(ifaddrs);
-}
-
-static void print_help(FILE *fp)
-{
-    fprintf(fp,
-        "i: show general information\n"
-        "add-peer <address>\n"
-        "q: close this console\n"
-        "v: toggle verbosity\n"
-        "h: show this help\n"
-    );
-
-    if (gstate.protocol->console) {
-        gstate.protocol->console(fp, "h\n");
+    if (p) {
+        if (argc == argc_max) {
+            log_warning("too many tokens\n");
+            return 0;
+        }
+        argv[argc++] = p;
     }
+
+    return argc;
 }
 
-static int console_exec(FILE *fp, const char *request)
+static int console_exec(FILE *fp, int argc, char *argv[])
 {
-    char addr[32];
-    char ifname[32];
-    char verbosity[32];
-    char d; // dummy marker
     int ret = 0;
 
-    if (sscanf(request, " t%c", &d) == 1) {
+    if (argc == 1 && !strcmp(argv[0], "t")) {
         traffic_debug(fp);
-    } else if (sscanf(request, " add-peer %s %c", addr, &d) == 2) {
+    } else if (argc == 2 && !strcmp(argv[0], "add-peer")) {
         if (gstate.protocol->add_peer) {
-            gstate.protocol->add_peer(fp, addr);
+            gstate.protocol->add_peer(fp, argv[1]);
         } else {
             fprintf(fp, "not supported by protocol %s\n", gstate.protocol->name);
         }
-    } else if (sscanf(request, " q%c", &d) == 1) {
+    } else if (argc == 1 && !strcmp(argv[0], "q")) {
         // close console
         ret = 1;
-    } else if (sscanf(request, " interface-add %30s", &ifname[0]) == 1) {
-        interface_add(ifname);
-    } else if (sscanf(request, " interface-del %30s", &ifname[0]) == 1) {
-        interface_del(ifname);
-    } else if (sscanf(request, " interfaces %c", &d) == 1) {
+    } else if (argc == 2 && !strcmp(argv[0], "interface-add")) {
+        interface_add(argv[1]);
+    } else if (argc == 2 && !strcmp(argv[0], "interface-del")) {
+        interface_del(argv[1]);
+    } else if (argc == 1 && !strcmp(argv[0], "interfaces")) {
         interfaces_debug(fp);
-    } else if (sscanf(request, " v %30s %c", &verbosity[0], &d) == 1) {
-        if (verbosity_int(verbosity)) {
-            gstate.log_verbosity = verbosity_int(verbosity);
+    } else if (argc == 2 && !strcmp(argv[0], "v")) {
+        int v = verbosity_int(argv[1]);
+        if (v != -1) {
+            gstate.log_verbosity = v;
         } else {
-            fprintf(fp, "Invalid verbosity\n");
+            fprintf(fp, "Invalid verbosity: %s\n", argv[1]);
         }
-    } else if (sscanf(request, " v%c", &d) == 1) {
+    } else if (argc == 1 && !strcmp(argv[0], "v")) {
         gstate.log_verbosity = (gstate.log_verbosity + 1) % 3;
         fprintf(fp, "%s enabled\n", verbosity_str(gstate.log_verbosity));
-    } else if (sscanf(request, " p%c", &d) == 1) {
-        fprintf(fp, "  process id: %u\n", (unsigned) getpid());
-        fprintf(fp, "  verbosity: %s\n", verbosity_str(gstate.log_verbosity));
-        fprintf(fp, "  tun device: %s\n", gstate.tun_name);
-        //debug_ip_addresses(fp, gstate.tun_name);
+    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+        fprintf(fp, "protocol: %s\n", gstate.protocol->name);
+        fprintf(fp, "process id: %u\n", (unsigned) getpid());
+        fprintf(fp, "verbosity: %s\n", verbosity_str(gstate.log_verbosity));
+        fprintf(fp, "tun device: %s\n", gstate.tun_name);
         if (gstate.protocol->console) {
-            gstate.protocol->console(fp, "i\n");
+            gstate.protocol->console(fp, argc, argv);
         }
-    } else if (gstate.protocol->console) {
-        if (0 != gstate.protocol->console(fp, request)) {
-            print_help(fp);
+    } else if (argc == 1 && !strcmp(argv[0], "h")) {
+        fprintf(fp,
+            "i: show general information\n"
+            "interfaces\n"
+            "interface-add <ifname>\n"
+            "interface-del <ifname>\n"
+            "add-peer <address>\n"
+            "q: close this console\n"
+            "v [verbosity]: toggle verbosity\n"
+            "h: show this help\n"
+        );
+
+        if (gstate.protocol->console) {
+            gstate.protocol->console(fp, argc, argv);
         }
     } else {
-        fprintf(fp, "unknown/incomplete command\n");
-        print_help(fp);
+        int rc = 1;
+
+        if (gstate.protocol->console) {
+            rc = gstate.protocol->console(fp, argc, argv);
+        }
+
+        if (rc != 0) {
+            fprintf(fp, "Unknown command. Use 'h' for help.\n");
+        }
     }
 
     return ret;
@@ -145,6 +142,9 @@ static int console_exec(FILE *fp, const char *request)
 void console_client_handler(int rc, int fd)
 {
     char request[256];
+    char *argv[8];
+    int argc;
+
     int ret = 0;
     FILE *fp;
 
@@ -162,11 +162,14 @@ void console_client_handler(int rc, int fd)
             break;
         }
 
-        if (read_len == -1) {
+        if (read_len < 0) {
+            // read error
             break;
         }
 
-        ret = console_exec(fp, request);
+        request[read_len] = '\0';
+        argc = tokenizer(argv, ARRAY_NELEMS(argv), request);
+        ret = console_exec(fp, argc, argv);
     }
 
     fclose(fp);

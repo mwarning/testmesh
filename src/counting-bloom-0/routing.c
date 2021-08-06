@@ -365,20 +365,18 @@ static char *format_bloom(char *buf, const uint8_t *bloom)
     return buf;
 }
 
-static int console_handler(FILE *fp, const char *cmd)
+static int console_handler(FILE *fp, int argc, char *argv[])
 {
     char buf_duration[64];
     char buf_bloom[BLOOM_M * 6];
-    int ret = 0;
-    char d;
 
-    if (sscanf(cmd, " h%c", &d) == 1) {
+    if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "  n: print neighbor table\n");
-    } else if (sscanf(cmd, " i%c", &d) == 1) {
+    } else if (argc == 1 && !strcmp(argv[0], "i")) {
         fprintf(fp, "  id: %04x / %s\n", g_own_id, format_bloom(buf_bloom, &g_own_id_bloom[0]));
         fprintf(fp, "  bloom-size: %u, bloom-capacity: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_C, BLOOM_K);
         fprintf(fp, "  bloom: %s\n", format_bloom(buf_bloom, &g_own_bloom[0]));
-    } else if (sscanf(cmd, " n%c", &d) == 1) {
+    } else if (argc == 1 && !strcmp(argv[0], "n")) {
         unsigned counter = 0;
         Neighbor *cur;
         Neighbor *tmp;
@@ -395,10 +393,10 @@ static int console_handler(FILE *fp, const char *cmd)
         }
         fprintf(fp, "%u entries\n", counter);
     } else {
-        ret = 1;
+        return 1;
     }
 
-    return ret;
+    return 0;
 }
 
 static void init()

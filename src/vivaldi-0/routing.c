@@ -405,18 +405,16 @@ static char *format_pos(char *buf, const float *pos)
     return buf;
 }
 
-static int console_handler(FILE *fp, const char *cmd)
+static int console_handler(FILE *fp, int argc, char *argv[])
 {
     char buf_duration[64];
     char buf_pos[8 * DIM];
-    int ret = 0;
-    char d;
 
-    if (sscanf(cmd, " h%c", &d) == 1) {
+    if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "n: print neighbor table\n");
-    } else if (sscanf(cmd, " i%c", &d) == 1) {
+    } else if (argc == 1 && !strcmp(argv[0], "i")) {
         fprintf(fp, "  own pos: %s\n", format_pos(buf_pos, g_own_pos));
-    } else if (sscanf(cmd, " n%c", &d) == 1) {
+    } else if (argc == 1 && !strcmp(argv[0], "n")) {
         unsigned counter = 0;
         Neighbor *cur;
         Neighbor *tmp;
@@ -433,10 +431,10 @@ static int console_handler(FILE *fp, const char *cmd)
         }
         fprintf(fp, "%u entries\n", counter);
     } else {
-        ret = 1;
+        return 1;
     }
 
-    return ret;
+    return 0;
 }
 
 static void init()
