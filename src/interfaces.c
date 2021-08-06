@@ -476,8 +476,13 @@ static void get_all_interfaces(int (*interface_add_cb)(const char *ifname))
             continue;
         }
 
-        // do not set broadcast via own tunnel interface
+        // do not send protocol data via own tunnel interface
         if (0 == strcmp(ifa->ifa_name, gstate.tun_name)) {
+            continue;
+        }
+
+        // avoid to add interfaces multiple times
+        if (-1 != find_interface(ifa->ifa_name)) {
             continue;
         }
 
