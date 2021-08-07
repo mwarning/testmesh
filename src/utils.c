@@ -730,20 +730,27 @@ int is_eui64(const struct in6_addr *addr)
     return (addr->s6_addr[11] == 0xff && addr->s6_addr[12] == 0xFE);
 }
 
-void id_get4(uint32_t *id, const struct in_addr *addr)
+uint32_t id_get4(const struct in_addr *addr)
 {
-    const uint8_t* s = (const uint8_t*) &addr->s_addr;
-    uint8_t* d = (uint8_t*) id;
+    uint32_t id = 0;
 
-    d[3] = s[0];
-    d[2] = s[1];
-    d[1] = s[2];
-    d[0] = s[3];
+    // is link local address
+    if ((addr->s_addr & 0x0000ffff) == 0x0000fea9) {
+        const uint8_t* s = (const uint8_t*) &addr->s_addr;
+        uint8_t* d = (uint8_t*) &id;
+
+        d[3] = s[0];
+        d[2] = s[1];
+        d[1] = s[2];
+        d[0] = s[3];
+    }
+
+    return id;
 }
 
-void id_set4(struct in_addr *addr, const uint32_t *id)
+void id_set4(struct in_addr *addr, uint32_t id)
 {
-    const uint8_t* s = (const uint8_t*) id;
+    const uint8_t* s = (const uint8_t*) &id;
     uint8_t* d = (uint8_t*) &addr->s_addr;
 
     d[3] = s[0];
@@ -752,31 +759,28 @@ void id_set4(struct in_addr *addr, const uint32_t *id)
     d[0] = s[3];
 }
 
-void id_get6(uint32_t *id, const struct in6_addr *addr)
+uint32_t id_get6(const struct in6_addr *addr)
 {
-    const uint8_t* s = (const uint8_t*) &addr->s6_addr;
-    uint8_t* d = (uint8_t*) id;
+    uint32_t id = 0;
 
-    // hm, not consisten with id_set6
-    /*if (is_eui64(addr)) {
-        d[3] = s[10];
-        d[2] = s[13];
-        d[1] = s[14];
-        d[0] = s[15];
-    } else {*/
+    // is link local address
+    if ((addr->s6_addr[0] == 0xfe) && ((addr->s6_addr[1] & 0xC0) == 0x80)) {
+        const uint8_t* s = (const uint8_t*) &addr->s6_addr;
+        uint8_t* d = (uint8_t*) &id;
+        // TODO: consider EUI64 scheme?
         d[3] = s[12];
         d[2] = s[13];
         d[1] = s[14];
         d[0] = s[15];
-    //}
-    //memcpy(id, &addr->s6_addr[16 - sizeof(*id)], sizeof(*id));
-    //reverse_bytes((uint8_t*) id, sizeof(*id));
+    }
+
+    return id;
 }
 
-void id_set6(struct in6_addr *addr, const uint32_t *id)
+void id_set6(struct in6_addr *addr, uint32_t id)
 {
-    memcpy(&addr->s6_addr[16 - sizeof(*id)], id, sizeof(*id));
-    reverse_bytes((uint8_t*) &addr->s6_addr[16 - sizeof(*id)], sizeof(*id));
+    memcpy(&addr->s6_addr[16 - sizeof(id)], &id, sizeof(id));
+    reverse_bytes((uint8_t*) &addr->s6_addr[16 - sizeof(id)], sizeof(id));
 }
 
 const char *format_mac(char buf[18], const struct mac *addr)

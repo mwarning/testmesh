@@ -92,10 +92,10 @@ int addr_set(const char *ifname, const struct in6_addr *addr);
 int addr_del(const char *ifname, const struct in6_addr *addr);
 int addr_flush(const char *ifname);
 
-void id_get4(uint32_t *id, const struct in_addr *addr);
-void id_set4(struct in_addr *addr, const uint32_t *id);
-void id_get6(uint32_t *id, const struct in6_addr *addr);
-void id_set6(struct in6_addr *addr, const uint32_t *id);
+uint32_t id_get4(const struct in_addr *addr);
+void id_set4(struct in_addr *addr, uint32_t id);
+uint32_t id_get6(const struct in6_addr *addr);
+void id_set6(struct in6_addr *addr, uint32_t id);
 
 int is_martian(const struct sockaddr *sa);
 

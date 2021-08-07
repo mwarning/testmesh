@@ -170,10 +170,9 @@ static void tun_handler(int events, int fd)
         }
 
         // some id we want to send data to
-        uint32_t dst_id = 0;
-        id_get6(&dst_id, daddr);
+        uint32_t dst_id = id_get6(daddr);
 
-        log_debug("read %d from %s for %04x", read_len, gstate.tun_name, dst_id);
+        log_debug("read %d from %s: %s => %s (%zu)", read_len, gstate.tun_name, str_in6(saddr), str_in6(daddr), dst_id);
 
         if (dst_id == g_own_id) {
             log_warning("send packet to self => drop packet");
@@ -265,7 +264,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
 static void init()
 {
     // get id from IP address
-    id_get6(&g_own_id, &gstate.tun_addr);
+    g_own_id = id_get6(&gstate.tun_addr);
 
     // call at least every second
     net_add_handler(-1, &periodic_handler);
