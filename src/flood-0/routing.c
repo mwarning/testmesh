@@ -245,6 +245,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
         Entry *cur;
         Entry *tmp;
         char buf[64];
+        int count = 0;
 
         fprintf(fp, "id seq_num last_updated\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
@@ -253,7 +254,9 @@ static int console_handler(FILE* fp, int argc, char *argv[])
                 (unsigned) cur->seq_num,
                 format_duration(buf, gstate.time_started, cur->last_updated)
             );
+            count += 1;
         }
+        fprintf(fp, "%d entries\n", count);
     } else {
         return 1;
     }
