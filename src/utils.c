@@ -32,6 +32,56 @@ uint32_t adler32(const void *buf, size_t buflength) {
     return (s2 << 16) | s1;
 }
 
+int parse_ip_packet(uint32_t *dst_id, const uint8_t *buf, ssize_t read_len)
+{
+    if (read_len <= 0) {
+        return 1;
+    }
+
+    int ip_version = (buf[0] >> 4) & 0x0f;
+
+    if (ip_version == 4 && read_len >= 20) {
+        // IPv4 packet
+        //int payload_length = ntohs(*((uint16_t*) &buf[2]));
+        struct in_addr *saddr = (struct in_addr *) &buf[12];
+        struct in_addr *daddr = (struct in_addr *) &buf[16];
+
+        if (IN_MULTICAST(&daddr->s_addr)) {
+            // no support for multicast traffic
+            return 1;
+        }
+
+        *dst_id = id_get4(daddr);
+
+        log_debug("read %d from %s: %s => %s (%zu)",
+            read_len, gstate.tun_name, str_in4(saddr), str_in4(daddr), dst_id);
+
+        return 0;
+    }
+
+    if (ip_version == 6 && read_len >= 24) {
+        // IPv6 packet
+        //int payload_length = ntohs(*((uint16_t*) &buf[4]));
+        struct in6_addr *saddr = (struct in6_addr *) &buf[8];
+        struct in6_addr *daddr = (struct in6_addr *) &buf[24];
+
+        if (IN6_IS_ADDR_MULTICAST(daddr)) {
+            // no support for multicast traffic
+            return 1;
+        }
+
+        *dst_id = id_get6(daddr);
+
+        log_debug("read %d from %s: %s => %s (%zu)",
+            read_len, gstate.tun_name, str_in6(saddr), str_in6(daddr), dst_id);
+
+        return 0;
+    }
+
+    // invalid IP packet
+    return 1;
+}
+
 void set_macaddr(Address *dst, const uint8_t *addr, int ifindex)
 {
     dst->mac.family = AF_MAC;
@@ -261,10 +311,18 @@ const char *str_addr6(const struct sockaddr_in6 *addr)
     return str_addr((struct sockaddr_storage*) addr);
 }
 
+const char *str_in4(const struct in_addr *addr)
+{
+    static char addrbuf[2][INET6_ADDRSTRLEN];
+    static unsigned addrbuf_i = 0;
+    return inet_ntop(AF_INET, addr, addrbuf[++addrbuf_i % 2], INET6_ADDRSTRLEN);
+}
+
 const char *str_in6(const struct in6_addr *addr)
 {
-    static char addrbuf[INET6_ADDRSTRLEN];
-    return inet_ntop(AF_INET6, addr, addrbuf, sizeof(addrbuf));
+    static char addrbuf[2][INET6_ADDRSTRLEN];
+    static unsigned addrbuf_i = 0;
+    return inet_ntop(AF_INET6, addr, addrbuf[++addrbuf_i % 2], INET6_ADDRSTRLEN);
 }
 
 static int common_bits(const void *p1, const void* p2, int bits_n)

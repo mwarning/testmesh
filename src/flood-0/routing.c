@@ -133,6 +133,7 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 // read traffic from tun0 and send to peers
 static void tun_handler(int events, int fd)
 {
+    uint32_t dst_id;
     DATA data = {
         .type = TYPE_DATA,
     };
@@ -142,37 +143,11 @@ static void tun_handler(int events, int fd)
     }
 
     while (1) {
-        int read_len = read(fd, &data.payload[0], sizeof(data.payload));
-        if (read_len <= 0) {
-            break;
-        }
+        ssize_t read_len = read(fd, &data.payload[0], sizeof(data.payload));
 
-        int ip_version = (data.payload[0] >> 4) & 0x0f;
-
-        if (ip_version != 6) {
-            log_debug("unhandled packet protocol version (IPv%d) => drop", ip_version);
+        if (!parse_ip_packet(&dst_id, &data.payload[0], read_len)) {
             continue;
         }
-
-        if (read_len < 24) {
-            log_debug("payload too small (%d) => drop", read_len);
-            continue;
-        }
-
-        // IPv6 packet
-        int payload_length = ntohs(*((uint16_t*) &data.payload[4]));
-        struct in6_addr *saddr = (struct in6_addr *) &data.payload[8];
-        struct in6_addr *daddr = (struct in6_addr *) &data.payload[24];
-
-        if (IN6_IS_ADDR_MULTICAST(daddr)) {
-            // no support for multicast traffic
-            continue;
-        }
-
-        // some id we want to send data to
-        uint32_t dst_id = id_get6(daddr);
-
-        log_debug("read %d from %s: %s => %s (%zu)", read_len, gstate.tun_name, str_in6(saddr), str_in6(daddr), dst_id);
 
         if (dst_id == g_own_id) {
             log_warning("send packet to self => drop packet");
