@@ -19,8 +19,9 @@
 #include "utils.h"
 
 
-uint32_t adler32(const void *buf, size_t buflength) {
-    const uint8_t *buffer = (const uint8_t*)buf;
+uint32_t adler32(const void *buf, size_t buflength)
+{
+    const uint8_t *buffer = (const uint8_t*) buf;
 
     uint32_t s1 = 1;
     uint32_t s2 = 0;
@@ -28,7 +29,8 @@ uint32_t adler32(const void *buf, size_t buflength) {
     for (size_t n = 0; n < buflength; n++) {
         s1 = (s1 + buffer[n]) % 65521;
         s2 = (s2 + s1) % 65521;
-    }     
+    }
+
     return (s2 << 16) | s1;
 }
 
@@ -660,7 +662,8 @@ int interface_get_addr6(struct in6_addr *addr, const char *ifname)
 }
 
 // set interface in an "up" state
-int interface_set_up(int fd, const char* ifname) {
+int interface_set_up(int fd, const char *ifname)
+{
     struct ifreq ifr = {0};
     int oldflags;
 
@@ -701,7 +704,7 @@ int interface_is_up(int fd, const char *ifname)
     return !!(ifr.ifr_flags & IFF_UP);
 }
 
-int _ip_cmd(const char *cmd, const char *ifname, const struct in6_addr *addr)
+static int _ip_cmd(const char *cmd, const char *ifname, const struct in6_addr *addr)
 {
     char addr_str[INET6_ADDRSTRLEN];
     char command[INET6_ADDRSTRLEN + 64];
