@@ -599,33 +599,6 @@ int interface_set_mtu(int fd, const char *ifname, int mtu)
     return 0;
 }
 
-int tun_alloc(const char *dev)
-{
-    const char *clonedev = "/dev/net/tun";
-    struct ifreq ifr = {0};
-    int fd;
-
-    if ((fd = open(clonedev, O_RDWR)) < 0) {
-        log_error("open %s: %s", clonedev, strerror(errno));
-        return -1;
-    }
-
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strcpy(ifr.ifr_name, dev);
-
-    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
-        log_error("ioctl(TUNSETIFF) %s", strerror(errno));
-        close(fd);
-        return -1;
-    }
-
-    if (0 != strcmp(ifr.ifr_name, dev)) {
-        return -1;
-    }
-
-    return fd;
-}
-
 int interface_get_addr6(struct in6_addr *addr, const char *ifname)
 {
     struct ifaddrs *ifaddr;

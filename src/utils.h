@@ -84,7 +84,6 @@ int addr_equal66(const struct sockaddr_in6 *addr1, const struct sockaddr_in6 *ad
 
 int interface_set_mtu(int fd, const char *ifname, int mtu);
 int interface_set_up(int fd, const char* ifname);
-int tun_alloc(const char *dev);
 
 int interface_is_up(int fd, const char *interface);
 

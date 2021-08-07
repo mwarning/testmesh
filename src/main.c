@@ -7,13 +7,12 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
-#include <arpa/inet.h>
+#include <arpa/inet.h> // IFF_TUN, IFF_NO_PI, TUNSETIFF
 #include <linux/if_tun.h>
+#include <fcntl.h> // open()
 #include <stddef.h>
-#include <ifaddrs.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <math.h>
 
 #include "main.h"
 #include "conf.h"
@@ -159,6 +158,33 @@ static void setup_unicast_socket(int *sock)
     }
 
     *sock = fd;
+}
+
+static int tun_alloc(const char *dev)
+{
+    const char *clonedev = "/dev/net/tun";
+    struct ifreq ifr = {0};
+    int fd;
+
+    if ((fd = open(clonedev, O_RDWR)) < 0) {
+        log_error("open %s: %s", clonedev, strerror(errno));
+        return -1;
+    }
+
+    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+    strcpy(ifr.ifr_name, dev);
+
+    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
+        log_error("ioctl(TUNSETIFF) %s", strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    if (0 != strcmp(ifr.ifr_name, dev)) {
+        return -1;
+    }
+
+    return fd;
 }
 
 // program name matches *-ctl
