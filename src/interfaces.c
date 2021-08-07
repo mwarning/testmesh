@@ -159,25 +159,29 @@ static void interface_setup(struct interface *ifa, int quiet)
 
     if (if_nametoindex2(&ifa->ifindex, ifname)) {
         if (!quiet)
-            log_warning("failed to get interface index: %s", ifname);
+            log_warning("Interface not found: %s", ifname);
         return;
     }
 
     if (if_nametomac2(&ifa->ifmac, ifname)) {
         if (!quiet)
-           log_warning("failed to get interface MAC address: %s", ifname);
+           log_warning("Failed to get interface MAC address: %s", ifname);
         return;
     }
 
     if (gstate.protocol->ext_handler_l2) {
         if (set_promisc_mode(ifname)) {
             if (!quiet)
-                log_warning("failed to set interface into promisc mode: %s", ifname);
+                log_warning("Failed to set interface into promisc mode: %s", ifname);
             return;
         }
 
-        setup_raw_socket(&ifa->ifsock_l2, ifa->ifname);
+        if (setup_raw_socket(&ifa->ifsock_l2, ifa->ifname)) {
+            return;
+        }
     }
+
+    log_info("Interface ready: %s", ifa->ifname);
 }
 
 int interface_get_ifindex(int fd)
@@ -544,7 +548,7 @@ void interfaces_init()
     }
 
     if (utarray_len(g_interfaces) == 0) {
-        log_info("no interface configured - add all interfaces");
+        log_info("No interface given => add all");
         g_add_all_interfaces = 1;
     }
 
