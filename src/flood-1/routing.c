@@ -229,40 +229,6 @@ static void tun_handler(int events, int fd)
     }
 }
 
-static void ext_handler_l3(int events, int fd)
-{
-    Address from_addr = {0};
-    Address to_addr = {0};
-
-    uint8_t buffer[sizeof(DATA)];
-    int ifindex = 0;
-
-    if (events <= 0) {
-        return;
-    }
-
-    ssize_t recv_len = recv6_fromto(
-        fd, buffer, sizeof(buffer), 0, &ifindex,
-        (struct sockaddr_storage*) &from_addr,
-        (struct sockaddr_storage*) &to_addr
-    );
-
-    if (recv_len <= 0) {
-        log_error("recvfrom() %s", strerror(errno));
-        return;
-    }
-
-    log_debug("got IP packet %s => %s (%s)", str_addr2(&from_addr), str_addr2(&to_addr), str_ifindex(ifindex));
-
-    switch (buffer[0]) {
-    case TYPE_DATA:
-        handle_DATA(&from_addr, (DATA*) &buffer[0], recv_len);
-        break;
-    default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr2(&from_addr), str_ifindex(ifindex));
-    }
-}
-
 static void ext_handler_l2(int events, int fd)
 {
     if (events <= 0) {
@@ -311,21 +277,6 @@ static void periodic_handler(int _events, int _fd)
     entry_timeout();
 }
 
-static int add_peer(FILE* fp, const char *str)
-{
-    Address addr;
-
-    if (EXIT_SUCCESS == addr_parse((struct sockaddr_storage*) &addr, str, STR(UNICAST_PORT), AF_INET6)) {
-        // TODO
-        //uint32_t id = id_get6(&addr.ip6);
-        //entry_add(id, 0, 1, &addr);
-        return EXIT_SUCCESS;
-    } else {
-        fprintf(fp, "Failed to parse peer address: %s", str);
-        return EXIT_FAILURE;
-    }
-}
-
 static int console_handler(FILE* fp, int argc, char *argv[])
 {
     if (argc == 1 && !strcmp(argv[0], "h")) {
@@ -370,8 +321,6 @@ void flood_1_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .ext_handler_l3 = &ext_handler_l3,
-        .add_peer = &add_peer,
         .console = &console_handler,
     };
 

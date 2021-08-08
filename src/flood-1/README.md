@@ -1,6 +1,6 @@
 # Flood 1
 
-Simple flooding protocol. Packets are send by unicast if the destination is known via the shorted route (hop count metric). Peers over the Internet are supported.
+Simple flooding protocol. Packets are send by unicast if the destination is known via the shorted route (hop count metric).
 
 Packet header:
 * source identifier
