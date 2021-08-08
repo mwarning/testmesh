@@ -36,9 +36,6 @@ typedef struct __attribute__((__packed__)) {
     uint8_t payload[2000];
 } DATA;
 
-static uint32_t g_own_id = 0; // set from the fe80 addr of tun0
-
-
 static void bloom_init(uint8_t *bloom, uint32_t id)
 {
     memset(bloom, 0, BLOOM_M);
@@ -90,20 +87,20 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
     log_debug("got data packet: %s / %04x => %04x",
         str_addr2(addr), p->src_id, p->dst_id);
 
-    if (p->src_id == g_own_id) {
+    if (p->src_id == gstate.own_id) {
         log_debug("own source id => drop packet");
         return;
     }
 
-    if (p->dst_id == g_own_id) {
+    if (p->dst_id == gstate.own_id) {
         log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
         if (write(gstate.tun_fd, p->payload, p->length) != p->length) {
             log_error("write() %s", strerror(errno));
         }
-    } else if (!bloom_test(&p->bloom[0], g_own_id)) {
-        bloom_add(&p->bloom[0], g_own_id);
+    } else if (!bloom_test(&p->bloom[0], gstate.own_id)) {
+        bloom_add(&p->bloom[0], gstate.own_id);
         send_bcasts_l2(p, recv_len);
     } else {
         // drop packet
@@ -133,12 +130,12 @@ static void tun_handler(int events, int fd)
             continue;
         }
 
-        if (dst_id == g_own_id) {
+        if (dst_id == gstate.own_id) {
             log_warning("send packet to self => drop packet");
             continue;
         }
 
-        data.src_id = g_own_id;
+        data.src_id = gstate.own_id;
         data.dst_id = dst_id;
         data.length = read_len;
         memset(&data.bloom, 0, sizeof(data.bloom));
@@ -181,8 +178,7 @@ static void ext_handler_l2(int events, int fd)
 
 static void init()
 {
-    // get id from IP address
-    g_own_id = id_get6(&gstate.tun_addr);
+    // nothing to do
 }
 
 void dsr_bloom_0_register()

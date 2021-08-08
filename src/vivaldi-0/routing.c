@@ -51,7 +51,6 @@ typedef struct __attribute__((__packed__)) {
 } DATA;
 
 
-static uint32_t g_own_id = 0; // not used yet
 static float g_own_pos[DIM];
 
 static Neighbor *g_neighbors = NULL;
@@ -200,7 +199,7 @@ static void handle_COMM(const Address *addr, COMM *p, unsigned recv_len)
 
     log_debug("got comm packet: %s / %04x", str_addr2(addr), p->sender_id);
 
-    if (p->sender_id == g_own_id) {
+    if (p->sender_id == gstate.own_id) {
         log_debug("own comm packet => drop");
         return;
     }
@@ -258,7 +257,7 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
         return;
     }
 
-    if (p->sender_id == g_own_id) {
+    if (p->sender_id == gstate.own_id) {
         log_debug("own data packet => drop");
         return;
     }
@@ -268,7 +267,7 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
         return;
     }
 
-    p->sender_id = g_own_id;
+    p->sender_id = gstate.own_id;
     p->hop_count += 1;
 
     forward_DATA(p, recv_len);
@@ -349,7 +348,7 @@ static void send_COMMs()
 
     COMM data = {
         .type = TYPE_COMM,
-        .sender_id = g_own_id,
+        .sender_id = gstate.own_id,
     };
 
     memcpy(&data.pos[0], &g_own_pos[0], sizeof(data.pos));
@@ -417,11 +416,6 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 
 static void init()
 {
-    srand(time(NULL));
-
-    // get id from IP address - not used yet
-    g_own_id = id_get6(&gstate.tun_addr);
-
     vec_random_unit(&g_own_pos[0]);
 
     net_add_handler(-1, &periodic_handler);

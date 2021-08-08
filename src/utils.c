@@ -34,7 +34,26 @@ uint32_t adler32(const void *buf, size_t buflength)
     return (s2 << 16) | s1;
 }
 
-int parse_ip_packet(uint32_t *dst_id, const uint8_t *buf, ssize_t read_len)
+// fill buffer with random bytes
+int bytes_random(void *buffer, size_t size)
+{
+   int fd;
+   int rc;
+
+   fd = open("/dev/urandom", O_RDONLY);
+   if (fd < 0) {
+       log_error("Failed to open /dev/urandom");
+       exit(1);
+   }
+
+   rc = read(fd, buffer, size);
+
+   close(fd);
+
+   return rc;
+}
+
+int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 {
     int ip_version = (buf[0] >> 4) & 0x0f;
 
@@ -49,11 +68,21 @@ int parse_ip_packet(uint32_t *dst_id, const uint8_t *buf, ssize_t read_len)
             return 1;
         }
 
-        *dst_id = id_get4(daddr);
+        uint32_t dst_id = id_get4(daddr);
+        if (dst_id == 0) {
+            // not a link local address => to gateway
+            dst_id = gstate.gateway_id;
+        }
+
+        // no valid id / no gateway defined
+        if (dst_id == 0) {
+            return 1;
+        }
 
         log_debug("read %d from %s: %s => %s (%zu)",
             read_len, gstate.tun_name, str_in4(saddr), str_in4(daddr), dst_id);
 
+        *dst_id_ret = dst_id;
         return 0;
     }
 
@@ -68,11 +97,21 @@ int parse_ip_packet(uint32_t *dst_id, const uint8_t *buf, ssize_t read_len)
             return 1;
         }
 
-        *dst_id = id_get6(daddr);
+        uint32_t dst_id = id_get6(daddr);
+        if (dst_id == 0) {
+            // not a link local address => to gateway
+            dst_id = gstate.gateway_id;
+        }
+
+        // no valid id / no gateway defined
+        if (dst_id == 0) {
+            return 1;
+        }
 
         log_debug("read %d from %s: %s => %s (%zu)",
             read_len, gstate.tun_name, str_in6(saddr), str_in6(daddr), dst_id);
 
+        *dst_id_ret = dst_id;
         return 0;
     }
 

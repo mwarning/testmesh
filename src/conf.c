@@ -11,6 +11,8 @@
 enum OPCODE {
     oProtocol,
     oInterface,
+    oGatewayIdentifier,
+    oOwnIdentifier,
     oDaemon,
     oVerbosity,
     oEtherType,
@@ -32,6 +34,8 @@ struct option_t {
 static struct option_t g_options[] = {
     {"--protocol", 1, oProtocol},
     {"-p", 1, oProtocol},
+    {"--gateway-id", 1, oGatewayIdentifier},
+    {"--own-id", 1, oOwnIdentifier},
     {"--ifname", 1, oInterface},
     {"-i", 1, oInterface},
     {"--log", 1, oLogFile},
@@ -93,6 +97,18 @@ int verbosity_int(const char *verbosity)
     return -1;
 }
 
+static int parse_hex(uint64_t *ret, const char *val, int bytes)
+{
+    int len = strlen(val);
+    if (len < 3 || len > (2 + 2 * bytes) || (len % 2) || val[0] != '0' || val[1] != 'x') {
+       return 1;
+    }
+
+    char *end = NULL;
+    *ret = strtoul(val + 2, &end, 16);
+    return (val + len) != end;
+}
+
 static const struct option_t *find_option(const char *name)
 {
     struct option_t *option;
@@ -111,6 +127,7 @@ static const struct option_t *find_option(const char *name)
 static int conf_set(const char *opt, const char *val)
 {
     const struct option_t *option;
+    uint64_t n;
 
     option = find_option(opt);
 
@@ -164,11 +181,29 @@ static int conf_set(const char *opt, const char *val)
     case oControlSocket:
         gstate.control_socket_path = strdup(val);
         break;
+    case oGatewayIdentifier:
+        if (parse_hex(&n, val, sizeof(gstate.gateway_id)) || n == 0) {
+            log_error("Invalid hex value for %s: %s", opt, val);
+            return EXIT_FAILURE;
+        }
+        gstate.gateway_id = n;
+        break;
+    case oOwnIdentifier:
+        if (parse_hex(&n, val, sizeof(gstate.own_id)) || n == 0) {
+            log_error("Invalid hex value for %s: %s", opt, val);
+            return EXIT_FAILURE;
+        }
+        gstate.own_id = n;
+        break;
     case oDisableStdin:
         gstate.disable_stdin = 1;
         break;
     case oEtherType:
-        gstate.ether_type = strtoul(val, NULL, 16);
+        if (parse_hex(&n, val, sizeof(gstate.ether_type))) {
+            log_error("Invalid hex value for %s: %s", opt, val);
+            return EXIT_FAILURE;
+        }
+        gstate.ether_type = n;
         break;
     case oVerbosity:
         if (verbosity_int(val) < 0) {

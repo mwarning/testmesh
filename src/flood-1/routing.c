@@ -43,7 +43,6 @@ typedef struct __attribute__((__packed__)) {
     uint8_t payload[2000];
 } DATA;
 
-static uint32_t g_own_id = 0; // set from the fe80 addr of tun0
 static uint16_t g_sequence_number = 0;
 static Entry *g_entries = NULL;
 
@@ -134,7 +133,7 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
     log_debug("data packet: %s / %04x => %04x",
         str_addr2(from_addr), p->src_id, p->dst_id);
 
-    if (p->src_id == g_own_id) {
+    if (p->src_id == gstate.own_id) {
         log_debug("own source id => drop packet");
         return;
     }
@@ -161,7 +160,7 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
     }
 
     // accept packet
-    if (p->dst_id == g_own_id) {
+    if (p->dst_id == gstate.own_id) {
         log_debug("write %u bytes to %s => accept packet", (unsigned) p->length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
@@ -207,14 +206,14 @@ static void tun_handler(int events, int fd)
             continue;
         }
 
-        if (dst_id == g_own_id) {
+        if (dst_id == gstate.own_id) {
             log_warning("send packet to self => drop packet");
             continue;
         }
 
         data.seq_num = g_sequence_number++;
         data.hop_count = 0;
-        data.src_id = g_own_id;
+        data.src_id = gstate.own_id;
         data.dst_id = dst_id;
         data.length = read_len;
 
@@ -307,9 +306,6 @@ static int console_handler(FILE* fp, int argc, char *argv[])
 
 static void init()
 {
-    // get id from IP address
-    g_own_id = id_get6(&gstate.tun_addr);
-
     // call at least every second
     net_add_handler(-1, &periodic_handler);
 }

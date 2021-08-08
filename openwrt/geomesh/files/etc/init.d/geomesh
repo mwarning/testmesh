@@ -24,7 +24,7 @@ start_instance() {
 	OPTS=""
 
 	# set protocol
-	for option in "protocol" "disable_stdin" "control_socket"; do
+	for option in "protocol" "disable_stdin" "control_socket" "gateway_id" "own_id"; do
 		config_get value "$cfg" "$option"
 		if [ -n "$value" ]; then
 			xappend "$value" "$option"

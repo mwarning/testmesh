@@ -37,14 +37,18 @@ struct state gstate = {
     .sock_console = -1,
     .ether_type = 0x88b5, // Local Experiment Ethertype 1
 
+    .gateway_id = 0,
+    .own_id = 0,
+
     .is_running = 1,
     .control_socket_path = NULL,
     .disable_stdin = 0,
     .mcast_addr = {0},
     .ucast_addr = {0},
+
     .tun_name = "tun0",
-    .tun_addr = {},
     .tun_fd = 0,
+
     .log_to_syslog = 0,
     .log_to_file = NULL,
     .log_to_terminal = 1, // disabled when running as daemon
@@ -194,6 +198,43 @@ static int is_client(const char *cmd)
     return sep && (strcmp(sep + 1, "ctl") == 0);
 }
 
+static int setup_tun0(uint32_t id, const char *ifname)
+{
+    char cmd[128];
+    int rc;
+    uint16_t *addr = (uint16_t*) &id;
+
+    sprintf(cmd, "ip link set up %s", ifname);
+    rc = system(cmd);
+    if (rc != 0) {
+        log_error("Failed to execute: %s", cmd);
+        return 1;
+    }
+
+    sprintf(cmd, "ip -4 addr flush dev %s", ifname);
+    rc = system(cmd);
+    if (rc != 0) {
+        log_error("Failed to execute: %s", cmd);
+        return 1;
+    }
+
+    sprintf(cmd, "ip -6 addr flush dev %s", ifname);
+    rc = system(cmd);
+    if (rc != 0) {
+        log_error("Failed to execute: %s", cmd);
+        return 1;
+    }
+
+    sprintf(cmd, "ip a a fe80::%04x:%04x/64 dev tun0", addr[1], addr[0]);
+    rc = system(cmd);
+    if (rc != 0) {
+        log_error("Failed to execute: %s", cmd);
+        return 1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     gstate.time_started = time(0);
@@ -203,10 +244,19 @@ int main(int argc, char *argv[])
         return client_main(argc, argv);
     }
 
+    srand(gstate.time_started);
+
     register_all_protocols();
 
     if (conf_setup(argc, argv) == EXIT_FAILURE) {
         return EXIT_FAILURE;
+    }
+
+    if (gstate.own_id == 0) {
+        if (!bytes_random(&gstate.own_id, sizeof(gstate.own_id))) {
+            log_error("Cannot create random identifier.");
+            return EXIT_FAILURE;
+        }
     }
 
     if (g_protocols_len == 0) {
@@ -255,14 +305,17 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (interface_set_up(gstate.sock_help, gstate.tun_name) < 0) {
-        log_error("Failed to set interface %S up: %s", gstate.tun_name, strerror(errno));
+    log_info("Own ID: 0x%04x", gstate.own_id);
+
+    if (setup_tun0(gstate.own_id, gstate.tun_name)) {
+        log_error("Failed to set up tunnel interface.");
         return EXIT_FAILURE;
     }
 
-    if (interface_get_addr6(&gstate.tun_addr, gstate.tun_name) < 0) {
-        log_error("Failed to get IPv6 address of interface: %s", gstate.tun_name);
-        return EXIT_FAILURE;
+    if (gstate.gateway_id) {
+        log_info("Gateway ID: 0x%04x", gstate.gateway_id);
+    } else {
+        log_info("Gateway ID: none");
     }
 
     if (gstate.protocol->init) {
@@ -270,16 +323,15 @@ int main(int argc, char *argv[])
     }
 
     log_info("Protocol: %s", gstate.protocol->name);
-    log_info("Entry device: %s", gstate.tun_name);
+    log_info("Entry Device: %s", gstate.tun_name);
     log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
-    log_info("Address of %s: %s", gstate.tun_name, str_in6(&gstate.tun_addr));
 
     if (gstate.control_socket_path) {
         log_info("Control socket: %s", gstate.control_socket_path);
     }
 
     if (gstate.protocol->ext_handler_l2) {
-        log_info("Ethertype: 0x%04x", gstate.ether_type);
+        log_info("Ether-type: 0x%04x", gstate.ether_type);
     }
 
     if (gstate.protocol->ext_handler_l3) {

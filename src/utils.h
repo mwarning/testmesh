@@ -42,6 +42,8 @@ typedef union {
 uint32_t adler32(const void *buf, size_t buflength);
 void hexDump(const char * desc, const void * addr, const int len);
 
+int bytes_random(void *buffer, size_t size);
+
 int parse_ip_packet(uint32_t *dst_id, const uint8_t *buf, ssize_t read_len);
 
 const char *address_type_str(const Address *addr);

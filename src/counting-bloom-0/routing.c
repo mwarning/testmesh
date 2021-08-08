@@ -54,7 +54,6 @@ typedef struct __attribute__((__packed__)) {
 } COMM;
 
 
-static uint32_t g_own_id = 0; // set from the fe80 addr of tun0
 static uint8_t g_own_id_bloom[BLOOM_M]; // does not change
 static uint8_t g_own_bloom[BLOOM_M]; // changes over time
 static Neighbor *g_entries = NULL;
@@ -149,7 +148,7 @@ static void handle_COMM(const Address *addr, COMM *p, unsigned recv_len)
 
     log_debug("got comm packet: %s / %04x", str_addr2(addr), p->sender_id);
 
-    if (p->sender_id == g_own_id) {
+    if (p->sender_id == gstate.own_id) {
         log_debug("own comm packet => drop");
         return;
     }
@@ -207,7 +206,7 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
         return;
     }
 
-    if (p->sender_id == g_own_id) {
+    if (p->sender_id == gstate.own_id) {
         log_debug("own data packet => drop");
         return;
     }
@@ -218,7 +217,7 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
         return;
     }
 
-    p->sender_id = g_own_id;
+    p->sender_id = gstate.own_id;
     p->hop_count += 1;
 
     forward_DATA(p, recv_len);
@@ -247,13 +246,13 @@ static void tun_handler(int events, int fd)
             continue;
         }
 
-        if (dst_id == g_own_id) {
+        if (dst_id == gstate.own_id) {
             log_warning("send packet to self => drop");
             continue;
         }
 
         data.dst_id = dst_id;
-        data.sender_id = g_own_id;
+        data.sender_id = gstate.own_id;
         data.hop_count = 0;
         data.length = read_len;
 
@@ -308,7 +307,7 @@ static void send_COMMs()
 
     COMM data = {
         .type = TYPE_COMM,
-        .sender_id = g_own_id,
+        .sender_id = gstate.own_id,
     };
 
     memcpy(&data.bloom[0], &g_own_bloom[0], sizeof(data.bloom));
@@ -351,7 +350,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "  n: print neighbor table\n");
     } else if (argc == 1 && !strcmp(argv[0], "i")) {
-        fprintf(fp, "  id: %04x / %s\n", g_own_id, format_bloom(buf_bloom, &g_own_id_bloom[0]));
+        fprintf(fp, "  id: %04x / %s\n", gstate.own_id, format_bloom(buf_bloom, &g_own_id_bloom[0]));
         fprintf(fp, "  bloom-size: %u, bloom-capacity: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_C, BLOOM_K);
         fprintf(fp, "  bloom: %s\n", format_bloom(buf_bloom, &g_own_bloom[0]));
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
@@ -379,11 +378,8 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 
 static void init()
 {
-    // get id from IP address
-    g_own_id = id_get6(&gstate.tun_addr);
-
     // put id into own (constant) bloom filter
-    bloom_init(&g_own_id_bloom[0], g_own_id);
+    bloom_init(&g_own_id_bloom[0], gstate.own_id);
 
     // sleep up to 1 second
     usleep(rand() % 1000);

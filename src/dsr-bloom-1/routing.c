@@ -51,7 +51,6 @@ typedef struct __attribute__((__packed__)) {
     uint8_t payload[2000];
 } DATA;
 
-static uint32_t g_own_id = 0; // set from the fe80 addr of tun0
 static Entry *g_entries = NULL;
 static uint16_t g_seq_num = 0;
 
@@ -92,7 +91,7 @@ static void bloom_converge(uint8_t *bloom)
 
     // add own id
     uint8_t bloom_own[BLOOM_M];
-    bloom_init(&bloom_own[0], g_own_id);
+    bloom_init(&bloom_own[0], gstate.own_id);
     for (int i = 0; i < (8 * BLOOM_M); i++) {
         if (BLOOM_BITTEST(&bloom_own[0], i)) {
             bloom_count[i] = MAX(bloom_count[i], bloom_count[i] + 1);
@@ -221,14 +220,14 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
     }
 
     // reduce log noise
-    if (p->sender_id == g_own_id) {
+    if (p->sender_id == gstate.own_id) {
         return;
     }
 
     log_debug("data packet from neighbor %04x => %04x (seq_num: %d, hop_cnt: %d, %s)",
         p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, address_type_str(to_addr));
 
-    if (p->dst_id == g_own_id) {
+    if (p->dst_id == gstate.own_id) {
         log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
@@ -239,7 +238,7 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
         return;
     }
 
-    if (bloom_test(&p->bloom[0], g_own_id)) {
+    if (bloom_test(&p->bloom[0], gstate.own_id)) {
         log_debug("own id in packets bloom filter => drop");
         return;
     }
@@ -259,7 +258,7 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
     }
 
     // add own id
-    bloom_add(&p->bloom[0], g_own_id);
+    bloom_add(&p->bloom[0], gstate.own_id);
 
     p->hop_cnt += 1;
 
@@ -289,17 +288,17 @@ static void tun_handler(int events, int fd)
             continue;
         }
 
-        if (dst_id == g_own_id) {
+        if (dst_id == gstate.own_id) {
             log_warning("send packet to self => drop packet");
             continue;
         }
 
-        data.sender_id = g_own_id;
+        data.sender_id = gstate.own_id;
         data.hop_cnt = 0;
         data.seq_num = g_seq_num++;
         data.dst_id = dst_id;
         data.length = read_len;
-        bloom_init(&data.bloom[0], g_own_id);
+        bloom_init(&data.bloom[0], gstate.own_id);
 
         forward_DATA(&data, offsetof(DATA, payload) + read_len);
     }
@@ -356,9 +355,9 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         fprintf(fp, "n: print routing table\n");
     } else if (argc == 1 && !strcmp(argv[0], "i")) {
         uint8_t own_bloom[BLOOM_M];
-        bloom_init(&own_bloom[0], g_own_id);
+        bloom_init(&own_bloom[0], gstate.own_id);
 
-        fprintf(fp, "id: %04x\n", g_own_id);
+        fprintf(fp, "id: %04x\n", gstate.own_id);
         fprintf(fp, "bloom-size: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_K);
         fprintf(fp, "bloom: %s\n", format_bloom(&own_bloom[0]));
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
@@ -400,9 +399,6 @@ static void periodic_handler(int _events, int _fd)
 
 static void init()
 {
-    // get id from IP address
-    g_own_id = id_get6(&gstate.tun_addr);
-
     net_add_handler(-1, &periodic_handler);
 }
 

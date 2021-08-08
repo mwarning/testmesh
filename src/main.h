@@ -37,6 +37,9 @@ struct state {
 	int sock_mcast_receive;
 	uint16_t ether_type;
 
+	uint32_t gateway_id;
+	uint32_t own_id;
+
 	int do_fork;
 	// state
 	int is_running;
@@ -53,7 +56,6 @@ struct state {
 	// tun0 - entry to the mesh
 	const char *tun_name;
 	int tun_fd;
-	struct in6_addr tun_addr;
 	const char *control_socket_path;
 
 	// settings
