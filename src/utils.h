@@ -84,10 +84,6 @@ const char *format_mac(char buf[18], const struct mac *addr);
 const char *format_duration(char buf[64], time_t from, time_t to);
 const char *format_size(char buf[64], unsigned bytes);
 
-int addr_set(const char *ifname, const struct in6_addr *addr);
-int addr_del(const char *ifname, const struct in6_addr *addr);
-int addr_flush(const char *ifname);
-
 uint32_t id_get4(const struct in_addr *addr);
 void id_set4(struct in_addr *addr, uint32_t id);
 uint32_t id_get6(const struct in6_addr *addr);

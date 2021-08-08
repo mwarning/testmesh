@@ -610,37 +610,6 @@ int interface_is_up(int fd, const char *ifname)
     return !!(ifr.ifr_flags & IFF_UP);
 }
 
-static int _ip_cmd(const char *cmd, const char *ifname, const struct in6_addr *addr)
-{
-    char addr_str[INET6_ADDRSTRLEN];
-    char command[INET6_ADDRSTRLEN + 64];
-    int prefixlen = 16;
-
-    inet_ntop(AF_INET6, addr, addr_str, sizeof(addr_str));
-
-    sprintf(command, "ip a %s %s/%u dev %s", cmd, addr_str, prefixlen, ifname);
-    //log_debug("command: %s", command);
-    return system(command);
-}
-
-int addr_set(const char *ifname, const struct in6_addr *addr)
-{
-    return _ip_cmd("add", ifname, addr);
-}
-
-int addr_del(const char *ifname, const struct in6_addr *addr)
-{
-    return _ip_cmd("del", ifname, addr);
-}
-
-int addr_flush(const char *ifname)
-{
-    char command[64];
-
-    sprintf(command, "ip a flush dev %s", ifname);
-    return system(command);
-}
-
 static const uint8_t zeroes[20] = {0};
 static const uint8_t v4prefix[16] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0, 0, 0, 0
