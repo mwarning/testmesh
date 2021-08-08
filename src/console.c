@@ -72,36 +72,31 @@ static int tokenizer(char *argv[], int argc_max, char *input)
 
 static int console_exec(FILE *fp, int argc, char *argv[])
 {
+    #define MATCH(n, cmd) (n == argc && !strcmp(argv[0], cmd))
+
     int ret = 0;
 
-    if (argc == 1 && !strcmp(argv[0], "t")) {
+    if (MATCH(1, "t")) {
         traffic_debug(fp);
-    } else if (argc == 2 && !strcmp(argv[0], "add-peer")) {
+    } else if (MATCH(2, "peer-add")) {
         if (gstate.protocol->add_peer) {
             gstate.protocol->add_peer(fp, argv[1]);
         } else {
             fprintf(fp, "not supported by protocol %s\n", gstate.protocol->name);
         }
-    } else if (argc == 1 && !strcmp(argv[0], "q")) {
+    } else if (MATCH(1, "q")) {
         // close console
         ret = 1;
-    } else if (argc == 2 && !strcmp(argv[0], "interface-add")) {
+    } else if (MATCH(2, "interface-add")) {
         interface_add(argv[1]);
-    } else if (argc == 2 && !strcmp(argv[0], "interface-del")) {
+    } else if (MATCH(2, "interface-del")) {
         interface_del(argv[1]);
-    } else if (argc == 1 && !strcmp(argv[0], "interfaces")) {
+    } else if (MATCH(1, "interfaces")) {
         interfaces_debug(fp);
-    } else if (argc == 2 && !strcmp(argv[0], "v")) {
-        int v = verbosity_int(argv[1]);
-        if (v != -1) {
-            gstate.log_verbosity = v;
-        } else {
-            fprintf(fp, "Invalid verbosity: %s\n", argv[1]);
-        }
-    } else if (argc == 1 && !strcmp(argv[0], "v")) {
+    } else if (MATCH(1, "v")) {
         gstate.log_verbosity = (gstate.log_verbosity + 1) % 3;
         fprintf(fp, "%s enabled\n", verbosity_str(gstate.log_verbosity));
-    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+    } else if (MATCH(1, "i")) {
         fprintf(fp, "protocol: %s\n", gstate.protocol->name);
         fprintf(fp, "own id: 0x%04x\n", gstate.own_id);
         if (gstate.gateway_id) {
@@ -115,16 +110,16 @@ static int console_exec(FILE *fp, int argc, char *argv[])
         if (gstate.protocol->console) {
             gstate.protocol->console(fp, argc, argv);
         }
-    } else if (argc == 1 && !strcmp(argv[0], "h")) {
+    } else if (MATCH(1, "h")) {
         fprintf(fp,
-            "i: show general information\n"
-            "interfaces\n"
-            "interface-add <ifname>\n"
-            "interface-del <ifname>\n"
-            "add-peer <address>\n"
-            "q: close this console\n"
-            "v [verbosity]: toggle verbosity\n"
-            "h: show this help\n"
+            "i                       General information.\n"
+            "interfaces              List all used interfaces.\n"
+            "interface-add <ifname>  Add interface.\n"
+            "interface-del <ifname>  Remove interface.\n"
+            "peer-add <address>      Add peer via IP address.\n"
+            "v                       Toggle verbosity.\n"
+            "q                       Close this console.\n"
+            "h                       Show this help.\n"
         );
 
         if (gstate.protocol->console) {
