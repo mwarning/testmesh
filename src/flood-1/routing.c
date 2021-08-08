@@ -58,7 +58,7 @@ static int is_newer_seq_num(uint16_t cur, uint16_t new)
     }
 }
 
-void send_one(const Address *addr, const void *data, size_t data_len)
+static void send_one(const Address *addr, const void *data, size_t data_len)
 {
     switch (addr->family) {
     case AF_MAC:
@@ -73,7 +73,7 @@ void send_one(const Address *addr, const void *data, size_t data_len)
     }
 }
 
-void send_all(const void *data, size_t data_len)
+static void send_all(const void *data, size_t data_len)
 {
     // on all configured interfaces
     send_bcasts_l2(data, data_len);
