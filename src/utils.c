@@ -36,10 +36,6 @@ uint32_t adler32(const void *buf, size_t buflength)
 
 int parse_ip_packet(uint32_t *dst_id, const uint8_t *buf, ssize_t read_len)
 {
-    if (read_len <= 0) {
-        return 1;
-    }
-
     int ip_version = (buf[0] >> 4) & 0x0f;
 
     if (ip_version == 4 && read_len >= 20) {

@@ -281,6 +281,10 @@ static void tun_handler(int events, int fd)
     while (1) {
         ssize_t read_len = read(fd, &data.payload[0], sizeof(data.payload));
 
+        if (read_len <= 0) {
+            break;
+        }
+
         if (parse_ip_packet(&dst_id, &data.payload[0], read_len)) {
             continue;
         }
