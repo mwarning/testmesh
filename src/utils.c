@@ -173,18 +173,6 @@ void extract_mac_from_eui64(uint8_t *mac, const struct in6_addr *addr)
 	mac[5] = addr->s6_addr[15];
 }
 
-// Create a random port != 0
-int port_random(void)
-{
-	uint16_t port;
-
-	do {
-		bytes_random(&port, sizeof(port));
-	} while (port == 0);
-
-	return port;
-}
-
 struct in6_ifreq {
     struct in6_addr addr;
     uint32_t        prefixlen;
@@ -211,57 +199,6 @@ int del_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex)
     ifr6.ifindex = ifindex;
     ifr6.prefixlen = prefixlen;
     return ioctl(gstate.sock_help, SIOCDIFADDR, &ifr6);
-}
-
-// Parse a port - treats 0 as valid port
-int port_parse(const char pstr[], int err)
-{
-	int port;
-	char c;
-
-	if (pstr && sscanf(pstr, "%d%c", &port, &c) == 1 && port >= 0 && port <= 65535) {
-		return port;
-	} else {
-		return err;
-	}
-}
-
-int port_set6(struct sockaddr_in6 *addr, uint16_t port)
-{
-    return port_set((struct sockaddr_storage *) addr, port);
-}
-
-int port_set(struct sockaddr_storage *addr, uint16_t port)
-{
-	switch (addr->ss_family) {
-	case AF_INET:
-		((struct sockaddr_in *)addr)->sin_port = htons(port);
-		return EXIT_SUCCESS;
-	case AF_INET6:
-		((struct sockaddr_in6 *)addr)->sin6_port = htons(port);
-		return EXIT_SUCCESS;
-	default:
-		return EXIT_FAILURE;
-	}
-}
-
-// Fill buffer with random bytes
-int bytes_random(void *buffer, size_t size)
-{
-	int fd;
-	int rc;
-
-	fd = open("/dev/urandom", O_RDONLY);
-	if (fd < 0) {
-		log_error("Failed to open /dev/urandom");
-		exit(1);
-	}
-
-	rc = read(fd, buffer, size);
-
-	close(fd);
-
-	return rc;
 }
 
 /*

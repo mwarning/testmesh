@@ -52,13 +52,6 @@ int is_eui64_sockaddr(struct sockaddr *addr);
 void extract_mac_from_eui64(uint8_t *mac, const struct in6_addr *addr);
 int interface_get_addr6(struct in6_addr /*sockaddr_in6*/ *addr, const char *ifname);
 
-int port_random(void);
-int port_parse(const char pstr[], int err);
-int port_set(struct sockaddr_storage *addr, uint16_t port);
-int port_set6(struct sockaddr_in6 *addr, uint16_t port);
-
-int bytes_random(void *buffer, size_t size);
-
 const char *str_addr2(const Address *addr);
 
 const char *str_addr6(const struct sockaddr_in6 *addr);
