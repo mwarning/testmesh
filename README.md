@@ -10,28 +10,28 @@ Implemented Protocols:
 - [flood-0](src/flood-0/)
   - reactive
   - sequence number
-  - only multicast
+  - only broadcast
   - no metric
 - [flood-1](src/flood-1/)
   - reactive
   - sequence number
-  - switch between multicast and unicast
+  - switch between broadcast and unicast
   - hop count metric
 - [dsr-bloom-0](src/dsr-bloom-0/)
   - reactive
   - Bloom filter in packet
   - nodes have no state
-  - only multicast
+  - only bradcast
 - [dsr-bloom-1](src/dsr-bloom-1/)
   - reactive
   - Bloom filter in packet
   - nodes store Bloom filters of neighbbors
-  - switches between multicast and unicast
+  - switches between bradcast and unicast
 - [counting-bloom-0](src/counting-bloom-0/)
   - proactive
   - counting Bloom filter
   - degrade filter on every hop
-  - send routing information as one hop multicast to neighbors
+  - send routing information as one hop bradcast to neighbors
   - send payload as unicast along gradient
 - [vivaldi-0](src/vivaldi-0/)
   - proactive
