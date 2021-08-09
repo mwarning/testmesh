@@ -74,8 +74,8 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             dst_id = gstate.gateway_id;
         }
 
-        // no valid id / no gateway defined
         if (dst_id == 0) {
+            // no valid id / no gateway defined
             return 1;
         }
 
@@ -103,8 +103,8 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             dst_id = gstate.gateway_id;
         }
 
-        // no valid id / no gateway defined
         if (dst_id == 0) {
+            // no valid id / no gateway defined
             return 1;
         }
 
@@ -214,8 +214,8 @@ void extract_mac_from_eui64(uint8_t *mac, const struct in6_addr *addr)
 
 struct in6_ifreq {
     struct in6_addr addr;
-    uint32_t        prefixlen;
-    unsigned int    ifindex;
+    uint32_t prefixlen;
+    unsigned int ifindex;
 };
 
 // configure interface
