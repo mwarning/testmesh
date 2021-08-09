@@ -198,7 +198,7 @@ static int is_client(const char *cmd)
     return sep && (strcmp(sep + 1, "ctl") == 0);
 }
 
-static int setup_tun0(uint32_t id, const char *ifname)
+static int tun_init(uint32_t id, const char *ifname)
 {
     char cmd[128];
     int rc;
@@ -307,7 +307,7 @@ int main(int argc, char *argv[])
 
     log_info("Own ID: 0x%04x", gstate.own_id);
 
-    if (setup_tun0(gstate.own_id, gstate.tun_name)) {
+    if (tun_init(gstate.own_id, gstate.tun_name)) {
         log_error("Failed to set up tunnel interface.");
         return EXIT_FAILURE;
     }
