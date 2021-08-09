@@ -42,10 +42,10 @@ typedef struct __attribute__((__packed__)) {
 static uint16_t g_sequence_number = 0;
 static Entry *g_entries = NULL;
 
-// wraps around
+// returns (new > cur), but wraps around
 static int is_newer_seq_num(uint16_t cur, uint16_t new)
 {
-    if (cur > new) {
+    if (cur >= new) {
         return (cur - new) > 0x7fff;
     } else {
         return (new - cur) < 0x7fff;
@@ -104,13 +104,13 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 
     if (entry) {
         entry->last_updated = gstate.time_now;
-        if (p->seq_num <= entry->seq_num) {
+        if (is_newer_seq_num(entry->seq_num, p->seq_num)) {
+            entry->seq_num = p->seq_num;
+        } else {
             // old packet => drop
              log_debug("drop packet with old sequence number %d (current is %d)",
                 (int) p->seq_num, (int) entry->seq_num);
             return;
-        } else {
-            entry->seq_num = p->seq_num;
         }
     } else {
         entry = entry_add(p->src_id, p->seq_num);

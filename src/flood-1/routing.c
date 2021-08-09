@@ -111,7 +111,10 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
     Entry *entry = entry_find(p->src_id);
     if (entry) {
         // packet already seen
-        if (p->seq_num <= entry->seq_num) {
+        if (is_newer_seq_num(entry->seq_num, p->seq_num)) {
+            entry->seq_num = p->seq_num;
+            entry->last_updated = gstate.time_now;
+        } else {
             if (p->seq_num == entry->seq_num && p->hop_count < entry->hop_count) {
                 memcpy(&entry->addr, &from_addr, sizeof(Address));
                 entry->last_updated = gstate.time_now;
@@ -120,9 +123,6 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
             log_debug("old sequence number %d (current is %d) => drop packet",
                 (int) p->seq_num, (int) entry->seq_num);
             return;
-        } else {
-            entry->seq_num = p->seq_num;
-            entry->last_updated = gstate.time_now;
         }
     } else {
         entry = entry_add(p->src_id, p->seq_num, p->hop_count, from_addr);
