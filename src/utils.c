@@ -79,7 +79,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             return 1;
         }
 
-        log_debug("read %d from %s: %s => %s (%zu)",
+        log_debug("read %d from %s: %s => %s (0x%08x)",
             read_len, gstate.tun_name, str_in4(saddr), str_in4(daddr), dst_id);
 
         *dst_id_ret = dst_id;

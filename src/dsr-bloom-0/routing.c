@@ -84,7 +84,7 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
         return;
     }
 
-    log_debug("got data packet: %s / %04x => %04x",
+    log_debug("got data packet: %s / 0x%08x => 0x%08x",
         str_addr2(addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {

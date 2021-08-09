@@ -98,9 +98,9 @@ static int console_exec(FILE *fp, int argc, char *argv[])
         fprintf(fp, "%s enabled\n", verbosity_str(gstate.log_verbosity));
     } else if (MATCH(1, "i")) {
         fprintf(fp, "protocol: %s\n", gstate.protocol->name);
-        fprintf(fp, "own id: 0x%04x\n", gstate.own_id);
+        fprintf(fp, "own id: 0x%08x\n", gstate.own_id);
         if (gstate.gateway_id) {
-            fprintf(fp, "gateway id: 0x%04x\n", gstate.gateway_id);
+            fprintf(fp, "gateway id: 0x%08x\n", gstate.gateway_id);
         } else {
             fprintf(fp, "gateway id: none\n");
         }

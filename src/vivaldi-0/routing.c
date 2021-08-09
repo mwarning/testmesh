@@ -139,7 +139,7 @@ static void neighbor_timeout()
 
     HASH_ITER(hh, g_neighbors, cur, tmp) {
         if ((cur->last_updated + TIMEOUT_NEIGHBOR_SEC) < gstate.time_now) {
-            log_debug("timeout neighbor %04x", cur->sender_id);
+            log_debug("timeout neighbor 0x%08x", cur->sender_id);
             HASH_DEL(g_neighbors, cur);
         }
     }
@@ -197,7 +197,7 @@ static void handle_COMM(const Address *addr, COMM *p, unsigned recv_len)
         return;
     }
 
-    log_debug("got comm packet: %s / %04x", str_addr2(addr), p->sender_id);
+    log_debug("got comm packet: %s / 0x%08x", str_addr2(addr), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
         log_debug("own comm packet => drop");
@@ -398,7 +398,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 
         fprintf(fp, "  sender_id addr updated bloom\n");
         HASH_ITER(hh, g_neighbors, cur, tmp) {
-            fprintf(fp, "  %04x %s %s %s\n",
+            fprintf(fp, "  0x%08x %s %s %s\n",
                 cur->sender_id,
                 str_addr2(&cur->addr),
                 format_duration(buf_duration, cur->last_updated, gstate.time_now),

@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    log_info("Own ID: 0x%04x", gstate.own_id);
+    log_info("Own ID: 0x%08x", gstate.own_id);
 
     if (tun_init(gstate.own_id, gstate.tun_name)) {
         log_error("Failed to set up tunnel interface.");
@@ -313,7 +313,7 @@ int main(int argc, char *argv[])
     }
 
     if (gstate.gateway_id) {
-        log_info("Gateway ID: 0x%04x", gstate.gateway_id);
+        log_info("Gateway ID: 0x%08x", gstate.gateway_id);
     } else {
         log_info("Gateway ID: none");
     }

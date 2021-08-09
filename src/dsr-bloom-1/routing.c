@@ -158,7 +158,7 @@ static void entry_timeout()
 
     HASH_ITER(hh, g_entries, cur, tmp) {
         if ((cur->last_updated + TIMEOUT_ENTRY_SEC) <= gstate.time_now) {
-            log_debug("timeout entry %04x", cur->sender_id);
+            log_debug("timeout entry 0x%08x", cur->sender_id);
             HASH_DEL(g_entries, cur);
         }
     }
@@ -202,7 +202,7 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     }
 
     if (next) {
-        log_debug("send as unicast to %04x (seq_num: %d, hop_cnt: %d)",
+        log_debug("send as unicast to 0x%08x (seq_num: %d, hop_cnt: %d)",
             next->sender_id, (int) p->seq_num, (int) p->hop_cnt);
         send_ucast_l2(&next->addr, p, recv_len);
     } else {
@@ -224,7 +224,7 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
         return;
     }
 
-    log_debug("data packet from neighbor %04x => %04x (seq_num: %d, hop_cnt: %d, %s)",
+    log_debug("data packet from neighbor 0x%08x => 0x%08x (seq_num: %d, hop_cnt: %d, %s)",
         p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, address_type_str(to_addr));
 
     if (p->dst_id == gstate.own_id) {
@@ -357,7 +357,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         uint8_t own_bloom[BLOOM_M];
         bloom_init(&own_bloom[0], gstate.own_id);
 
-        fprintf(fp, "id: %04x\n", gstate.own_id);
+        fprintf(fp, "id: 0x%08x\n", gstate.own_id);
         fprintf(fp, "bloom-size: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_K);
         fprintf(fp, "bloom: %s\n", format_bloom(&own_bloom[0]));
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
@@ -367,7 +367,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 
         fprintf(fp, "sender-id addr updated bloom hop-count\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
-            fprintf(fp, "%04x %s %s %s %u\n",
+            fprintf(fp, "0x%08x %s %s %s %u\n",
                 cur->sender_id,
                 str_addr2(&cur->addr),
                 format_duration(buf_duration, cur->last_updated, gstate.time_now),

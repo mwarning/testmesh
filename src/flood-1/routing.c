@@ -64,7 +64,7 @@ static void entry_timeout()
 
     HASH_ITER(hh, g_entries, cur, tmp) {
         if ((cur->last_updated + TIMEOUT_ENTRY) < gstate.time_now) {
-            log_debug("timeout entry %04x", cur->src_id);
+            log_debug("timeout entry 0x%08x", cur->src_id);
             HASH_DEL(g_entries, cur);
         }
     }
@@ -99,7 +99,7 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
         return;
     }
 
-    log_debug("data packet: %s / %04x => %04x",
+    log_debug("data packet: %s / 0x%08x => 0x%08x",
         str_addr2(from_addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
@@ -258,7 +258,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
 
         fprintf(fp, "src_id seq_num hop-count last-updated prev-hop\n");
         HASH_ITER(hh, g_entries, cur, tmp) {
-            fprintf(fp, "%04x %u %u %s %s\n",
+            fprintf(fp, "0x%08x %u %u %s %s\n",
                 cur->src_id,
                 (unsigned) cur->seq_num,
                 (unsigned) cur->hop_count,
