@@ -242,7 +242,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
         const float dist_neighbor = vec_dist(&cur->pos[0], &dst_pos[0]);
         log_debug("dist_neighbor: %.2f", dist_neighbor);
         if (dist_neighbor > dist_own) {
-            send_ucast_l2(cur->addr.mac.ifindex, &cur->addr.mac.addr.data[0], p, recv_len);
+            send_ucast_l2(&cur->addr, p, recv_len);
             send_counter += 1;
         }
     }

@@ -317,8 +317,12 @@ void send_bcasts_l2(const void* data, size_t data_len)
     }
 }
 
-int send_ucast_l2(int ifindex, const uint8_t *dst_addr, const void* data, size_t data_len)
+int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 {
+    assert(addr->family == AF_MAC);
+    int ifindex = addr->mac.ifindex;
+    const uint8_t *dst_addr = &addr->mac.addr.data[0];
+
     char sendbuf[ETH_FRAME_LEN] = {0};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 

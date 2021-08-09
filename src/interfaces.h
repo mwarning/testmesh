@@ -14,7 +14,7 @@ int interface_del(const char *ifname);
 
 void send_ucast_l3(const struct sockaddr_storage *addr, const void *data, size_t data_len);
 void send_bcasts_l2(const void* data, size_t data_len);
-int send_ucast_l2(int ifindex, const uint8_t *dst_addr, const void* data, size_t data_len);
+int send_ucast_l2(const Address *addr, const void* data, size_t data_len);
 
 void send_mcasts_l3(const void* data, int data_len);
 int send_mcast_l3(int ifindex, const void* data, int data_len);

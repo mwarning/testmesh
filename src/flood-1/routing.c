@@ -47,44 +47,13 @@ static uint16_t g_sequence_number = 0;
 static Entry *g_entries = NULL;
 
 
-// wraps around
+// returns (new > cur), but wraps around
 static int is_newer_seq_num(uint16_t cur, uint16_t new)
 {
-    if (cur > new) {
+    if (cur >= new) {
         return (cur - new) > 0x7fff;
     } else {
         return (new - cur) < 0x7fff;
-    }
-}
-
-static void send_one(const Address *addr, const void *data, size_t data_len)
-{
-    switch (addr->family) {
-    case AF_MAC:
-        send_ucast_l2(addr->mac.ifindex, &addr->mac.addr.data[0], data, data_len);
-        break;
-    case AF_INET6:
-    case AF_INET:
-        send_ucast_l3((const struct sockaddr_storage *) addr, data, data_len);
-        break;
-    default:
-        exit(1);
-    }
-}
-
-static void send_all(const void *data, size_t data_len)
-{
-    // on all configured interfaces
-    send_bcasts_l2(data, data_len);
-
-    Entry *tmp;
-    Entry *cur;
-
-    // all peers
-    HASH_ITER(hh, g_entries, cur, tmp) {
-        if (cur->addr.family != AF_MAC) {
-            send_ucast_l3((struct sockaddr_storage*) &cur->addr, data, data_len);
-        }
     }
 }
 
@@ -175,11 +144,11 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
     if (entry) {
         log_debug("forward as ucast");
         p->hop_count += 1;
-        send_one(&entry->addr, p, recv_len);
+        send_ucast_l2(&entry->addr, p, recv_len);
     } else {
         log_debug("forward as bcast");
         p->hop_count += 1;
-        send_all(p, recv_len);
+        send_bcasts_l2(p, recv_len);
     }
 }
 
@@ -220,10 +189,10 @@ static void tun_handler(int events, int fd)
         Entry *entry = entry_find(data.src_id);
         if (entry) {
             log_debug("send to one");
-            send_one(&entry->addr, &data, offsetof(DATA, payload) + read_len);
+            send_ucast_l2(&entry->addr, &data, offsetof(DATA, payload) + read_len);
         } else {
             log_debug("send to all");
-            send_all(&data, offsetof(DATA, payload) + read_len);
+            send_bcasts_l2(&data, offsetof(DATA, payload) + read_len);
         }
     }
 }

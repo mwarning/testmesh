@@ -204,7 +204,7 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     if (next) {
         log_debug("send as unicast to %04x (seq_num: %d, hop_cnt: %d)",
             next->sender_id, (int) p->seq_num, (int) p->hop_cnt);
-        send_ucast_l2(next->addr.mac.ifindex, &next->addr.mac.addr.data[0], p, recv_len);
+        send_ucast_l2(&next->addr, p, recv_len);
     } else {
         log_debug("send as broadcast (seq_num: %d, hop_cnt: %d)",
             (int) p->seq_num, (int) p->hop_cnt);

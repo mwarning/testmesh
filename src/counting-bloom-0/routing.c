@@ -191,7 +191,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
         const uint32_t p_neighbor = bloom_probability(&cur->bloom[0], &dst_bloom[0]);
         log_warning("p_neighbor: %u", (unsigned) p_neighbor);
         if (p_neighbor > p_own) {
-            send_ucast_l2(cur->addr.mac.ifindex, &cur->addr.mac.addr.data[0], p, recv_len);
+            send_ucast_l2(&cur->addr, p, recv_len);
             send_counter += 1;
         }
     }
