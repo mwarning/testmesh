@@ -53,34 +53,44 @@ int bytes_random(void *buffer, size_t size)
    return rc;
 }
 
+// used for traffic from tun0
 int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 {
+    if (buf == NULL || read_len == 0) {
+        return 1;
+    }
+
     int ip_version = (buf[0] >> 4) & 0x0f;
 
     if (ip_version == 4 && read_len >= 20) {
         // IPv4 packet
-        //int payload_length = ntohs(*((uint16_t*) &buf[2]));
+        size_t length = ntohs(*((uint16_t*) &buf[2]));
         struct in_addr *saddr = (struct in_addr *) &buf[12];
         struct in_addr *daddr = (struct in_addr *) &buf[16];
 
         if (IN_MULTICAST(&daddr->s_addr)) {
             // no support for multicast traffic
+            log_debug("parse_ip_packet: ipv4 multicast => drop");
             return 1;
         }
 
-        uint32_t dst_id = id_get4(daddr);
-        if (dst_id == 0) {
-            // not a link local address => to gateway
-            dst_id = gstate.gateway_id;
-        }
+        // IPv4 packets always goes to the gateway or will be dropped!
+        uint32_t dst_id = gstate.gateway_id;
 
         if (dst_id == 0) {
-            // no valid id / no gateway defined
+            log_debug("parse_ip_packet: no gateway for ipv4 traffic => drop");
+            // no gateway defined
             return 1;
         }
 
-        log_debug("read %d from %s: %s => %s (0x%08x)",
-            read_len, gstate.tun_name, str_in4(saddr), str_in4(daddr), dst_id);
+        if (read_len != length) {
+            log_warning("parse_ip_packet: consider to lower mtu on %s", gstate.tun_name);
+            log_warning("parse_ip_packet: incomplete ipv4 packet in buffer => drop");
+            return 1;
+        }
+
+        log_debug("read %zu/%zu from %s: %s => %s (0x%08x)",
+            read_len, length, gstate.tun_name, str_in4(saddr), str_in4(daddr), dst_id);
 
         *dst_id_ret = dst_id;
         return 0;
@@ -88,11 +98,12 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
     if (ip_version == 6 && read_len >= 24) {
         // IPv6 packet
-        //int payload_length = ntohs(*((uint16_t*) &buf[4]));
+        size_t length = ntohs(*((uint16_t*) &buf[4]));
         struct in6_addr *saddr = (struct in6_addr *) &buf[8];
         struct in6_addr *daddr = (struct in6_addr *) &buf[24];
 
         if (IN6_IS_ADDR_MULTICAST(daddr)) {
+            log_debug("parse_ip_packet: ipv6 multicast => drop");
             // no support for multicast traffic
             return 1;
         }
@@ -105,18 +116,52 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
         if (dst_id == 0) {
             // no valid id / no gateway defined
+            log_debug("parse_ip_packet: no gateway for ipv6 traffic => drop");
             return 1;
         }
 
-        log_debug("read %d from %s: %s => %s (%zu)",
-            read_len, gstate.tun_name, str_in6(saddr), str_in6(daddr), dst_id);
+        log_debug("read %zu/%zu from %s: %s => %s (0x%08x)",
+            read_len, length, gstate.tun_name, str_in6(saddr), str_in6(daddr), dst_id);
 
         *dst_id_ret = dst_id;
         return 0;
     }
 
+    log_debug("parse_ip_packet: invalid ip packet => drop");
+
     // invalid IP packet
     return 1;
+}
+
+void debug_payload(uint8_t *buf, size_t buflen)
+{
+    if (buf == NULL || buflen == 0) {
+        log_debug("Invalid packet: buflen: %zu", buflen);
+        return;
+    }
+
+    int ip_version = (buf[0] >> 4) & 0x0f;
+
+    if (ip_version == 4 && buflen >= 20) {
+        // IPv4 packet
+        size_t length = ntohs(*((uint16_t*) &buf[2]));
+        struct in_addr *saddr = (struct in_addr *) &buf[12];
+        struct in_addr *daddr = (struct in_addr *) &buf[16];
+
+        log_debug("ipv4: buflen: %zu (length: %zu): %s => %s",
+            buflen, length, str_in4(saddr), str_in4(daddr));
+        return;
+    } else if (ip_version == 6 && buflen >= 24) {
+        // IPv6 packet
+        size_t length = ntohs(*((uint16_t*) &buf[4]));
+        struct in6_addr *saddr = (struct in6_addr *) &buf[8];
+        struct in6_addr *daddr = (struct in6_addr *) &buf[24];
+
+        log_debug("ipv6: buflen: %zu (length: %zu): %s => %s",
+            buflen, length, str_in6(saddr), str_in6(daddr));
+    } else {
+        log_debug("Invalid packet: ip_version: %d, buflen: %zu", ip_version, buflen);
+    }
 }
 
 void set_macaddr(Address *dst, const uint8_t *addr, int ifindex)
@@ -680,8 +725,8 @@ uint32_t id_get6(const struct in6_addr *addr)
 {
     uint32_t id = 0;
 
-    // is link local address
-    if ((addr->s6_addr[0] == 0xfe) && ((addr->s6_addr[1] & 0xC0) == 0x80)) {
+    // is local address
+    if ((addr->s6_addr[0] & 0xfc) == 0xfc) {
         const uint8_t* s = (const uint8_t*) &addr->s6_addr;
         uint8_t* d = (uint8_t*) &id;
         // TODO: consider EUI64 scheme?
