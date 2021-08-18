@@ -21,6 +21,7 @@ enum OPCODE {
     oDisableStdin,
     oLogFile,
     oPeer,
+    oTunSetup,
     oHelp,
     oVersion
 };
@@ -41,6 +42,7 @@ static struct option_t g_options[] = {
     {"--log", 1, oLogFile},
     {"--ether-type", 1, oEtherType},
     {"--peer", 1, oPeer},
+    {"--tun-setup", 0, oTunSetup},
     {"--tun", 1, oTun},
     {"--disable-stdin", 0, oDisableStdin},
     {"--control-socket", 1, oControlSocket},
@@ -65,6 +67,7 @@ static const char *usage_str =
     "  --peer <address>            Add a peer manually by address.\n"
     "  --control-socket,-s <path>  Control socket to connect to a daemon.\n"
     "  --tun <name>                Set route device (Default: tun0).\n"
+    "  --tun-setup                 Setup tunnel interface with ip addresses and routes.\n"
     "  --ether-type <hex>          Ethernet type. (Default: 88b5)\n"
     "  --verbosity <level>         Set verbosity (QUIET, VERBOSE, DEBUG).\n"
     "  --disable-stdin             Disable interactive console on startup.\n"
@@ -170,6 +173,9 @@ static int conf_set(const char *opt, const char *val)
             return EXIT_FAILURE;
         }
         interface_add(val);
+        break;
+    case oTunSetup:
+        gstate.tun_setup = 1;
         break;
     case oLogFile:
         gstate.log_to_file = fopen(val, "w");

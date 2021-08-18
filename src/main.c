@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <stdarg.h>
 
 #include "main.h"
 #include "conf.h"
@@ -39,6 +40,7 @@ struct state gstate = {
 
     .gateway_id = 0,
     .own_id = 0,
+    .tun_setup = 0,
 
     .is_running = 1,
     .control_socket_path = NULL,
@@ -198,41 +200,34 @@ static int is_client(const char *cmd)
     return sep && (strcmp(sep + 1, "ctl") == 0);
 }
 
-static int tun_init(uint32_t id, const char *ifname)
+static void execute(const char *fmt, ...)
 {
     char cmd[128];
-    int rc;
+    va_list vlist;
+
+    va_start(vlist, fmt);
+    vsnprintf(cmd, sizeof(cmd), fmt, vlist);
+    va_end(vlist);
+
+    if (system(cmd) != 0) {
+        log_error("Failed to execute: %s", cmd);
+        exit(1);
+    }
+}
+
+static void tun_init(uint32_t id, const char *ifname)
+{
     uint16_t *addr = (uint16_t*) &id;
-
-    sprintf(cmd, "ip link set up %s", ifname);
-    rc = system(cmd);
-    if (rc != 0) {
-        log_error("Failed to execute: %s", cmd);
-        return 1;
-    }
-
-    sprintf(cmd, "ip -4 addr flush dev %s", ifname);
-    rc = system(cmd);
-    if (rc != 0) {
-        log_error("Failed to execute: %s", cmd);
-        return 1;
-    }
-
-    sprintf(cmd, "ip -6 addr flush dev %s", ifname);
-    rc = system(cmd);
-    if (rc != 0) {
-        log_error("Failed to execute: %s", cmd);
-        return 1;
-    }
-
-    sprintf(cmd, "ip a a fe80::%04x:%04x/64 dev tun0", addr[1], addr[0]);
-    rc = system(cmd);
-    if (rc != 0) {
-        log_error("Failed to execute: %s", cmd);
-        return 1;
-    }
-
-    return 0;
+    execute("ip a > /tmp/foo1");
+    execute("ip link set up %s", ifname);
+    execute("ip a > /tmp/foo2");
+    execute("ip -4 addr flush dev %s", ifname);
+    execute("ip -6 addr flush dev %s", ifname);
+    execute("ip a > /tmp/foo3");
+    execute("ip -6 addr add fe80::%04x:%04x/64 dev tun0", addr[1], addr[0]);
+    execute("ip -6 addr add "PREFIX6"::%04x:%04x/64 dev tun0", addr[1], addr[0]);
+    // MTU show not be too low, otherwise IP is not supported anymore (addresses are dropped)
+    execute("ip link set dev %s mtu 1400", ifname);
 }
 
 int main(int argc, char *argv[])
@@ -282,6 +277,21 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    log_info("Protocol: %s", gstate.protocol->name);
+    if (gstate.own_id) {
+        log_info("Own ID: 0x%08x", gstate.own_id);
+    }
+
+    if (gstate.gateway_id) {
+        log_info("Gateway ID: 0x%08x", gstate.gateway_id);
+    } else {
+        log_info("Gateway ID: none");
+    }
+
+    log_info("Entry Device: %s", gstate.tun_name);
+    log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
+    log_info("Tunnel setup: %d", gstate.tun_setup);
+
     gstate.sock_help = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (gstate.sock_help < 0) {
         log_error("socket() %s", strerror(errno));
@@ -305,26 +315,13 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    log_info("Own ID: 0x%08x", gstate.own_id);
-
-    if (tun_init(gstate.own_id, gstate.tun_name)) {
-        log_error("Failed to set up tunnel interface.");
-        return EXIT_FAILURE;
-    }
-
-    if (gstate.gateway_id) {
-        log_info("Gateway ID: 0x%08x", gstate.gateway_id);
-    } else {
-        log_info("Gateway ID: none");
+    if (gstate.tun_setup) {
+        tun_init(gstate.own_id, gstate.tun_name);
     }
 
     if (gstate.protocol->init) {
         gstate.protocol->init();
     }
-
-    log_info("Protocol: %s", gstate.protocol->name);
-    log_info("Entry Device: %s", gstate.tun_name);
-    log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
 
     if (gstate.control_socket_path) {
         log_info("Control socket: %s", gstate.control_socket_path);
