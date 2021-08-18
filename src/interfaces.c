@@ -28,7 +28,7 @@ struct interface {
 };
 
 static UT_array *g_interfaces = NULL;
-static int g_add_all_interfaces = 0;
+static int g_dynamic_interfaces = 0;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
 static void interface_copy(void *_dst, const void *_src)
@@ -42,17 +42,26 @@ static void interface_copy(void *_dst, const void *_src)
     memcpy(&dst->ifmac, &src->ifmac, ETH_ALEN);
 }
 
+static void interface_reset(struct interface *ifa)
+{
+    if (ifa->ifsock_l2 != 0) {
+        net_remove_handler(ifa->ifsock_l2, gstate.protocol->ext_handler_l2);
+        close(ifa->ifsock_l2);
+        ifa->ifsock_l2 = 0;
+    }
+
+    ifa->ifmac = g_nullmac;
+    ifa->ifindex = 0;
+}
+
 static void interface_dtor(void *_ifa)
 {
     struct interface *ifa = (struct interface*) _ifa;
 
+    interface_reset(ifa);
+
     if (ifa->ifname) {
         free(ifa->ifname);
-    }
-
-    if (ifa->ifsock_l2 != 0) {
-        net_remove_handler(ifa->ifsock_l2, gstate.protocol->ext_handler_l2);
-        close(ifa->ifsock_l2);
     }
 }
 
@@ -77,6 +86,7 @@ static int find_interface(const char *ifname)
     return -1;
 }
 
+// get mac address of an interface
 static int if_nametomac2(struct mac *addr, const char *ifname)
 {
     struct ifreq if_mac = { 0 };
@@ -91,6 +101,7 @@ static int if_nametomac2(struct mac *addr, const char *ifname)
     return 0;
 }
 
+// get interface index of an interface
 static int if_nametoindex2(int *ifindex, const char *ifname)
 {
     struct ifreq if_idx = { 0 };
@@ -110,15 +121,15 @@ static int set_promisc_mode(const char *ifname)
 {
     struct ifreq ifopts;
 
-    strncpy(ifopts.ifr_name, ifname, IFNAMSIZ-1);
+    strncpy(ifopts.ifr_name, ifname, IFNAMSIZ - 1);
     int rc1 = ioctl(gstate.sock_help, SIOCGIFFLAGS, &ifopts);
     ifopts.ifr_flags |= IFF_PROMISC;
     int rc2 = ioctl(gstate.sock_help, SIOCSIFFLAGS, &ifopts);
 
-    return (rc1 == 0 && rc2 == 0) ? 0 : -1;
+    return (rc1 == 0 && rc2 == 0) ? 0 : 1;
 }
 
-static int setup_raw_socket(int *sock_ret, const char *ifname)
+static int setup_raw_socket(int *sock_ret, const char *ifname, int ifindex)
 {
     int sock = *sock_ret;
 
@@ -127,22 +138,31 @@ static int setup_raw_socket(int *sock_ret, const char *ifname)
         net_remove_handler(sock, gstate.protocol->ext_handler_l2);
     }
 
-    // ETH_P_ALL for all
     if ((sock = socket(PF_PACKET, SOCK_RAW, htons(gstate.ether_type))) == -1) {
-        log_error("socket(SOCK_RAW): %s", strerror(errno));
+        log_error("setup_raw_socket: socket(SOCK_RAW): %s", strerror(errno));
         return 1;
     }
 
-    int sockopt = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof(sockopt)) == -1) {
-        close(sock);
-        log_error("setsockopt(SO_REUSEADDR): %s", strerror(errno));
+    struct sockaddr_ll interfaceAddr;
+    struct packet_mreq mreq;
+
+    memset(&interfaceAddr,0,sizeof(interfaceAddr));
+    memset(&mreq, 0, sizeof(mreq));
+
+    interfaceAddr.sll_ifindex = ifindex;
+    interfaceAddr.sll_family = AF_PACKET;
+
+    if (bind(sock, (struct sockaddr *)&interfaceAddr, sizeof(interfaceAddr)) < 0) {
+        log_error("setup_raw_socket: bind(): %s", strerror(errno));
         return 1;
     }
 
-    if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ifname, IFNAMSIZ-1) == -1) {
-        close(sock);
-        log_error("setsockopt(SO_BINDTODEVICE) on %s: %s", ifname, strerror(errno));
+    mreq.mr_ifindex = ifindex;
+    mreq.mr_type = PACKET_MR_PROMISC;
+    mreq.mr_alen = 6;
+
+    if (setsockopt(sock, SOL_PACKET, PACKET_ADD_MEMBERSHIP, (void*)&mreq, (socklen_t) sizeof(mreq)) < 0) {
+        log_error("setup_raw_socket: setsockopt(PACKET_ADD_MEMBERSHIP): %s", strerror(errno));
         return 1;
     }
 
@@ -153,35 +173,37 @@ static int setup_raw_socket(int *sock_ret, const char *ifname)
     return 0;
 }
 
-static void interface_setup(struct interface *ifa, int quiet)
+static int interface_setup(struct interface *ifa, int quiet)
 {
     const char *ifname = ifa->ifname;
 
     if (if_nametoindex2(&ifa->ifindex, ifname)) {
         if (!quiet)
             log_warning("Interface not found: %s", ifname);
-        return;
+        return 1;
     }
 
     if (if_nametomac2(&ifa->ifmac, ifname)) {
         if (!quiet)
            log_warning("Failed to get interface MAC address: %s", ifname);
-        return;
+        return 1;
     }
 
     if (gstate.protocol->ext_handler_l2) {
         if (set_promisc_mode(ifname)) {
             if (!quiet)
                 log_warning("Failed to set interface into promisc mode: %s", ifname);
-            return;
+            return 1;
         }
 
-        if (setup_raw_socket(&ifa->ifsock_l2, ifa->ifname)) {
-            return;
+        if (setup_raw_socket(&ifa->ifsock_l2, ifa->ifname, ifa->ifindex)) {
+            return 1;
         }
     }
 
     log_info("Interface ready: %s", ifa->ifname);
+
+    return 0;
 }
 
 int interface_get_ifindex(int fd)
@@ -189,7 +211,7 @@ int interface_get_ifindex(int fd)
     struct interface *ifa = NULL;
 
     while ((ifa = utarray_next(g_interfaces, ifa))) {
-        if (ifa->ifsock_l2 == fd) {
+        if (fd != 0 && ifa->ifsock_l2 == fd) {
             return ifa->ifindex;
         }
     }
@@ -220,7 +242,7 @@ int interface_add(const char *ifname)
         .ifsock_l2 = 0,
     };
 
-    interface_setup(&ifa, 0);
+    interface_setup(&ifa, 1);
 
     utarray_push_back(g_interfaces, &ifa);
 
@@ -266,7 +288,7 @@ static void join_mcast(int sock, int ifindex)
 */
 }
 
-static int send_l2_internal(const struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)
+static int send_l2_internal(struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)
 {
     if (!is_valid_ifa(ifa)) {
         return 1;
@@ -283,13 +305,14 @@ static int send_l2_internal(const struct interface *ifa, const uint8_t *dst_addr
     memcpy(&eh->h_dest, dst_addr, ETH_ALEN);
     memcpy(&eh->h_source, &ifa->ifmac, ETH_ALEN);
 
-    struct sockaddr_ll socket_address;
+    struct sockaddr_ll socket_address = {};
     socket_address.sll_halen = ETH_ALEN;
     socket_address.sll_ifindex = ifa->ifindex;
     memcpy(&socket_address.sll_addr, dst_addr, ETH_ALEN);
 
     if (sendto(ifa->ifsock_l2, sendbuf, sendlen, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0) {
         log_warning("sendto() failed on raw socket: %s", strerror(errno));
+        interface_reset(ifa);
         return 1;
     }
 
@@ -311,7 +334,7 @@ void send_bcasts_l2(const void* data, size_t data_len)
 
     memcpy(&sendbuf[sizeof(struct ethhdr)], data, data_len);
 
-    const struct interface *ifa = NULL;
+    struct interface *ifa = NULL;
     while ((ifa = utarray_next(g_interfaces, ifa))) {
         send_l2_internal(ifa, &dst_addr[0], &sendbuf[0], sendlen);
     }
@@ -340,7 +363,7 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 
     int found = 0;
 
-    const struct interface *ifa = NULL;
+    struct interface *ifa = NULL;
     while ((ifa = utarray_next(g_interfaces, ifa))) {
         if (ifa->ifindex == ifindex) {
             found = 1;
@@ -504,22 +527,26 @@ static void periodic_interfaces_handler(int _events, int _fd)
 {
     static time_t check_time = 0;
 
-    if (check_time != 0 && check_time <= gstate.time_now) {
+    if (check_time != 0 && check_time >= gstate.time_now) {
         return;
     } else {
-        check_time = gstate.time_now + 2;
+        check_time = gstate.time_now + 5;
+    }
+
+    if (g_dynamic_interfaces) {
+        get_all_interfaces(&interface_add);
     }
 
     struct interface *ifa = NULL;
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
+    while ((ifa = utarray_prev(g_interfaces, ifa))) {
         if (!is_valid_ifa(ifa)) {
-            interface_setup(ifa, 1);
+            int rc = interface_setup(ifa, g_dynamic_interfaces);
+            if (rc != 0 && g_dynamic_interfaces) {
+                // remove failing dynamic interfaces
+                int pos = utarray_eltidx(g_interfaces, ifa);
+                utarray_erase(g_interfaces, pos, 1);
+            }
         }
-    }
-
-    if (g_add_all_interfaces) {
-        //g_do_detect_interfaces = 0;
-        get_all_interfaces(&interface_add);
     }
 }
 
@@ -529,14 +556,15 @@ int interfaces_debug(FILE *fd)
     char mac_buf[18];
     struct interface *ifa = NULL;
 
-    fprintf(fd, "name index mac socket status\n");
+    fprintf(fd, "name mac status\n");
     while ((ifa = utarray_next(g_interfaces, ifa))) {
-        fprintf(fd, "%s %d %s %d %s\n",
+        fprintf(fd, "%s %s %s (socket: %d, ifindex: %d, ifindex2name: %s)\n",
             ifa->ifname,
-            ifa->ifindex,
             format_mac(mac_buf, &ifa->ifmac),
+            is_valid_ifa(ifa) ? "active" : "inactive",
             ifa->ifsock_l2,
-            is_valid_ifa(ifa) ? "active" : "inactive"
+            ifa->ifindex,
+            str_ifindex(ifa->ifindex)
         );
         count += 1;
     }
@@ -553,7 +581,7 @@ void interfaces_init()
 
     if (utarray_len(g_interfaces) == 0) {
         log_info("No interface given => add all");
-        g_add_all_interfaces = 1;
+        g_dynamic_interfaces = 1;
     }
 
     net_add_handler(-1, &periodic_interfaces_handler);
