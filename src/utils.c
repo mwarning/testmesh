@@ -556,21 +556,6 @@ int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2)
     return memcmp(addr1, addr2, sizeof(struct in6_addr));
 }
 
-// configure interface
-int interface_set_mtu(int fd, const char *ifname, int mtu)
-{
-    struct ifreq ifr = {0};
-    strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
-    ifr.ifr_mtu = mtu;
-
-    if (ioctl(fd, SIOCSIFMTU, &ifr) == -1) {
-      log_error("ioctl(SIOCSIFMTU) %s", strerror(errno));
-      return 1;
-    }
-
-    return 0;
-}
-
 int interface_get_addr6(struct in6_addr *addr, const char *ifname)
 {
     struct ifaddrs *ifaddr;
@@ -604,49 +589,6 @@ int interface_get_addr6(struct in6_addr *addr, const char *ifname)
 
     freeifaddrs(ifaddr);
     return -1;
-}
-
-// set interface in an "up" state
-int interface_set_up(int fd, const char *ifname)
-{
-    struct ifreq ifr = {0};
-    int oldflags;
-
-    strncpy(ifr.ifr_name, ifname, IF_NAMESIZE);
-
-    if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0) {
-        log_error("ioctl(SIOCGIFFLAGS) for %s: %s", ifname, strerror(errno));
-        return -1;
-    }
-
-    oldflags = ifr.ifr_flags;
-    ifr.ifr_flags |= IFF_UP;
-
-    if (oldflags == ifr.ifr_flags) {
-        // interface is already up/down
-        return 0;
-    }
-
-    if (ioctl(fd, SIOCSIFFLAGS, &ifr) < 0) {
-        log_error("ioctl(SIOCSIFFLAGS) for %s: %s", ifname, strerror(errno));
-        return -1;
-    }
-
-    return 0;
-}
-
-int interface_is_up(int fd, const char *ifname)
-{
-    struct ifreq ifr = {0};
-
-    memset(&ifr, 0, sizeof(ifr));
-    strcpy(ifr.ifr_name, ifname);
-    if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0) {
-		log_error("SIOCGIFFLAGS for %s: %s", ifname, strerror(errno));
-		return 0;
-    }
-
-    return !!(ifr.ifr_flags & IFF_UP);
 }
 
 static const uint8_t zeroes[20] = {0};

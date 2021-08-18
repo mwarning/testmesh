@@ -77,11 +77,6 @@ int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_stora
 int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2);
 int addr_equal66(const struct sockaddr_in6 *addr1, const struct sockaddr_in6 *addr2);
 
-int interface_set_mtu(int fd, const char *ifname, int mtu);
-int interface_set_up(int fd, const char* ifname);
-
-int interface_is_up(int fd, const char *interface);
-
 const char *format_mac(char buf[18], const struct mac *addr);
 const char *format_duration(char buf[64], time_t from, time_t to);
 const char *format_size(char buf[64], unsigned bytes);
