@@ -73,6 +73,11 @@ const Protocol *find_protocol(const char *protocol)
 
 void register_protocol(const Protocol *p)
 {
+    if (g_protocols_len == ARRAY_NELEMS(g_protocols)) {
+        log_error("Too many protocols.");
+        exit(1);
+    }
+
     if (find_protocol(p->name)) {
         log_error("Duplicate protocol: %s", p->name);
         exit(1);
