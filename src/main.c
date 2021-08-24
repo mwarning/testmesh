@@ -52,7 +52,7 @@ struct state gstate = {
     .log_to_terminal = 1, // disabled when running as daemon
     .log_to_socket = 1, // output log via domain socket
     .log_timestamp = 1, // log with timestamp
-    .log_verbosity = VERBOSITY_DEBUG,
+    .log_verbosity = VERBOSITY_VERBOSE,
 };
 
 // list of all supported protocols

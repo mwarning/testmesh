@@ -69,7 +69,7 @@ static const char *usage_str =
     "  --tun-name <ifname>         Set route device (Default: tun0).\n"
     "  --tun-setup                 Setup tunnel interface with ip addresses and routes.\n"
     "  --ether-type <hex>          Ethernet type. (Default: 88b5)\n"
-    "  --verbosity <level>         Set verbosity (QUIET, VERBOSE, DEBUG).\n"
+    "  --verbosity <level>         Set verbosity to quiet, verbose or debug (Default: verbose).\n"
     "  --disable-stdin             Disable interactive console on startup.\n"
     "  --help,-h                   Prints this help text.\n"
     "  --version,-v                Print version.";
@@ -93,7 +93,7 @@ const char *verbosity_str(int verbosity)
 int verbosity_int(const char *verbosity)
 {
     for (int i = 0; i < ARRAY_NELEMS(g_verbosity_map); i++) {
-        if (0 == strcmp(g_verbosity_map[i].str, verbosity)) {
+        if (0 == strcasecmp(g_verbosity_map[i].str, verbosity)) {
             return g_verbosity_map[i].i;
         }
     }
