@@ -5,6 +5,7 @@ config geomesh
 	option control_socket '/var/geomesh.ctl'
 	option tun_setup 1
 	list ifname 'wlan0'
+	option verbosity 'quiet'
 	#option tun_name 'tun0'
 	#option own_id '0x02'
 	#option gateway_id '0x01'
