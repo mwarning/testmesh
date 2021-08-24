@@ -14,6 +14,7 @@
 #include "../console.h"
 #include "../main.h"
 #include "../uthash.h"
+#include "../tun.h"
 #include "../interfaces.h"
 
 #include "routing.h"
@@ -92,14 +93,14 @@ static Entry *entry_add(uint32_t src_id, uint16_t seq_num, uint8_t hop_count, co
     return e;
 }
 
-static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *from_addr, DATA *p, size_t recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
         log_debug("invalid packet size => drop");
         return;
     }
 
-    log_debug("data packet: %s / 0x%08x => 0x%08x",
+    log_debug("handle DATA: %s / 0x%08x => 0x%08x",
         str_addr2(from_addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
@@ -130,12 +131,7 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
 
     // accept packet
     if (p->dst_id == gstate.own_id) {
-        log_debug("write %u bytes to %s => accept packet", (unsigned) p->length, gstate.tun_name);
-
-        // destination is the local tun0 interface => write packet to tun0
-        if (write(gstate.tun_fd, p->payload, p->length) != p->length) {
-            log_error("write() %s", strerror(errno));
-        }
+        tun_write(p->payload, p->length);
         return;
     }
 
@@ -156,6 +152,7 @@ static void handle_DATA(const Address *from_addr, DATA *p, unsigned recv_len)
 static void tun_handler(int events, int fd)
 {
     uint32_t dst_id;
+
     DATA data = {
         .type = TYPE_DATA,
     };
@@ -165,19 +162,10 @@ static void tun_handler(int events, int fd)
     }
 
     while (1) {
-        ssize_t read_len = read(fd, &data.payload[0], sizeof(data.payload));
+        ssize_t read_len = tun_read(&dst_id, &data.payload[0], sizeof(data.payload));
 
         if (read_len <= 0) {
             break;
-        }
-
-        if (parse_ip_packet(&dst_id, &data.payload[0], read_len)) {
-            continue;
-        }
-
-        if (dst_id == gstate.own_id) {
-            log_warning("send packet to self => drop packet");
-            continue;
         }
 
         data.seq_num = g_sequence_number++;
@@ -220,8 +208,6 @@ static void ext_handler_l2(int events, int fd)
     Address to_addr;
     set_macaddr(&from_addr, &eh->h_source[0], ifindex);
     set_macaddr(&to_addr, &eh->h_dest[0], ifindex);
-
-    log_debug("got Ethernet packet %s => %s (%s)", str_addr2(&from_addr), str_addr2(&to_addr), str_ifindex(ifindex));
 
     switch (payload[0]) {
     case TYPE_DATA:

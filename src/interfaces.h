@@ -6,6 +6,8 @@
 void interfaces_init();
 int interfaces_debug(FILE *fd);
 
+const char *str_ifindex(int ifindex);
+
 // returns ifindex (0 on error)
 int interface_get_ifindex(int fd);
 

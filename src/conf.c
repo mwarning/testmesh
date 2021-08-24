@@ -17,11 +17,11 @@ enum OPCODE {
     oVerbosity,
     oEtherType,
     oControlSocket,
-    oTun,
+    oTunName,
+    oTunSetup,
     oDisableStdin,
     oLogFile,
     oPeer,
-    oTunSetup,
     oHelp,
     oVersion
 };
@@ -42,8 +42,8 @@ static struct option_t g_options[] = {
     {"--log", 1, oLogFile},
     {"--ether-type", 1, oEtherType},
     {"--peer", 1, oPeer},
+    {"--tun-name", 1, oTunName},
     {"--tun-setup", 0, oTunSetup},
-    {"--tun", 1, oTun},
     {"--disable-stdin", 0, oDisableStdin},
     {"--control-socket", 1, oControlSocket},
     {"-s", 1, oControlSocket},
@@ -66,7 +66,7 @@ static const char *usage_str =
     "  --log <path>                Write log output to file.\n"
     "  --peer <address>            Add a peer manually by address.\n"
     "  --control-socket,-s <path>  Control socket to connect to a daemon.\n"
-    "  --tun <name>                Set route device (Default: tun0).\n"
+    "  --tun-name <ifname>         Set route device (Default: tun0).\n"
     "  --tun-setup                 Setup tunnel interface with ip addresses and routes.\n"
     "  --ether-type <hex>          Ethernet type. (Default: 88b5)\n"
     "  --verbosity <level>         Set verbosity (QUIET, VERBOSE, DEBUG).\n"
@@ -174,15 +174,18 @@ static int conf_set(const char *opt, const char *val)
         }
         interface_add(val);
         break;
-    case oTunSetup:
-        gstate.tun_setup = 1;
-        break;
     case oLogFile:
         gstate.log_to_file = fopen(val, "w");
         if (gstate.log_to_file == NULL) {
             log_error("Failed to open file to log: %s (%s)", val, strerror(errno));
             return EXIT_FAILURE;
         }
+        break;
+    case oTunName:
+        gstate.tun_name = strdup(val);
+        break;
+    case oTunSetup:
+        gstate.tun_setup = 1;
         break;
     case oControlSocket:
         gstate.control_socket_path = strdup(val);
@@ -192,11 +195,19 @@ static int conf_set(const char *opt, const char *val)
             log_error("Invalid hex value for %s: %s", opt, val);
             return EXIT_FAILURE;
         }
+        if (gstate.own_id == n) {
+            log_error("Own and gateway id are the same: %08x", n);
+            return EXIT_FAILURE;
+        }
         gstate.gateway_id = n;
         break;
     case oOwnIdentifier:
         if (parse_hex(&n, val, sizeof(gstate.own_id)) || n == 0) {
             log_error("Invalid hex value for %s: %s", opt, val);
+            return EXIT_FAILURE;
+        }
+        if (gstate.gateway_id == n) {
+            log_error("Gateway and own id are the same: %08x", n);
             return EXIT_FAILURE;
         }
         gstate.own_id = n;

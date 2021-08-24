@@ -10,6 +10,7 @@ FILES := src/main.c \
 		 src/traffic.c \
 		 src/console.c \
 		 src/unix.c \
+		 src/tun.c \
 		 src/net.c \
 		 src/client.c \
 		 src/interfaces.c

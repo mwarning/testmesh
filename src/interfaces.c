@@ -44,10 +44,10 @@ static void interface_copy(void *_dst, const void *_src)
 
 static void interface_reset(struct interface *ifa)
 {
-    if (ifa->ifsock_l2 != 0) {
+    if (ifa->ifsock_l2 != -1) {
         net_remove_handler(ifa->ifsock_l2, gstate.protocol->ext_handler_l2);
         close(ifa->ifsock_l2);
-        ifa->ifsock_l2 = 0;
+        ifa->ifsock_l2 = -1;
     }
 
     ifa->ifmac = g_nullmac;
@@ -84,6 +84,18 @@ static int find_interface(const char *ifname)
     }
 
     return -1;
+}
+
+const char *str_ifindex(int ifindex)
+{
+    struct interface *ifa = NULL;
+    while ((ifa = utarray_next(g_interfaces, ifa))) {
+        if (ifa->ifindex == ifindex) {
+            return ifa->ifname;
+        }
+    }
+
+    return NULL;
 }
 
 // get mac address of an interface
@@ -133,7 +145,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, int ifindex)
 {
     int sock = *sock_ret;
 
-    if (sock != 0) {
+    if (sock != -1) {
         close(sock);
         net_remove_handler(sock, gstate.protocol->ext_handler_l2);
     }
@@ -210,8 +222,12 @@ int interface_get_ifindex(int fd)
 {
     struct interface *ifa = NULL;
 
+    if (fd == -1) {
+        return 0;
+    }
+
     while ((ifa = utarray_next(g_interfaces, ifa))) {
-        if (fd != 0 && ifa->ifsock_l2 == fd) {
+        if (ifa->ifsock_l2 == fd) {
             return ifa->ifindex;
         }
     }
@@ -226,20 +242,20 @@ int interface_add(const char *ifname)
     }
 
     if (0 == strcmp(ifname, gstate.tun_name)) {
-        log_error("try to add tun interface: %s", ifname);
+        log_error("Cannot add own tun interface: %s", ifname);
         return 1;
     }
 
     if (-1 != find_interface(ifname)) {
-        log_error("duplicate interface: %s", ifname);
+        log_error("Cannot add duplicate interface: %s", ifname);
         return 1;
     }
 
     struct interface ifa = {
-        .ifindex = 0,
+        .ifindex = -1,
         .ifname = strdup(ifname),
         .ifmac = g_nullmac,
-        .ifsock_l2 = 0,
+        .ifsock_l2 = -1,
     };
 
     interface_setup(&ifa, 1);
@@ -349,7 +365,7 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     char sendbuf[ETH_FRAME_LEN] = {0};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
-    if (ifindex == 0) {
+    if (ifindex <= 0) {
         log_error("send_ucast_l2(): invalid ifindex");
         return 1;
     }

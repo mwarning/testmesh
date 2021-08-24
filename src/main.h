@@ -13,8 +13,6 @@
 #define MULTICAST_PORT 4321
 #define UNICAST_PORT 654
 
-#define PREFIX6 "fdef:17a0:ffb1:300"
-
 
 typedef struct {
     const char *name;
@@ -41,12 +39,11 @@ struct state {
 
 	uint32_t gateway_id;
 	uint32_t own_id;
-	uint8_t tun_setup;
 
 	uint8_t do_fork;
 	// state
 	int is_running;
-	int disable_stdin;
+	uint8_t disable_stdin;
 	time_t time_now;
 	time_t time_started;
 
@@ -58,6 +55,7 @@ struct state {
 
 	// tun0 - entry to the mesh
 	const char *tun_name;
+	int tun_setup;
 	int tun_fd;
 	const char *control_socket_path;
 

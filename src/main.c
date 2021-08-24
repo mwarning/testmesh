@@ -2,17 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
-#include <net/if.h>
-#include <sys/socket.h>
+#include <unistd.h> // getuid(), chdir(), STDIN_FILENO
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <arpa/inet.h> // IFF_TUN, IFF_NO_PI, TUNSETIFF
-#include <linux/if_tun.h>
-#include <fcntl.h> // open()
 #include <stddef.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <stdarg.h>
 
 #include "main.h"
@@ -21,11 +15,13 @@
 #include "utils.h"
 #include "net.h"
 #include "unix.h"
+#include "tun.h"
 //#include "traffic.h"
 #include "interfaces.h"
 #include "console.h"
 #include "client.h"
 #include "protocols.h"
+
 
 struct state gstate = {
     .protocol = NULL,
@@ -40,7 +36,6 @@ struct state gstate = {
 
     .gateway_id = 0,
     .own_id = 0,
-    .tun_setup = 0,
 
     .is_running = 1,
     .control_socket_path = NULL,
@@ -49,7 +44,8 @@ struct state gstate = {
     .ucast_addr = {0},
 
     .tun_name = "tun0",
-    .tun_fd = 0,
+    .tun_setup = 0,
+    .tun_fd = -1,
 
     .log_to_syslog = 0,
     .log_to_file = NULL,
@@ -166,68 +162,11 @@ static void setup_unicast_socket(int *sock)
     *sock = fd;
 }
 
-static int tun_alloc(const char *dev)
-{
-    const char *clonedev = "/dev/net/tun";
-    struct ifreq ifr = {0};
-    int fd;
-
-    if ((fd = open(clonedev, O_RDWR)) < 0) {
-        log_error("open %s: %s", clonedev, strerror(errno));
-        return -1;
-    }
-
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strcpy(ifr.ifr_name, dev);
-
-    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
-        log_error("ioctl(TUNSETIFF) %s", strerror(errno));
-        close(fd);
-        return -1;
-    }
-
-    if (0 != strcmp(ifr.ifr_name, dev)) {
-        return -1;
-    }
-
-    return fd;
-}
-
 // program name matches *-ctl
 static int is_client(const char *cmd)
 {
     const char *sep = strrchr(cmd, '-');
     return sep && (strcmp(sep + 1, "ctl") == 0);
-}
-
-static void execute(const char *fmt, ...)
-{
-    char cmd[128];
-    va_list vlist;
-
-    va_start(vlist, fmt);
-    vsnprintf(cmd, sizeof(cmd), fmt, vlist);
-    va_end(vlist);
-
-    if (system(cmd) != 0) {
-        log_error("Failed to execute: %s", cmd);
-        exit(1);
-    }
-}
-
-static void tun_init(uint32_t id, const char *ifname)
-{
-    uint16_t *addr = (uint16_t*) &id;
-    execute("ip a > /tmp/foo1");
-    execute("ip link set up %s", ifname);
-    execute("ip a > /tmp/foo2");
-    execute("ip -4 addr flush dev %s", ifname);
-    execute("ip -6 addr flush dev %s", ifname);
-    execute("ip a > /tmp/foo3");
-    execute("ip -6 addr add fe80::%04x:%04x/64 dev tun0", addr[1], addr[0]);
-    execute("ip -6 addr add "PREFIX6"::%04x:%04x/64 dev tun0", addr[1], addr[0]);
-    // MTU show not be too low, otherwise IP is not supported anymore (addresses are dropped)
-    execute("ip link set dev %s mtu 1400", ifname);
 }
 
 int main(int argc, char *argv[])
@@ -238,8 +177,6 @@ int main(int argc, char *argv[])
         // called as control client
         return client_main(argc, argv);
     }
-
-    srand(gstate.time_started);
 
     register_all_protocols();
 
@@ -290,7 +227,6 @@ int main(int argc, char *argv[])
 
     log_info("Entry Device: %s", gstate.tun_name);
     log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
-    log_info("Tunnel setup: %d", gstate.tun_setup);
 
     gstate.sock_help = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (gstate.sock_help < 0) {
@@ -310,13 +246,8 @@ int main(int argc, char *argv[])
 
     unix_signals();
 
-    if ((gstate.tun_fd = tun_alloc(gstate.tun_name)) < 0) {
-        log_error("Error creating to %s interface: %s", gstate.tun_name, strerror(errno));
+    if (tun_init(gstate.own_id, gstate.tun_name) != EXIT_SUCCESS) {
         return EXIT_FAILURE;
-    }
-
-    if (gstate.tun_setup) {
-        tun_init(gstate.own_id, gstate.tun_name);
     }
 
     if (gstate.protocol->init) {
