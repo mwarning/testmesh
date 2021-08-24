@@ -38,7 +38,7 @@ start_instance() {
 	done
 
 	# --<option> <value>
-	for option in "protocol" "disable_stdin" "control_socket" "gateway_id" "own_id"; do
+	for option in "protocol" "disable_stdin" "control_socket" "gateway_id" "own_id" "tun_name"; do
 		config_get value "$cfg" "$option"
 		[ -n "$value" ] && xappend "$value" "$option"
 	done

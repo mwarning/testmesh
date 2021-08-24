@@ -60,10 +60,10 @@ n="network.mesh"
 uci set $n="interface"
 uci set $n.ifname=tun0
 uci set $n.proto=none
-uci set $n.mtu=1400
 
 n="firewall.mesh_zone"
 uci set $n="zone"
+uci set $n.name="mesh"
 uci add_list $n.network="mesh"
 uci set $n.input="ACCEPT"
 uci set $n.output="ACCEPT"
@@ -71,11 +71,14 @@ uci set $n.forward="ACCEPT"
 
 n="firewall.mesh_forwarding"
 uci set $n="forwarding"
-uci set $n.src="lan"
-uci set $n.dest="mesh"
+uci set $n.src="mesh"
+uci set $n.dest="wan"
+
+uci add_list dhcp.lan.dhcp_option='6,8.8.8.8'
 
 uci commit wireless
 uci commit network
 uci commit firewall
+uci commit dhcp
 
 /etc/init.d/geomesh enable

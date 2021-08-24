@@ -2,9 +2,10 @@
 config geomesh
 	option enabled 1
 	option protocol 'flood-1'
-	option control '/var/geomesh.ctl'
+	option control_socket '/var/geomesh.ctl'
 	option tun_setup 1
+	list ifname 'wlan0'
+	#option tun_name 'tun0'
 	#option own_id '0x02'
 	#option gateway_id '0x01'
-	list ifname 'wlan0'
 	#list peer 'somepeer.example.com'
