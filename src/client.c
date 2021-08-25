@@ -31,9 +31,9 @@ void client_usage(const char *pname)
 {
     fprintf(stderr,
         "Usage:\n"
-        "  %s -s /tmp/command.sock [<commands-to-send>]\n"
+        "  %s -c /tmp/command.sock [<commands-to-send>]\n"
         "\n"
-        "-s <path>       Domain socket to control the instance.\n"
+        "-c <path>       Path to control socket.\n"
         "-h              Prints this help text.\n"
         "\n"
         "If no command is given on the command, then an interactive shell will be started.\n",
@@ -104,9 +104,9 @@ int client_main(int argc, char *argv[])
     char *command = NULL;
 
     int option;
-    while ((option = getopt(argc, argv, "s:h")) > 0) {
+    while ((option = getopt(argc, argv, "c:h")) > 0) {
         switch(option) {
-            case 's':
+            case 'c':
                 socket_path = optarg;
                 break;
             case 'h':

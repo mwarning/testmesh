@@ -2,7 +2,7 @@
 config geomesh
 	option enabled 1
 	option protocol 'flood-1'
-	option control_socket '/var/geomesh.ctl'
+	option control '/var/geomesh.ctl'
 	option tun_setup 1
 	list ifname 'wlan0'
 	option verbosity 'quiet'

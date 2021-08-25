@@ -45,8 +45,8 @@ static struct option_t g_options[] = {
     {"--tun-name", 1, oTunName},
     {"--tun-setup", 0, oTunSetup},
     {"--disable-stdin", 0, oDisableStdin},
-    {"--control-socket", 1, oControlSocket},
-    {"-s", 1, oControlSocket},
+    {"--control", 1, oControlSocket},
+    {"-c", 1, oControlSocket},
     {"--verbosity", 1, oVerbosity},
     {"--daemon", 0, oDaemon},
     {"-d", 0, oDaemon},
@@ -65,7 +65,7 @@ static const char *usage_str =
     "  --interface,-i <interface>  Limit to given interfaces.\n"
     "  --log <path>                Write log output to file.\n"
     "  --peer <address>            Add a peer manually by address.\n"
-    "  --control-socket,-s <path>  Control socket to connect to a daemon.\n"
+    "  --control,-c <path>         Control socket to connect to a daemon.\n"
     "  --tun-name <ifname>         Set route device (Default: tun0).\n"
     "  --tun-setup                 Setup tunnel interface with ip addresses and routes.\n"
     "  --ether-type <hex>          Ethernet type. (Default: 88b5)\n"
