@@ -8,16 +8,21 @@ int interfaces_debug(FILE *fd);
 
 const char *str_ifindex(int ifindex);
 
-// returns ifindex (0 on error)
+// get ifindex a socket is bound to (0 on error)
 int interface_get_ifindex(int fd);
 
+// register interface (only layer 2 right now)
 int interface_add(const char *ifname);
 int interface_del(const char *ifname);
 
+// send to an IP address (e.g. over Internet)
 void send_ucast_l3(const struct sockaddr_storage *addr, const void *data, size_t data_len);
+
+// send as Ethernet packet (e.g. over mesh WiFi)
 void send_bcasts_l2(const void* data, size_t data_len);
 int send_ucast_l2(const Address *addr, const void* data, size_t data_len);
 
+// send as IPv6 multicast (deprecated?)
 void send_mcasts_l3(const void* data, int data_len);
 int send_mcast_l3(int ifindex, const void* data, int data_len);
 
