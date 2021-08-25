@@ -121,9 +121,7 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
         log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
-        if (write(gstate.tun_fd, p->payload, p->length) != p->length) {
-            log_error("write() %s", strerror(errno));
-        }
+        tun_write(p->payload, p->length);
     } else {
         log_debug("send all");
         send_bcasts_l2(p, recv_len);

@@ -174,7 +174,7 @@ static void tun_handler(int events, int fd)
         data.dst_id = dst_id;
         data.length = read_len;
 
-        Entry *entry = entry_find(data.src_id);
+        Entry *entry = entry_find(data.dst_id);
         if (entry) {
             log_debug("send to one");
             send_ucast_l2(&entry->addr, &data, offsetof(DATA, payload) + read_len);
