@@ -52,9 +52,10 @@ typedef struct __attribute__((__packed__)) {
     uint8_t payload[2000];
 } DATA;
 
-static Entry *g_entries = NULL;
+static Entry *g_neighbors = NULL;
 static uint16_t g_seq_num = 0;
 
+// set BLOOM_K bits based on id
 static void bloom_init(uint8_t *bloom, uint64_t id)
 {
     memset(bloom, 0, BLOOM_M);
@@ -82,7 +83,7 @@ static void bloom_converge(uint8_t *bloom)
     // add neighbors
     Entry *cur;
     Entry *tmp;
-    HASH_ITER(hh, g_entries, cur, tmp) {
+    HASH_ITER(hh, g_neighbors, cur, tmp) {
         for (int i = 0; i < (8 * BLOOM_M); i++) {
             if (BLOOM_BITTEST(&cur->bloom[0], i)) {
                 bloom_count[i]++;
@@ -113,6 +114,7 @@ static void bloom_converge(uint8_t *bloom)
 }
 #endif
 
+// count of bits set in bloom filter
 static int bloom_ones(const uint8_t *bloom)
 {
     int ones = 0;
@@ -157,10 +159,10 @@ static void entry_timeout()
     Entry *tmp;
     Entry *cur;
 
-    HASH_ITER(hh, g_entries, cur, tmp) {
+    HASH_ITER(hh, g_neighbors, cur, tmp) {
         if ((cur->last_updated + TIMEOUT_ENTRY_SEC) <= gstate.time_now) {
             log_debug("timeout entry 0x%08x", cur->sender_id);
-            HASH_DEL(g_entries, cur);
+            HASH_DEL(g_neighbors, cur);
         }
     }
 }
@@ -168,7 +170,7 @@ static void entry_timeout()
 static Entry *entry_find(uint32_t sender_id)
 {
     Entry *cur = NULL;
-    HASH_FIND_INT(g_entries, &sender_id, cur);
+    HASH_FIND_INT(g_neighbors, &sender_id, cur);
     return cur;
 }
 
@@ -182,7 +184,7 @@ static Entry *entry_add(uint32_t sender_id, uint8_t hop_cnt, uint8_t *bloom, con
     e->hop_cnt = hop_cnt;
     e->last_updated = gstate.time_now;
 
-    HASH_ADD_INT(g_entries, sender_id, e);
+    HASH_ADD_INT(g_neighbors, sender_id, e);
 
     return e;
 }
@@ -194,7 +196,8 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     Entry *cur;
     Entry *tmp;
 
-    HASH_ITER(hh, g_entries, cur, tmp) {
+    // find neighbor that is nearest
+    HASH_ITER(hh, g_neighbors, cur, tmp) {
         if (bloom_test(&cur->bloom[0], p->dst_id)) {
             if (next == NULL || cur->hop_cnt < next->hop_cnt) {
                 next = cur;
@@ -229,7 +232,7 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
         p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, address_type_str(to_addr));
 
     if (p->dst_id == gstate.own_id) {
-        log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
+        log_debug("write %u bytes to %s => accept", (unsigned) p->length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
         tun_write(p->payload, p->length);
@@ -241,7 +244,7 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
         return;
     }
 
-    // limit how much we allow the bloom filter to be occupied
+    // limit bloom filter fill rate to BLOOM_LIMIT percent
     if (bloom_ones(&p->bloom[0]) > (int) ((BLOOM_M * 8) * BLOOM_LIMIT) / 100) {
         log_debug("bloom filter occupancy reached => drop");
         return;
@@ -303,7 +306,7 @@ static void ext_handler_l2(int events, int fd)
     uint8_t buffer[ETH_FRAME_LEN];
     ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
-    if (numbytes <= sizeof(struct ethhdr)) {
+    if (numbytes <= sizeof(struct ethhdr) + 1) {
         return;
     }
 
@@ -356,7 +359,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         Entry *tmp;
 
         fprintf(fp, "sender-id addr updated bloom hop-count\n");
-        HASH_ITER(hh, g_entries, cur, tmp) {
+        HASH_ITER(hh, g_neighbors, cur, tmp) {
             fprintf(fp, "0x%08x %s %s %s %u\n",
                 cur->sender_id,
                 str_addr2(&cur->addr),
