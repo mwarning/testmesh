@@ -140,14 +140,14 @@ static Neighbor *neighbor_add(uint32_t sender_id, uint8_t *bloom, const Address 
     return e;
 }
 
-static void handle_COMM(const Address *addr, COMM *p, unsigned recv_len)
+static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
 {
     if (recv_len != sizeof(COMM)) {
         log_debug("invalid packet size => drop");
         return;
     }
 
-    log_debug("got comm packet: %s / 0x%08x", str_addr2(addr), p->sender_id);
+    log_debug("got comm packet: %s / 0x%08x", str_addr2(from_addr), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
         log_debug("own comm packet => drop");
@@ -167,10 +167,10 @@ only add full bloom filter if it adds zero or one more fields to be >0?
     Neighbor *neighbor = neighbor_find(p->sender_id);
     if (neighbor) {
         memcpy(&neighbor->bloom, &p->bloom, sizeof(neighbor->bloom));
-        memcpy(&neighbor->addr, addr, sizeof(neighbor->addr)); // not expected to change but update anyway
+        memcpy(&neighbor->addr, from_addr, sizeof(neighbor->addr)); // not expected to change but update anyway
         neighbor->last_updated = gstate.time_now;
     } else {
-        neighbor = neighbor_add(p->sender_id, p->bloom, addr);
+        neighbor = neighbor_add(p->sender_id, p->bloom, from_addr);
     }
 }
 
