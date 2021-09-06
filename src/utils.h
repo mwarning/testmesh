@@ -45,7 +45,7 @@ void hex_dump(const char *desc, const void *addr, const int len);
 int bytes_random(void *buffer, size_t size);
 
 const char *address_type_str(const Address *addr);
-void set_macaddr(Address *dst, const uint8_t *addr, int ifindex);
+void init_macaddr(Address *dst, const void *mac_addr, int ifindex);
 
 const char *str_addr2(const Address *addr);
 const char *str_addr6(const struct sockaddr_in6 *addr);

@@ -273,8 +273,8 @@ static void ext_handler_l2(int events, int fd)
 
     Address from_addr;
     Address to_addr;
-    set_macaddr(&from_addr, &eh->h_source[0], ifindex);
-    set_macaddr(&to_addr, &eh->h_dest[0], ifindex);
+    init_macaddr(&from_addr, &eh->h_source[0], ifindex);
+    init_macaddr(&to_addr, &eh->h_dest[0], ifindex);
 
     switch (payload[0]) {
     case TYPE_COMM:

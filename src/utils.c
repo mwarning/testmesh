@@ -53,10 +53,10 @@ int bytes_random(void *buffer, size_t size)
    return rc;
 }
 
-void set_macaddr(Address *dst, const uint8_t *addr, int ifindex)
+void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
 {
     dst->mac.family = AF_MAC;
-    memcpy(&dst->mac.addr, addr, 6);
+    memcpy(&dst->mac.addr, mac_addr, 6);
     dst->mac.ifindex = ifindex;
 }
 
