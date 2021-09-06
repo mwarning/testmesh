@@ -191,14 +191,14 @@ static void vivaldi_update_simple(float *local_pos, const float *remote_pos, flo
     }
 }
 
-static void handle_COMM(const Address *addr, COMM *p, unsigned recv_len)
+static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
 {
     if (recv_len != sizeof(COMM)) {
         log_debug("invalid packet size => drop");
         return;
     }
 
-    log_debug("got comm packet: %s / 0x%08x", str_addr2(addr), p->sender_id);
+    log_debug("got comm packet: %s / 0x%08x", str_addr2(from_addr), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
         log_debug("own comm packet => drop");
@@ -219,7 +219,7 @@ static void handle_COMM(const Address *addr, COMM *p, unsigned recv_len)
         memcpy(&new[0], &p->pos[0], sizeof(new));
         memcpy(&old[0], &p->pos[0], sizeof(old));
 
-        neighbor = neighbor_add(p->sender_id, &new[0], addr);
+        neighbor = neighbor_add(p->sender_id, &new[0], from_addr);
     }
 
     vivaldi_update_simple(&g_own_pos[0], &neighbor->pos[0], 1.5f);
