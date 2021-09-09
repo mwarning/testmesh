@@ -30,42 +30,42 @@ const Protocol *find_protocol(const char *protocol);
 struct state {
     const Protocol *protocol;
 
-	// sockets
-	int sock_help; // helper socket used to communicate with the kernel
-	int sock_console; // unix socket
-	int sock_udp; // also used to send mcast
-	int sock_mcast_receive;
-	uint16_t ether_type;
+    // sockets
+    int sock_help; // helper socket used to communicate with the kernel
+    int sock_console; // unix socket
+    int sock_udp; // also used to send mcast
+    int sock_mcast_receive;
+    uint16_t ether_type;
 
-	uint32_t gateway_id;
-	uint32_t own_id;
+    uint32_t gateway_id;
+    uint32_t own_id;
 
-	uint8_t do_fork;
-	// state
-	int is_running;
-	uint8_t disable_stdin;
-	time_t time_now;
-	time_t time_started;
+    uint8_t do_fork;
+    // state
+    int is_running;
+    uint8_t disable_stdin;
+    time_t time_now;
+    time_t time_started;
 
-	// local network discovery address
-	struct sockaddr_in6 mcast_addr;
+    // local network discovery address
+    struct sockaddr_in6 mcast_addr;
 
-	// listen address for unicast packets
-	struct sockaddr_in6 ucast_addr;
+    // listen address for unicast packets
+    struct sockaddr_in6 ucast_addr;
 
-	// tun0 - entry to the mesh
-	const char *tun_name;
-	int tun_setup;
-	int tun_fd;
-	const char *control_socket_path;
+    // tun0 - entry to the mesh
+    const char *tun_name;
+    int tun_setup;
+    int tun_fd;
+    const char *control_socket_path;
 
-	// settings
-	int log_to_syslog;
-	int log_to_terminal;
-	FILE* log_to_file;
-	int log_to_socket;
-	int log_timestamp;
-	int log_verbosity;
+    // settings
+    int log_to_syslog;
+    int log_to_terminal;
+    FILE* log_to_file;
+    int log_to_socket;
+    int log_timestamp;
+    int log_verbosity;
 };
 
 extern struct state gstate;
