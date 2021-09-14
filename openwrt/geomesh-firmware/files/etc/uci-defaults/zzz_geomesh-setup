@@ -1,0 +1,148 @@
+#!/bin/sh
+
+is_gateway=0
+
+exec >/root/setup.log 2>&1
+
+. /lib/functions.sh
+
+echo "(I) Start Geomesh Firmware Setup"
+
+mac=$(cat /sys/class/ieee80211/phy0/macaddress)
+
+if [ $is_gateway -eq 1 ]; then
+	id="00000001"
+else
+	# set id based on mac - hopefully with a good uniqueness
+	#id="${mac:6:2}${mac:9:2}${mac:12:2}${mac:15:2}"
+	id="00${mac:9:2}${mac:12:2}${mac:15:2}" # IPv4 compatible
+fi
+
+addr6_lan="300:${id:0:4}:${id:4:4}::"
+addr6_mesh="200:${id:0:4}:${id:4:4}::"
+addr6_mesh_gateway="200:0000:0001::"
+addr6_mesh_dns="200:0000:0001::"
+
+addr4_mesh="$(printf "10.%d.%d.%d" 0x${id:2:2} 0x${id:4:2} 0x${id:6:2})"
+addr4_mesh_gateway="10.0.0.1"
+addr4_mesh_dns="10.0.0.1"
+
+# Delete all wifi interfaces
+while uci -q delete wireless.@wifi-iface[0]; do :; done
+
+# Create an AP and mesh interface for each wifi device
+config_wifi() {
+	local ds="$1" #device section
+	local wifi_device=`uci -q get wireless.$ds.device`
+	local wifi_path=`uci -q get wireless.$ds.path`
+
+	[ -z "$wifi_device" ] && wifi_device="$ds"
+
+	echo "(I) Configure wifi device: '$wifi_device'"
+
+	if [ `uci get wireless.$ds.channel` -gt 35 ]; then
+		uci set wireless.$ds.channel=36
+	else
+		uci set wireless.$ds.channel=1
+	fi
+
+	uci set wireless.$ds.country='DE'
+	uci set wireless.$ds.disabled='0'
+
+	# Mesh interface
+	h="wireless.${wifi_device}_geomesh"
+	uci set $h="wifi-iface"
+	uci set $h.device="$wifi_device"
+	uci set $h.mode="mesh"
+	uci set $h.network="${wifi_device}_geomesh"
+	uci set $h.mesh_id="mesh-id"
+	uci set $h.mesh_fwding="0" # Disabled! Because we use our own routing protocol.
+
+	# AP interface
+	p="wireless.${wifi_device}_ap"
+	uci set $p="wifi-iface"
+	uci set $p.device="$wifi_device"
+	uci set $p.mode="ap"
+	uci set $p.network="lan"
+	if [ $is_gateway -eq 1 ]; then
+		uci set $p.ssid="geomesh-gateway-${mac:15}"
+	else
+		uci set $p.ssid="geomesh-client-${mac:15}"
+	fi
+	uci set $p.encryption="psk2" #none
+	uci set $p.key="openwrt123"
+}
+
+config_load wireless
+config_foreach config_wifi wifi-device
+
+uci delete network.globals
+
+n=geomesh.@geomesh[-1]
+uci set $n.enabled=1
+uci set $n.protocol="flood-1"
+uci set $n.tun_name="tun0"
+uci set $n.own_id="0x${id}"
+uci set $n.verbosity="debug"
+
+n="network.lan"
+uci add_list $n.ip6addr="${addr6_lan}/64"
+uci set $n.mtu=1400
+# upstream DNS servers for OpenWrt
+uci set $n.dns="${addr6_mesh_dns} ${addr4_mesh_dns}"
+
+if [ $is_gateway -eq 0 ]; then
+	# route Internet traffic to the gateway
+	n="network.mesh_route6"
+	uci set $n="route6"
+	uci set $n.interface="mesh"
+	uci set $n.target="::/0"
+	uci set $n.gateway="${addr6_mesh_gateway}"
+	uci set $n.metric="1"
+
+	n="network.mesh_route"
+	uci set $n="route"
+	uci set $n.interface="mesh"
+	uci set $n.target="0.0.0.0"
+	uci set $n.netmask="0.0.0.0"
+	uci set $n.gateway="${addr4_mesh_gateway}"
+	uci set $n.metric="1"
+fi
+
+n="network.mesh"
+uci set $n="interface"
+uci set $n.ifname="tun0"
+uci set $n.proto="static"
+uci set $n.mtu=1400
+uci set $n.ipaddr="${addr4_mesh}"
+uci set $n.netmask='255.0.0.0'
+uci add_list $n.ip6addr="${addr6_mesh}/7"
+
+n="firewall.mesh_zone"
+uci set $n="zone"
+uci set $n.name="mesh"
+uci add_list $n.network="mesh"
+uci set $n.input="ACCEPT"
+uci set $n.output="ACCEPT"
+uci set $n.forward="ACCEPT"
+uci set $n.masq="1"
+uci set $n.mtu_fix="1"
+
+n="firewall.mesh_forwarding"
+uci set $n="forwarding"
+if [ $is_gateway -eq 1 ]; then
+	uci set $n.src="mesh"
+	uci set $n.dest="wan"
+else
+	uci set $n.src="lan"
+	uci set $n.dest="mesh"
+fi
+
+uci commit geomesh
+uci commit wireless
+uci commit network
+uci commit firewall
+
+/etc/init.d/geomesh enable
+
+echo "(I) Done"

@@ -1,0 +1,25 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+handle_ifname_list() {
+	local ifname="$1" cfg="$2" control="/tmp/geomesh-ctl"
+
+	config_get control $cfg "control"
+
+	if [ "$ifname" = "$INTERFACE" ]; then
+		if [ "$ACTION" = "ifup" ]; then
+			geomesh-ctl -s $control interface-add "$DEVICE"
+		fi
+		if [ "$ACTION" = "ifdown" ]; then
+			geomesh-ctl -s $control interface-del "$DEVICE"
+		fi
+	fi
+}
+
+handle_geomesh_section() {
+	config_list_foreach "$1" ifname handle_ifname_list "$1"
+}
+
+config_load geomesh
+config_foreach handle_geomesh_section geomesh

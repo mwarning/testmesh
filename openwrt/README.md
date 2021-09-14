@@ -1,7 +1,6 @@
-# Building and Packaging TesMesh on OpenWrt
+# Building and Packaging Geomesh on OpenWrt
 
-To inlcude TestMesh into your [OpenWrt](https://openwrt.org) image or to create an .ipk package (equivalent to Debian Linux .deb files), you have to build a firmware image.
-These steps were tested using OpenWrt:
+These are instructions to create an [OpenWrt](https://openwrt.org) image with a complete Geomesh setup.
 
 For building OpenWrt on Debian Linux, you need to install these packages:
 ```
@@ -17,7 +16,7 @@ cd openwrt
 ./scripts/feeds install -a
 
 # copy GeoMesh package and source
-cp -r ~/geomesh/openwrt/geomesh package/geomesh
+cp -r ~/geomesh/openwrt/geomesh* package/
 mkdir package/geomesh/src
 cp -r ~/geomesh/Makefile ~/geomesh/src package/geomesh/src
 
@@ -25,17 +24,12 @@ make menuconfig
 ```
 
 At this point select the appropiate "Target System" and "Target Profile" depending on what target chipset/router you want to build for.
-And mark the GeoMesh package under "Network" => "Routing and Redirection", of course.
+Packages `geomesh` (the routing protocol) and `geomesh-firmware` (for wifi/lan configuration) are selected by default.
 
 Now compile/build everything:
 
 ```
-make
+make -j8
 ```
 
-The images and all \*.ipk packages are now inside the bin/ folder.
-You can install the geomesh-1.0.0.ipk using "opkg install \<ipkg-file\>" on the router or just use the entire image to flash OpenWrt with the package already installed.
-
-## Setup Mesh Interface
-
-To mesh, you need to configure a WiFi mesh interface in `/etc/conifg/wireless`.
+The images and all \*.ipk packages are now inside the `bin/` folder. Flash the `bin/<target>/<subtarget>/*-factory.bin` image for a complete setup.

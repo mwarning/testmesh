@@ -1,0 +1,9 @@
+menu "Configuration"
+	depends on PACKAGE_geomesh-firmware
+
+config GEOMESH_FIRMWARE_GATEWAY
+	bool "Build with gateway configuration."
+	depends on PACKAGE_geomesh-firmware
+	default n
+
+endmenu

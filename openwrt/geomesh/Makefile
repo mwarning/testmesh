@@ -4,7 +4,7 @@ PKG_NAME:=geomesh
 PKG_VERSION:=1.0.0
 PKG_RELEASE:=1
 
-PKG_MAINTAINER:=John Doe <john.doe@example.com>
+PKG_MAINTAINER:=Moritz Warning <moritzwarning@web.de>
 PKG_LICENSE:=CC0-1.0
 
 PKG_INSTALL:=1
@@ -18,7 +18,7 @@ define Package/geomesh
 	CATEGORY:=Network
 	SUBMENU:=Routing and Redirection
 	MENU:=1
-	DEPENDS:=+kmod-tun @IPV6
+	DEPENDS:=+kmod-tun
 endef
 
 define Package/geomesh/description
