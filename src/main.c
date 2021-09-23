@@ -43,6 +43,9 @@ struct state gstate = {
     .mcast_addr = {0},
     .ucast_addr = {0},
 
+    .disable_ipv4 = 0,
+    .disable_ipv6 = 0,
+
     .tun_name = "tun0",
     .tun_setup = 0,
     .tun_fd = -1,
@@ -174,6 +177,11 @@ static int is_client(const char *cmd)
     return sep && (strcmp(sep + 1, "ctl") == 0);
 }
 
+static const char *is_enabled(int enabled)
+{
+    return enabled ? "yes" : "no";
+}
+
 int main(int argc, char *argv[])
 {
     gstate.time_started = time(0);
@@ -232,6 +240,7 @@ int main(int argc, char *argv[])
 
     log_info("Entry Device: %s", gstate.tun_name);
     log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
+    log_info("IPv4/IPv6: %s/%s", is_enabled(!gstate.disable_ipv4), is_enabled(!gstate.disable_ipv6));
 
     gstate.sock_help = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (gstate.sock_help < 0) {

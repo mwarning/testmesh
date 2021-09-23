@@ -21,6 +21,8 @@ enum OPCODE {
     oTunSetup,
     oDisableStdin,
     oLogFile,
+    oDisableIpv4,
+    oDisableIpv6,
     oPeer,
     oHelp,
     oVersion
@@ -48,6 +50,8 @@ static struct option_t g_options[] = {
     {"--control", 1, oControlSocket},
     {"-c", 1, oControlSocket},
     {"--verbosity", 1, oVerbosity},
+    {"--disable-ipv4", 0, oDisableIpv4},
+    {"--disable-ipv6", 0, oDisableIpv6},
     {"--daemon", 0, oDaemon},
     {"-d", 0, oDaemon},
     {"--help", 0, oHelp},
@@ -71,6 +75,8 @@ static const char *usage_str =
     "  --ether-type <hex>          Ethernet type. (Default: 88b5)\n"
     "  --verbosity <level>         Set verbosity to quiet, verbose or debug (Default: verbose).\n"
     "  --disable-stdin             Disable interactive console on startup.\n"
+    "  --disable-ipv4              Disable IPv4\n"
+    "  --disable-ipv6              Disable IPv6\n"
     "  --help,-h                   Prints this help text.\n"
     "  --version,-v                Print version.";
 
@@ -214,6 +220,12 @@ static int conf_set(const char *opt, const char *val)
         break;
     case oDisableStdin:
         gstate.disable_stdin = 1;
+        break;
+    case oDisableIpv4:
+        gstate.disable_ipv4 = 1;
+        break;
+    case oDisableIpv6:
+        gstate.disable_ipv6 = 1;
         break;
     case oEtherType:
         if (parse_hex(&n, val, sizeof(gstate.ether_type))) {

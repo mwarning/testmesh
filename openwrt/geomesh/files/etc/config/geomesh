@@ -6,3 +6,5 @@ config geomesh
 	#option own_id '0x02'
 	list ifname 'wlan0'
 	#list peer 'somepeer.example.com'
+	#option disable_ipv4 '1'
+	#option disable_ipv6 '1'

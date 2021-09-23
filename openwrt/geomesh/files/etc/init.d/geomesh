@@ -31,6 +31,12 @@ start_instance() {
 
 	OPTS=""
 
+	## --<option>
+	for option in "disable_ipv4" "disable_ipv6"; do
+		config_get_bool value "$cfg" "$option" 0
+		[ $value -gt 0 ] && xappend '' $option
+	done
+
 	# --<option> <value>
 	for option in "protocol" "disable_stdin" "control" "own_id" "verbosity" "gateway_id"; do
 		config_get value "$cfg" "$option"

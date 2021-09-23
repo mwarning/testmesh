@@ -153,8 +153,25 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
     return 1;
 }
 
+static int ip_disabled(uint8_t *data, ssize_t len)
+{
+    int ip_version = (data[0] >> 4) & 0x0f;
+    switch (ip_version) {
+        case 4:
+            return gstate.disable_ipv4;
+        case 6:
+            return gstate.disable_ipv6;
+        default:
+            return 0;
+    }
+}
+
 ssize_t tun_write(uint8_t *data, ssize_t len)
 {
+    if (data == NULL || len <= 0 || ip_disabled(data, len)) {
+        return -1;
+    }
+
     debug_payload("tun_write", data, len);
 
     ssize_t ret = write(gstate.tun_fd, data, len);
@@ -171,8 +188,13 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 {
     ssize_t read_len = read(gstate.tun_fd, buf, buflen);
 
+/*
     if (read_len <= 0) {
     	return read_len;
+    }
+*/
+    if (buf == NULL || read_len <= 0 || ip_disabled(buf, buflen)) {
+        return -1;
     }
 
     debug_payload("tun_read", buf, read_len);

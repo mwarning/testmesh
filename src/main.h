@@ -53,6 +53,9 @@ struct state {
     // listen address for unicast packets
     struct sockaddr_in6 ucast_addr;
 
+    uint8_t disable_ipv4;
+    uint8_t disable_ipv6;
+
     // tun0 - entry to the mesh
     const char *tun_name;
     int tun_setup;
