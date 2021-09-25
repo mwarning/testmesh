@@ -18,7 +18,6 @@ enum OPCODE {
     oEtherType,
     oControlSocket,
     oTunName,
-    oTunSetup,
     oDisableStdin,
     oLogFile,
     oDisableIpv4,
@@ -45,7 +44,6 @@ static struct option_t g_options[] = {
     {"--ether-type", 1, oEtherType},
     {"--peer", 1, oPeer},
     {"--tun-name", 1, oTunName},
-    {"--tun-setup", 0, oTunSetup},
     {"--disable-stdin", 0, oDisableStdin},
     {"--control", 1, oControlSocket},
     {"-c", 1, oControlSocket},
@@ -71,7 +69,6 @@ static const char *usage_str =
     "  --peer <address>            Add a peer manually by address.\n"
     "  --control,-c <path>         Control socket to connect to a daemon.\n"
     "  --tun-name <ifname>         Set route device (Default: tun0).\n"
-    "  --tun-setup                 Setup tunnel interface with ip addresses and routes.\n"
     "  --ether-type <hex>          Ethernet type. (Default: 88b5)\n"
     "  --verbosity <level>         Set verbosity to quiet, verbose or debug (Default: verbose).\n"
     "  --disable-stdin             Disable interactive console on startup.\n"
@@ -189,9 +186,6 @@ static int conf_set(const char *opt, const char *val)
         break;
     case oTunName:
         gstate.tun_name = strdup(val);
-        break;
-    case oTunSetup:
-        gstate.tun_setup = 1;
         break;
     case oControlSocket:
         gstate.control_socket_path = strdup(val);

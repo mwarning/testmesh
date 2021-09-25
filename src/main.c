@@ -47,7 +47,6 @@ struct state gstate = {
     .disable_ipv6 = 0,
 
     .tun_name = "tun0",
-    .tun_setup = 0,
     .tun_fd = -1,
 
     .log_to_syslog = 0,

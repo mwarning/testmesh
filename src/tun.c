@@ -250,24 +250,5 @@ int tun_init(uint32_t id, const char *ifname)
         return EXIT_FAILURE;
     }
 
-    if (gstate.tun_setup) {
-        execute("ip link set up %s", ifname);
-        execute("ip -4 addr flush dev %s", ifname);
-        execute("ip -6 addr flush dev %s", ifname);
-
-        const uint8_t *addr = (const uint8_t*) &id;
-
-        if (id < 0xffff) {
-            execute("ip -4 addr add 169.254.%u.%u/16 dev tun0", (unsigned) addr[1], (unsigned) addr[0]);
-        } else {
-            log_warning("Own identifier too big for use with IPv4!");
-        }
-
-        execute("ip -6 addr add fe80::%02x%02x:%02x%02x/64 dev tun0", addr[3], addr[2], addr[1], addr[0]);
-
-        // MTU show not be too low, otherwise IP is not supported anymore (addresses are dropped)
-        execute("ip link set dev %s mtu 1400", ifname);
-    }
-
     return EXIT_SUCCESS;
 }

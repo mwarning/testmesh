@@ -58,7 +58,6 @@ struct state {
 
     // tun0 - entry to the mesh
     const char *tun_name;
-    int tun_setup;
     int tun_fd;
     const char *control_socket_path;
 
