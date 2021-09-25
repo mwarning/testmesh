@@ -16,54 +16,91 @@
 #include "utils.h"
 
 
-static void execute(const char *fmt, ...)
+static const char *protocol_str(int protocol)
 {
-    char cmd[128];
-    va_list vlist;
-
-    va_start(vlist, fmt);
-    vsnprintf(cmd, sizeof(cmd), fmt, vlist);
-    va_end(vlist);
-
-    if (system(cmd) != 0) {
-        log_error("Failed to execute: %s", cmd);
-        exit(1);
+    switch (protocol) {
+        case 0x06: return "TCP";
+        case 0x11: return "UDP";
+        default: return "???";
     }
 }
 
-void debug_payload(const char *name, uint8_t *buf, size_t buflen)
+static const char *debug_payload(uint8_t *buf, size_t buflen)
 {
+    static char ret[200];
+
     if (buf == NULL || buflen == 0) {
-        log_debug("%s: Invalid packet: buflen: %zu", name, buflen);
-        return;
+        snprintf(ret, sizeof(ret), "invalid input");
+        return ret;
     }
 
     int ip_version = (buf[0] >> 4) & 0x0f;
 
     if (ip_version == 4 && buflen >= 20) {
         // IPv4 packet
+        //size_t ihl = buf[0] & 0x0f;
         size_t length = ntohs(*((uint16_t*) &buf[2]));
         struct in_addr *saddr = (struct in_addr *) &buf[12];
         struct in_addr *daddr = (struct in_addr *) &buf[16];
+        int protocol = buf[9];
 
-        log_debug("%s: IPv4 buflen: %zu (length: %zu): %s => %s",
-            name, buflen, length, str_in4(saddr), str_in4(daddr));
-    } else if (ip_version == 6 && buflen >= 24) {
+        if (protocol == 0x06 || protocol == 0x11) {
+            int sport = ntohs(*((uint16_t*) &buf[20]));
+            int dport = ntohs(*((uint16_t*) &buf[22]));
+
+            snprintf(ret, sizeof(ret), "IPv4/%s, len: %zu, %s:%d => %s:%d",
+                protocol_str(protocol), length, str_in4(saddr), sport, str_in4(daddr), dport
+            );
+        } else {
+            snprintf(ret, sizeof(ret), "IPv4/0x%02x, len: %zu, %s => %s",
+                protocol, length, str_in4(saddr), str_in4(daddr)
+            );
+        }
+    } else if (ip_version == 6 && buflen >= 44) {
         // IPv6 packet
         size_t length = ntohs(*((uint16_t*) &buf[4]));
         struct in6_addr *saddr = (struct in6_addr *) &buf[8];
         struct in6_addr *daddr = (struct in6_addr *) &buf[24];
+        int protocol = buf[6];
 
-        log_debug("%s: IPv6 buflen: %zu (length: %zu): %s => %s",
-            name, buflen, length, str_in6(saddr), str_in6(daddr));
+        if (protocol == 0x06 || protocol == 0x11) {
+            int sport = ntohs(*((uint16_t*) &buf[40]));
+            int dport = ntohs(*((uint16_t*) &buf[42]));
+            snprintf(ret, sizeof(ret), "IPv6/%s, len: %zu, [%s]:%d => [%s]:%d",
+                protocol_str(protocol), length, str_in6(saddr), sport, str_in6(daddr), dport
+            );
+        } else {
+            snprintf(ret, sizeof(ret), "IPv6/0x%02x, len: %zu, %s=> %s",
+                protocol, length, str_in6(saddr), str_in6(daddr)
+            );
+        }
     } else {
-        log_debug("%s: invalid packet: ip_version: %d, buflen: %zu",
-            name, ip_version, buflen);
+        snprintf(ret, sizeof(ret), "unknown packet");
     }
+
+    return ret;
+}
+
+// is an IPv4 address to get a mesh ID from
+// e.g. 10.0.0.0/8 or 192.168.0.0/16
+static int addr4_is_mesh(const struct in_addr *addr)
+{
+    const uint8_t *a = (const uint8_t*) &addr->s_addr;
+    return (a[0] == 10) || (a[0] == 192 && a[1] == 168);
+}
+
+// is an IPv6 address to get a mesh ID from
+// e.g. 200::/8 or 300::/8
+static int addr6_is_mesh(const struct in6_addr *addr)
+{
+    uint8_t a1 = addr->s6_addr[0];
+    uint8_t a2 = addr->s6_addr[1];
+    return (a1 == 0x02) || (a1 == 0x03) || (a1 == 0xfe && a2 == 0x80);
 }
 
 int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 {
+    uint32_t src_id = 0;
     uint32_t dst_id = 0;
 
     if (buf == NULL || read_len == 0) {
@@ -84,22 +121,21 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             return 1;
         }
 
-        // is link local address
-        if ((daddr->s_addr & 0x0000ffff) == 0x0000fea9) {
-            const uint8_t* s = (const uint8_t*) &daddr->s_addr;
-            ((uint8_t*) &dst_id)[1] = s[2];
-            ((uint8_t*) &dst_id)[0] = s[3];
+        if (addr4_is_mesh(daddr)) {
+            dst_id = in4_addr_id(daddr);
         } else {
             dst_id = gstate.gateway_id;
         }
 
+        src_id = in4_addr_id(saddr);
+
         if (dst_id == 0) {
-            log_debug("parse_ip_packet: no gateway for IPv4 traffic => drop");
+            // invalid id
+            log_debug("parse_ip_packet: no destination for IPv4 packet => drop");
             return 1;
         }
 
-        log_debug("read %zu/%zu from %s: %s => %s (0x%08x)",
-            read_len, length, gstate.tun_name, str_in4(saddr), str_in4(daddr), dst_id);
+        log_debug("got 0x%08x => 0x%08x", src_id, dst_id);
 
         if (read_len != length) {
             log_warning("parse_ip_packet: consider to lower mtu on %s", gstate.tun_name);
@@ -123,25 +159,26 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             return 1;
         }
 
-        // is local address
-        if ((daddr->s6_addr[0] & 0xfc) == 0xfc) {
-            const uint8_t* addr = (const uint8_t*) &daddr->s6_addr;
-            ((uint8_t*) &dst_id)[3] = addr[12];
-            ((uint8_t*) &dst_id)[2] = addr[13];
-            ((uint8_t*) &dst_id)[1] = addr[14];
-            ((uint8_t*) &dst_id)[0] = addr[15];
+        if (addr6_is_mesh(daddr)) {
+            dst_id = in6_addr_id(daddr);
         } else {
             dst_id = gstate.gateway_id;
         }
 
+        src_id = in6_addr_id(saddr);
+
         if (dst_id == 0) {
-            // no valid id / no gateway defined
-            log_debug("parse_ip_packet: no gateway for IPv6 traffic => drop");
+            // invalid id
+            log_debug("parse_ip_packet: no destination for IPv6 packet => drop");
             return 1;
         }
 
-        log_debug("read %zu/%zu from %s: %s => %s (0x%08x)",
-            read_len, length, gstate.tun_name, str_in6(saddr), str_in6(daddr), dst_id);
+        log_debug("got 0x%08x => 0x%08x", src_id, dst_id);
+
+        if (read_len != length) {
+            log_warning("parse_ip_packet: ipv6 packet size mismatch?");
+            return 1;
+        }
 
         *dst_id_ret = dst_id;
         return 0;
@@ -166,19 +203,21 @@ static int ip_disabled(uint8_t *data, ssize_t len)
     }
 }
 
-ssize_t tun_write(uint8_t *data, ssize_t len)
+ssize_t tun_write(uint8_t *buf, ssize_t buflen)
 {
-    if (data == NULL || len <= 0 || ip_disabled(data, len)) {
+    if (buf == NULL || buflen <= 0 || ip_disabled(buf, buflen)) {
         return -1;
     }
 
-    debug_payload("tun_write", data, len);
+    if (gstate.log_verbosity == VERBOSITY_DEBUG) {
+        log_debug("tun_write: buflen: %zu, %s", buflen, debug_payload(buf, buflen));
+    }
 
-    ssize_t ret = write(gstate.tun_fd, data, len);
-    if (ret != len) {
+    ssize_t ret = write(gstate.tun_fd, buf, buflen);
+    if (ret != buflen) {
         log_error("write() %s", strerror(errno));
     } else {
-        log_debug("write %u bytes to %s => accept packet", (unsigned) len, gstate.tun_name);
+        //log_debug("write %u bytes to %s => accept packet", (unsigned) len, gstate.tun_name);
     }
 
     return ret;
@@ -188,16 +227,13 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 {
     ssize_t read_len = read(gstate.tun_fd, buf, buflen);
 
-/*
-    if (read_len <= 0) {
-    	return read_len;
-    }
-*/
     if (buf == NULL || read_len <= 0 || ip_disabled(buf, buflen)) {
         return -1;
     }
 
-    debug_payload("tun_read", buf, read_len);
+    if (gstate.log_verbosity == VERBOSITY_DEBUG) {
+        log_debug("tun_read: buflen: %zu, %s", buflen, debug_payload(buf, buflen));
+    }
 
     if (parse_ip_packet(dst_id, buf, read_len)) {
         return -1;
