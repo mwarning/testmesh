@@ -48,11 +48,11 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
             int sport = ntohs(*((uint16_t*) &buf[20]));
             int dport = ntohs(*((uint16_t*) &buf[22]));
 
-            snprintf(ret, sizeof(ret), "IPv4/%s, len: %zu, %s:%d => %s:%d",
+            snprintf(ret, sizeof(ret), "IPv4/%s, plen: %zu, %s:%d => %s:%d",
                 protocol_str(protocol), length, str_in4(saddr), sport, str_in4(daddr), dport
             );
         } else {
-            snprintf(ret, sizeof(ret), "IPv4/0x%02x, len: %zu, %s => %s",
+            snprintf(ret, sizeof(ret), "IPv4/0x%02x, plen: %zu, %s => %s",
                 protocol, length, str_in4(saddr), str_in4(daddr)
             );
         }
@@ -66,11 +66,11 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
         if (protocol == 0x06 || protocol == 0x11) {
             int sport = ntohs(*((uint16_t*) &buf[40]));
             int dport = ntohs(*((uint16_t*) &buf[42]));
-            snprintf(ret, sizeof(ret), "IPv6/%s, len: %zu, [%s]:%d => [%s]:%d",
+            snprintf(ret, sizeof(ret), "IPv6/%s, plen: %zu, [%s]:%d => [%s]:%d",
                 protocol_str(protocol), length, str_in6(saddr), sport, str_in6(daddr), dport
             );
         } else {
-            snprintf(ret, sizeof(ret), "IPv6/0x%02x, len: %zu, %s=> %s",
+            snprintf(ret, sizeof(ret), "IPv6/0x%02x, plen: %zu, %s=> %s",
                 protocol, length, str_in6(saddr), str_in6(daddr)
             );
         }
@@ -210,7 +210,7 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
     }
 
     if (gstate.log_verbosity == VERBOSITY_DEBUG) {
-        log_debug("tun_write: buflen: %zu, %s", buflen, debug_payload(buf, buflen));
+        log_debug("tun_write: blen: %zu, %s", buflen, debug_payload(buf, buflen));
     }
 
     ssize_t ret = write(gstate.tun_fd, buf, buflen);
@@ -232,7 +232,7 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
     }
 
     if (gstate.log_verbosity == VERBOSITY_DEBUG) {
-        log_debug("tun_read: buflen: %zu, %s", buflen, debug_payload(buf, buflen));
+        log_debug("tun_read: blen: %zu, %s", buflen, debug_payload(buf, buflen));
     }
 
     if (parse_ip_packet(dst_id, buf, read_len)) {
