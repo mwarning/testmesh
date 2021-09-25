@@ -535,3 +535,26 @@ const char *str_addr2(const Address *addr)
     }
 }
 
+uint32_t in6_addr_id(const struct in6_addr *addr)
+{
+    uint32_t id = 0;
+    const uint8_t* p = (const uint8_t*) &addr->s6_addr;
+
+    ((uint8_t*) &id)[0] = p[5];
+    ((uint8_t*) &id)[1] = p[4];
+    ((uint8_t*) &id)[2] = p[3];
+    ((uint8_t*) &id)[3] = p[2];
+
+    return id;
+}
+
+uint32_t in4_addr_id(const struct in_addr *addr)
+{
+    uint32_t id = 0;
+    const uint8_t* p = (const uint8_t*) &addr->s_addr;
+    // ignore p[0], it should be always 10 as in 10.x.y.z
+    ((uint8_t*) &id)[2] = p[1];
+    ((uint8_t*) &id)[1] = p[2];
+    ((uint8_t*) &id)[0] = p[3];
+    return id;
+}
