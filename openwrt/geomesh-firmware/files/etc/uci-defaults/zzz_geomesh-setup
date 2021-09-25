@@ -1,6 +1,6 @@
 #!/bin/sh
 
-is_gateway=0
+is_gateway=n
 
 exec >/root/setup.log 2>&1
 
@@ -10,7 +10,7 @@ echo "(I) Start Geomesh Firmware Setup"
 
 mac=$(cat /sys/class/ieee80211/phy0/macaddress)
 
-if [ $is_gateway -eq 1 ]; then
+if [ $is_gateway = 'y' ]; then
 	id="00000001"
 else
 	# set id based on mac - hopefully with a good uniqueness
@@ -64,7 +64,7 @@ config_wifi() {
 	uci set $p.device="$wifi_device"
 	uci set $p.mode="ap"
 	uci set $p.network="lan"
-	if [ $is_gateway -eq 1 ]; then
+	if [ $is_gateway = 'y' ]; then
 		uci set $p.ssid="geomesh-gateway-${mac:15}"
 	else
 		uci set $p.ssid="geomesh-client-${mac:15}"
@@ -83,6 +83,7 @@ uci set $n.enabled=1
 uci set $n.protocol="flood-1"
 uci set $n.tun_name="tun0"
 uci set $n.own_id="0x${id}"
+uci set $n.gateway_id="0x00000001"
 uci set $n.verbosity="debug"
 
 n="network.lan"
@@ -91,7 +92,7 @@ uci set $n.mtu=1400
 # upstream DNS servers for OpenWrt
 uci set $n.dns="${addr6_mesh_dns} ${addr4_mesh_dns}"
 
-if [ $is_gateway -eq 0 ]; then
+if [ $is_gateway = 'n' ]; then
 	# route Internet traffic to the gateway
 	n="network.mesh_route6"
 	uci set $n="route6"
@@ -130,7 +131,7 @@ uci set $n.mtu_fix="1"
 
 n="firewall.mesh_forwarding"
 uci set $n="forwarding"
-if [ $is_gateway -eq 1 ]; then
+if [ $is_gateway = 'y' ]; then
 	uci set $n.src="mesh"
 	uci set $n.dest="wan"
 else

@@ -20,12 +20,6 @@ define Package/geomesh-firmware/config
 	source "$(SOURCE)/Config.in"
 endef
 
-ifeq ($(CONFIG_GEOMESH_FIRMWARE_GATEWAY),y)
-	$(SED) -i "s/is_gateway=0/is_gateway=1/" ./files/etc/uci-defaults/zzz_geomesh-setup
-else
-	$(SED) -i "s/is_gateway=1/is_gateway=0/" ./files/etc/uci-defaults/zzz_geomesh-setup
-endif
-
 # dummy makefile
 define Build/Prepare
 	echo "all: " > $(PKG_BUILD_DIR)/Makefile
@@ -33,6 +27,7 @@ endef
 
 define Package/geomesh-firmware/install
 	$(CP) ./files/* $(1)/
+	$(SED) "s/is_gateway=.*/is_gateway=$(CONFIG_GEOMESH_FIRMWARE_GATEWAY)/" $(1)/etc/uci-defaults/zzz_geomesh-setup
 endef
 
 $(eval $(call BuildPackage,geomesh-firmware))
