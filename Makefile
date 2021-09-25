@@ -36,6 +36,7 @@ all: src/protocols.h $(OBJS)
 
 # generate this file
 src/protocols.h:
+	@echo "Creating src/protocols.h"
 	@echo "// this file is auto-generated" > src/protocols.h
 	@awk 'FNR == 1{printf("#include \"%s\"\n", substr(FILENAME, 5))}' src/*/routing.h >> src/protocols.h
 	@echo >> src/protocols.h
