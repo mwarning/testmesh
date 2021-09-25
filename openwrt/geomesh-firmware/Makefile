@@ -25,9 +25,15 @@ define Build/Prepare
 	echo "all: " > $(PKG_BUILD_DIR)/Makefile
 endef
 
+ifeq ($(CONFIG_GEOMESH_FIRMWARE_GATEWAY),y)
+	GEOMESH_FIRMWARE_GATEWAY=y
+else
+	GEOMESH_FIRMWARE_GATEWAY=n
+endif
+
 define Package/geomesh-firmware/install
 	$(CP) ./files/* $(1)/
-	$(SED) "s/is_gateway=.*/is_gateway=$(CONFIG_GEOMESH_FIRMWARE_GATEWAY)/" $(1)/etc/uci-defaults/zzz_geomesh-setup
+	$(SED) "s/is_gateway=.*/is_gateway=$(GEOMESH_FIRMWARE_GATEWAY)/" $(1)/etc/uci-defaults/zzz_geomesh-setup
 endef
 
 $(eval $(call BuildPackage,geomesh-firmware))
