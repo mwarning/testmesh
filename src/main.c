@@ -32,7 +32,7 @@ struct state gstate = {
     .sock_udp = -1,
     .sock_mcast_receive = -1,
     .sock_console = -1,
-    .ether_type = 0x88b5, // Local Experiment Ethertype 1
+    .ether_type = 0x88b5, // "Local Experiment Ethertype 1"
 
     .gateway_id = 0,
     .own_id = 0,
