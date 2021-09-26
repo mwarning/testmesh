@@ -117,7 +117,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
         if (IN_MULTICAST(&daddr->s_addr)) {
             // no support for multicast traffic
-            log_debug("parse_ip_packet: ipv4 multicast => drop");
+            log_debug("parse_ip_packet: IPv4 multicast => drop");
             return 1;
         }
 
@@ -137,9 +137,8 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
         log_debug("got 0x%08x => 0x%08x", src_id, dst_id);
 
-        if (read_len != length) {
-            log_warning("parse_ip_packet: consider to lower mtu on %s", gstate.tun_name);
-            log_warning("parse_ip_packet: incomplete IPv4 packet in buffer => drop");
+        if (read_len < length) {
+            log_warning("parse_ip_packet: Partial IPv4 packet (%zu < %zu). Consider to set an MTU. => drop", read_len, length);
             return 1;
         }
 
@@ -175,8 +174,8 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
         log_debug("got 0x%08x => 0x%08x", src_id, dst_id);
 
-        if (read_len != length) {
-            log_warning("parse_ip_packet: ipv6 packet size mismatch?");
+        if (read_len < length) {
+            log_warning("parse_ip_packet: IPv6 packet bigger than received data (%zu < %zu). => drop", read_len, length);
             return 1;
         }
 
