@@ -70,50 +70,6 @@ static void bloom_init(uint8_t *bloom, uint64_t id)
     }
 }
 
-#if 0
-// create bloom filter that fits into the neighbors
-static void bloom_converge(uint8_t *bloom)
-{
-    uint8_t bloom_count[BLOOM_M * 8];
-    //uint8_t highest[BLOOM_K];
-    //memset(&highest[0], 0, sizeof(highest));
-
-    memset(&bloom_count[0], 0, sizeof(bloom_count));
-
-    // add neighbors
-    Entry *cur;
-    Entry *tmp;
-    HASH_ITER(hh, g_neighbors, cur, tmp) {
-        for (int i = 0; i < (8 * BLOOM_M); i++) {
-            if (BLOOM_BITTEST(&cur->bloom[0], i)) {
-                bloom_count[i]++;
-            }
-        }
-    }
-
-    // add own id
-    uint8_t bloom_own[BLOOM_M];
-    bloom_init(&bloom_own[0], gstate.own_id);
-    for (int i = 0; i < (8 * BLOOM_M); i++) {
-        if (BLOOM_BITTEST(&bloom_own[0], i)) {
-            bloom_count[i] = MAX(bloom_count[i], bloom_count[i] + 1);
-        }
-    }
-
-    // get most set BLOOM_K bits
-    memset(&bloom[0], 0, BLOOM_M);
-
-/*
-    -- every item until only BLOOM_K items are set
-    for (int j = 0; j < BLOOM_K; j++) {
-
-    }
-
-    // calculate bloom filter back to id!
-*/
-}
-#endif
-
 // count of bits set in bloom filter
 static int bloom_ones(const uint8_t *bloom)
 {
@@ -216,7 +172,7 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     }
 }
 
-static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *p, size_t recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
         log_debug("invalid packet size => drop");
@@ -331,7 +287,7 @@ static void ext_handler_l2(int events, int fd)
 
 static char *format_bloom(const uint8_t *bloom)
 {
-    static char buf[BLOOM_M * 8  + 1];
+    static char buf[BLOOM_M * 8 + 1];
     char *cur = buf;
     for (int i = 0; i < (8 * BLOOM_M); i++) {
         unsigned bit = (0 != BLOOM_BITTEST(bloom, i));
