@@ -81,7 +81,7 @@ static void bloom_add(uint8_t *bloom, uint32_t id)
 static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid packet size => drop");
+        log_debug("invalid DATA packet size => drop");
         return;
     }
 

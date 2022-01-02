@@ -337,14 +337,14 @@ static int send_l2_internal(struct interface *ifa, const uint8_t *dst_addr, cons
 
 void send_bcasts_l2(const void* data, size_t data_len)
 {
-    log_debug("send_raws: %d (%d interfaces)", (int) data_len, (int) utarray_len(g_interfaces));
+    log_debug("send_raws: %d bytes on %d interfaces", (int) data_len, (int) utarray_len(g_interfaces));
 
     char sendbuf[ETH_FRAME_LEN] = {0};
     static uint8_t dst_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
     if (sendlen >= sizeof(sendbuf)) {
-        log_error("send_raws(): data too big");
+        log_error("send_raws(): too much data");
         return;
     }
 
@@ -371,7 +371,7 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     }
 
     if (sendlen > sizeof(sendbuf)) {
-        log_error("send_ucast_l2(): data too big");
+        log_error("send_ucast_l2(): too much data (%zu > %zu)", sendlen, sizeof(sendbuf));
         return 1;
     }
 
@@ -388,7 +388,7 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     }
 
     if (!found) {
-        log_error("send_raws(): ifindex not found");
+        log_error("send_raws(): ifindex not found: %d", ifindex);
         return 1;
     }
 

@@ -115,7 +115,7 @@ static void setup_mcast_socket_receive(int *sock)
 
     int on = 1;
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0) {
-        printf("setsockopt IPV6_RECVPKTINFO ");
+        printf("setsockopt(IPV6_RECVPKTINFO)");
         exit(1);
     }
 
@@ -219,7 +219,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // set to only protocol
+    // set to the only protocol
     if (g_protocols_len == 1) {
         gstate.protocol = g_protocols[0];
     }

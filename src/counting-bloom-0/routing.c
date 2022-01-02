@@ -143,14 +143,14 @@ static Neighbor *neighbor_add(uint32_t sender_id, uint8_t *bloom, const Address 
 static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
 {
     if (recv_len != sizeof(COMM)) {
-        log_debug("invalid packet size => drop");
+        log_debug("invalid COMM packet size => drop");
         return;
     }
 
     log_debug("got COMM packet: %s / 0x%08x", str_addr(from_addr), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
-        log_debug("own comm packet => drop");
+        log_debug("own COMM packet => drop");
         return;
     }
 
@@ -203,12 +203,12 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
 static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid packet size => drop");
+        log_debug("invalid DATA packet size => drop");
         return;
     }
 
     if (p->sender_id == gstate.own_id) {
-        log_debug("own data packet => drop");
+        log_debug("own DATA packet => drop");
         return;
     }
 

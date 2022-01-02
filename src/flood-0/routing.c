@@ -89,7 +89,7 @@ static Entry *entry_add(uint32_t id, uint16_t seq_num)
 static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid packet size => drop");
+        log_debug("invalid DATA packet size => drop");
         return;
     }
 

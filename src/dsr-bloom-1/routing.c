@@ -175,7 +175,7 @@ static void forward_DATA(DATA *p, unsigned recv_len)
 static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *p, size_t recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid packet size => drop");
+        log_debug("invalid DATA size => drop");
         return;
     }
 
@@ -184,7 +184,7 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
         return;
     }
 
-    log_debug("data packet from neighbor 0x%08x => 0x%08x (seq_num: %d, hop_cnt: %d, %s)",
+    log_debug("got DATA packet from neighbor 0x%08x => 0x%08x (seq_num: %d, hop_cnt: %d, %s)",
         p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, address_type_str(to_addr));
 
     if (p->dst_id == gstate.own_id) {
