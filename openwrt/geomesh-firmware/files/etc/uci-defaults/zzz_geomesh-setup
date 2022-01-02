@@ -84,7 +84,10 @@ uci set $n.enabled=1
 uci set $n.protocol="${protocol}"
 uci set $n.tun_name="tun0"
 uci set $n.own_id="0x${id}"
-uci set $n.verbosity="debug"
+uci set $n.verbosity="2"
+uci set $n.enable_ipv4="1"
+uci set $n.enable_ipv6="1"
+uci set $n.setup_tun="0"
 if [ $is_gateway = 'n' ]; then
 	uci set $n.gateway_id="0x00000001"
 fi

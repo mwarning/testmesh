@@ -5,6 +5,8 @@ config geomesh
 	option control '/var/geomesh.ctl'
 	#option own_id '0x02'
 	list ifname 'wlan0'
-	#list peer 'somepeer.example.com'
-	#option disable_ipv4 '1'
-	#option disable_ipv6 '1'
+	#option tun_setup 1
+	#list peer 'some-peer-example.com'
+	#option enable_ipv4 1
+	#option enable_ipv6 1
+	option verbosity 2
