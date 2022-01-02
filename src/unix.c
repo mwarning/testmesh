@@ -114,7 +114,7 @@ int unix_create_unix_socket(const char path[], int *sock_out)
 
 	rc = unlink(path);
 	if (rc == 0) {
-		log_warning("Removed stale file: %s", path);
+		log_warning("Removed stale control socket: %s", path);
 	}
 
 	// Directory does not exist and cannot be created
