@@ -262,7 +262,7 @@ static void ext_handler_l2(int events, int fd)
     uint8_t buffer[ETH_FRAME_LEN];
     ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
-    if (numbytes <= sizeof(struct ethhdr) + 1) {
+    if (numbytes <= sizeof(struct ethhdr)) {
         return;
     }
 
