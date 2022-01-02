@@ -36,7 +36,7 @@ typedef struct __attribute__((__packed__)) {
     uint16_t seq_num; // sequence number
     uint32_t src_id;
     uint32_t dst_id;
-    uint16_t payload_length; // might not be needed
+    uint16_t payload_length;
     //uint8_t payload[ETH_FRAME_LEN];
 } DATA;
 
@@ -99,16 +99,16 @@ static Entry *entry_add(uint32_t id, uint16_t seq_num)
 static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
-        log_debug("invalid DATA packet size => drop");
+        log_debug("DATA: invalid packet size => drop");
         return;
     }
 
     if (p->src_id == gstate.own_id) {
-        log_debug("own source id => drop packet");
+        log_debug("DATA: own source id => drop");
         return;
     }
 
-    log_debug("got DATA packet: %s / 0x%08x => 0x%08x",
+    log_debug("DATA: got packet from %s / 0x%08x => 0x%08x",
         str_addr(addr), p->src_id, p->dst_id);
 
     Entry *entry = entry_find(p->src_id);
@@ -119,8 +119,8 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
             entry->seq_num = p->seq_num;
         } else {
             // old packet => drop
-             log_debug("drop packet with old sequence number %d (current is %d)",
-                (int) p->seq_num, (int) entry->seq_num);
+             log_debug("DATA: drop packet with old sequence number %u (current is %u)",
+                p->seq_num, entry->seq_num);
             return;
         }
     } else {
@@ -128,12 +128,12 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
     }
 
     if (p->dst_id == gstate.own_id) {
-        log_debug("write %u bytes to %s", p->payload_length, gstate.tun_name);
+        log_debug("DATA: write %u bytes to %s", p->payload_length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
         tun_write(get_data_payload(p), p->payload_length);
     } else {
-        log_debug("send all");
+        log_debug("DATA: send all");
         send_bcasts_l2(p, recv_len);
     }
 }
@@ -163,7 +163,7 @@ static void tun_handler(int events, int fd)
         data->dst_id = dst_id;
         data->payload_length = read_len;
 
-        log_debug("send all");
+        log_debug("send DATA packet as broadcast");
         send_bcasts_l2(data, get_data_size(data));
     }
 }
