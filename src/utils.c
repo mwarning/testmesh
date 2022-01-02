@@ -570,10 +570,10 @@ uint32_t in6_addr_id(const struct in6_addr *addr)
     uint32_t id = 0;
     const uint8_t* p = (const uint8_t*) &addr->s6_addr;
 
-    ((uint8_t*) &id)[0] = p[5];
-    ((uint8_t*) &id)[1] = p[4];
-    ((uint8_t*) &id)[2] = p[3];
-    ((uint8_t*) &id)[3] = p[2];
+    ((uint8_t*) &id)[0] = p[15];
+    ((uint8_t*) &id)[1] = p[14];
+    ((uint8_t*) &id)[2] = p[13];
+    ((uint8_t*) &id)[3] = p[12];
 
     return id;
 }
