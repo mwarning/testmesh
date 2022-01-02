@@ -7,6 +7,7 @@
 #include <ifaddrs.h>
 #include <assert.h>
 #include <unistd.h>           // close()
+#include <net/if.h>           // if_nametoindex()
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <linux/if.h>         // struct ifreq
@@ -539,6 +540,7 @@ static void get_all_interfaces(int (*interface_add_cb)(const char *ifname))
     freeifaddrs(ifaddr);
 }
 
+// interfaces might have disappeared or appeared
 static void periodic_interfaces_handler(int _events, int _fd)
 {
     static time_t check_time = 0;
@@ -555,6 +557,12 @@ static void periodic_interfaces_handler(int _events, int _fd)
 
     struct interface *ifa = NULL;
     while ((ifa = utarray_prev(g_interfaces, ifa))) {
+        int ifindex = if_nametoindex(ifa->ifname);
+        if (ifindex == 0 || ifindex != ifa->ifindex) {
+            log_warning("%s changed ifindex: %d => %d", ifa->ifname, ifa->ifindex, ifindex);
+            interface_reset(ifa);
+        }
+
         if (!is_valid_ifa(ifa)) {
             int rc = interface_setup(ifa, g_dynamic_interfaces);
             if (rc != 0 && g_dynamic_interfaces) {
@@ -572,15 +580,14 @@ int interfaces_debug(FILE *fd)
     char mac_buf[18];
     struct interface *ifa = NULL;
 
-    fprintf(fd, "name mac status\n");
+    fprintf(fd, "name\tmac\tstatus\tmisc\n");
     while ((ifa = utarray_next(g_interfaces, ifa))) {
-        fprintf(fd, "%s %s %s (socket: %d, ifindex: %d, ifindex2name: %s)\n",
+        fprintf(fd, "%s\t%s\t%s\t(fd: %d, ifindex: %d)\n",
             ifa->ifname,
             format_mac(mac_buf, &ifa->ifmac),
-            is_valid_ifa(ifa) ? "active" : "inactive",
+            is_valid_ifa(ifa) ? "up" : "down",
             ifa->ifsock_l2,
-            ifa->ifindex,
-            str_ifindex(ifa->ifindex)
+            ifa->ifindex
         );
         count += 1;
     }
