@@ -519,11 +519,11 @@ const char *format_duration(char buf[64], time_t from, time_t to)
     seconds = secs;
 
     if (days > 0) {
-        snprintf(buf, 64, "%s%dd %dh", neg, days, hours);
+        snprintf(buf, 64, "%s%dd%dh", neg, days, hours);
     } else if (hours > 0) {
-        snprintf(buf, 64, "%s%dh %dm", neg, hours, minutes);
+        snprintf(buf, 64, "%s%dh%dm", neg, hours, minutes);
     } else if (minutes > 0) {
-        snprintf(buf, 64, "%s%dm %ds", neg, minutes, seconds);
+        snprintf(buf, 64, "%s%dm%ds", neg, minutes, seconds);
     } else {
         snprintf(buf, 64, "%s%ds", neg, seconds);
     }
