@@ -333,22 +333,9 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     return 0;
 }
 
-static void periodic_handler(int _events, int _fd)
-{
-    static time_t g_every_second = 0;
-
-    if (g_every_second == gstate.time_now) {
-        return;
-    } else {
-        g_every_second = gstate.time_now;
-    }
-
-    entry_timeout();
-}
-
 static void init()
 {
-    net_add_handler(-1, &periodic_handler);
+    net_add_handler(-1, &entry_timeout);
 }
 
 void dsr_bloom_1_register()
