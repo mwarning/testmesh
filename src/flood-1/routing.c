@@ -19,6 +19,8 @@
 
 #include "routing.h"
 
+// incomplete!
+
 enum {
     TYPE_DATA
 };
@@ -37,12 +39,22 @@ typedef struct {
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
     uint8_t hop_count;  // hop count (metric)
-    uint16_t seq_num; // sequence number
+    uint16_t seq_num;   // sequence number
     uint32_t src_id;
     uint32_t dst_id;
-    uint16_t length;  // might not be needed
-    uint8_t payload[2000];
+    uint16_t payload_length;
+    //uint8_t payload[ETH_FRAME_LEN];
 } DATA;
+
+static uint8_t *get_data_payload(const DATA *data)
+{
+    return ((uint8_t*) data) + sizeof(DATA);
+}
+
+static size_t get_data_size(const DATA *data)
+{
+    return sizeof(DATA) + data->payload_length;
+}
 
 static uint16_t g_sequence_number = 0;
 static Entry *g_entries = NULL;
@@ -95,18 +107,18 @@ static Entry *entry_add(uint32_t src_id, uint16_t seq_num, uint8_t hop_count, co
 
 static void handle_DATA(const Address *from_addr, DATA *p, size_t recv_len)
 {
-    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid DATA packet size => drop");
+    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+        log_debug("DATA: invalid packet size => drop");
         return;
     }
-
-    log_debug("handle DATA: %s / 0x%08x => 0x%08x",
-        str_addr(from_addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
-        log_debug("own source id => drop packet");
+        log_debug("DATA: own source id => drop");
         return;
     }
+
+    log_debug("DATA: got packet from %s / 0x%08x => 0x%08x",
+        str_addr(from_addr), p->src_id, p->dst_id);
 
     // update routing table
     Entry *entry = entry_find(p->src_id);
@@ -121,8 +133,8 @@ static void handle_DATA(const Address *from_addr, DATA *p, size_t recv_len)
                 entry->last_updated = gstate.time_now;
             }
             // old packet => drop
-            log_debug("old sequence number %d (current is %d) => drop packet",
-                (int) p->seq_num, (int) entry->seq_num);
+            log_debug("DATA: old sequence number %u (current is %u) => drop",
+                p->seq_num, entry->seq_num);
             return;
         }
     } else {
@@ -131,18 +143,18 @@ static void handle_DATA(const Address *from_addr, DATA *p, size_t recv_len)
 
     // accept packet
     if (p->dst_id == gstate.own_id) {
-        tun_write(p->payload, p->length);
+        tun_write(get_data_payload(p), p->payload_length);
         return;
     }
 
     // forward packet
     entry = entry_find(p->dst_id);
     if (entry) {
-        log_debug("forward as ucast");
+        log_debug("DATA: forward as unicast");
         p->hop_count += 1;
         send_ucast_l2(&entry->addr, p, recv_len);
     } else {
-        log_debug("forward as bcast");
+        log_debug("DATA: forward as broadcast");
         p->hop_count += 1;
         send_bcasts_l2(p, recv_len);
     }
@@ -151,36 +163,35 @@ static void handle_DATA(const Address *from_addr, DATA *p, size_t recv_len)
 // read traffic from tun0 and send to peers
 static void tun_handler(int events, int fd)
 {
+    uint8_t buffer[ETH_FRAME_LEN];
     uint32_t dst_id;
-
-    DATA data = {
-        .type = TYPE_DATA,
-    };
+    DATA *data = (DATA*) &buffer[0];
 
     if (events <= 0) {
         return;
     }
 
     while (1) {
-        ssize_t read_len = tun_read(&dst_id, &data.payload[0], sizeof(data.payload));
+        uint8_t *payload = get_data_payload(data);
+        ssize_t read_len = tun_read(&dst_id, payload, ETH_FRAME_LEN - sizeof(DATA));
 
         if (read_len <= 0) {
             break;
         }
 
-        data.seq_num = g_sequence_number++;
-        data.hop_count = 0;
-        data.src_id = gstate.own_id;
-        data.dst_id = dst_id;
-        data.length = read_len;
+        data->seq_num = g_sequence_number++;
+        data->hop_count = 0;
+        data->src_id = gstate.own_id;
+        data->dst_id = dst_id;
+        data->payload_length = read_len;
 
-        Entry *entry = entry_find(data.dst_id);
+        Entry *entry = entry_find(data->dst_id);
         if (entry) {
-            log_debug("send to one");
-            send_ucast_l2(&entry->addr, &data, offsetof(DATA, payload) + read_len);
+            log_debug("send as unicast");
+            send_ucast_l2(&entry->addr, data, get_data_size(data));
         } else {
-            log_debug("send to all");
-            send_bcasts_l2(&data, offsetof(DATA, payload) + read_len);
+            log_debug("send as broadcast");
+            send_bcasts_l2(data, get_data_size(data));
         }
     }
 }
@@ -194,12 +205,12 @@ static void ext_handler_l2(int events, int fd)
     uint8_t buffer[ETH_FRAME_LEN];
     ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
 
-    if (numbytes <= sizeof(struct ethhdr)) {
+    if (numbytes <= (sizeof(struct ethhdr))) {
         return;
     }
 
     uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
+    size_t payload_length = numbytes - sizeof(struct ethhdr);
     struct ethhdr *eh = (struct ethhdr *) &buffer[0];
 
     int ifindex = interface_get_ifindex(fd);
@@ -211,7 +222,7 @@ static void ext_handler_l2(int events, int fd)
 
     switch (payload[0]) {
     case TYPE_DATA:
-        handle_DATA(&from_addr, (DATA*) payload, payload_len);
+        handle_DATA(&from_addr, (DATA*) payload, payload_length);
         break;
     default:
         log_warning("unknown packet type %d from %s (%s)", payload[0], str_addr(&from_addr),  str_ifindex(ifindex));

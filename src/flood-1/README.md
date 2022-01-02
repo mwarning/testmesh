@@ -1,6 +1,6 @@
 # Flood 1
 
-Simple flooding protocol. Packets are send by unicast if the destination is known via the shorted route (hop count metric).
+Simple flooding protocol. Packets are send by unicast if the destination is known via the shortest route (hop count metric). The algorithm is similar to AODV.
 
 Packet header:
 * source identifier
