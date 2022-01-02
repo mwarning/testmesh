@@ -22,7 +22,7 @@
 
 
 struct interface {
-    int ifindex;
+    unsigned ifindex;
     char *ifname;
     struct mac ifmac;
     int ifsock_l2;
@@ -70,7 +70,7 @@ static UT_icd interface_icd = {sizeof(struct interface), NULL, interface_copy, i
 
 static int is_valid_ifa(const struct interface *ifa)
 {
-    return (ifa->ifindex != 0 && memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) != 0);
+    return (ifa->ifindex > 0 && memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) != 0);
 }
 
 static int find_interface(const char *ifname)
@@ -87,9 +87,15 @@ static int find_interface(const char *ifname)
     return -1;
 }
 
-const char *str_ifindex(int ifindex)
+const char *str_ifindex(unsigned ifindex)
 {
-    struct interface *ifa = NULL;
+    struct interface *ifa;
+
+    if (ifindex == 0) {
+        return NULL;
+    }
+
+    ifa = NULL;
     while ((ifa = utarray_next(g_interfaces, ifa))) {
         if (ifa->ifindex == ifindex) {
             return ifa->ifname;
@@ -115,7 +121,7 @@ static int if_nametomac2(struct mac *addr, const char *ifname)
 }
 
 // get interface index of an interface
-static int if_nametoindex2(int *ifindex, const char *ifname)
+static int if_nametoindex2(unsigned *ifindex, const char *ifname)
 {
     struct ifreq if_idx = { 0 };
 
@@ -142,7 +148,7 @@ static int set_promisc_mode(const char *ifname)
     return (rc1 == 0 && rc2 == 0) ? 0 : 1;
 }
 
-static int setup_raw_socket(int *sock_ret, const char *ifname, int ifindex)
+static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 {
     int sock = *sock_ret;
 
@@ -214,26 +220,57 @@ static int interface_setup(struct interface *ifa, int quiet)
         }
     }
 
-    log_info("Interface ready: %s", ifa->ifname);
+    log_info("Interface added: %s", ifa->ifname);
 
     return 0;
 }
 
-int interface_get_ifindex(int fd)
+unsigned interface_get_ifindex_by_name(const char *ifname)
 {
-    struct interface *ifa = NULL;
+    struct interface *ifa;
 
-    if (fd == -1) {
+    if (ifname == NULL) {
         return 0;
     }
 
+    ifa = NULL;
     while ((ifa = utarray_next(g_interfaces, ifa))) {
-        if (ifa->ifsock_l2 == fd) {
+        if (0 == strcmp(ifa->ifname, ifname)) {
             return ifa->ifindex;
         }
     }
 
-    return 0;
+    return if_nametoindex(ifname);
+}
+
+static struct interface *get_interface_by_fd(int fd)
+{
+    struct interface *ifa = NULL;
+
+    if (fd == -1) {
+        return NULL;
+    }
+
+    while ((ifa = utarray_next(g_interfaces, ifa))) {
+        if (ifa->ifsock_l2 == fd) {
+            return ifa;
+        }
+    }
+
+    return NULL;
+}
+
+// TODO: replace by interface_get_ifindex_by_name, as ifindex might chance when wifi gets up/down
+unsigned interface_get_ifindex(int fd)
+{
+    struct interface *ifa = get_interface_by_fd(fd);
+    return ifa ? ifa->ifindex : 0;
+}
+
+struct mac interface_get_ifmac(int fd)
+{
+    struct interface *ifa = get_interface_by_fd(fd);
+    return ifa ? ifa->ifmac : g_nullmac;
 }
 
 int interface_add(const char *ifname)
@@ -253,7 +290,7 @@ int interface_add(const char *ifname)
     }
 
     struct interface ifa = {
-        .ifindex = -1,
+        .ifindex = 0,
         .ifname = strdup(ifname),
         .ifmac = g_nullmac,
         .ifsock_l2 = -1,
@@ -282,6 +319,7 @@ int interface_del(const char *ifname)
     return 1;
 }
 
+/*
 static void join_mcast(int sock, int ifindex)
 {
     struct ipv6_mreq group = {0};
@@ -296,14 +334,13 @@ static void join_mcast(int sock, int ifindex)
         }
     }
 
-/*
     // do not reseive own packets send to a multicast group (remove if we have multiple instances on the same host)
-    int loop = 0;
-    if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
-        log_warning("setsockopt(IPV6_MULTICAST_LOOP) %s\n", strerror(errno));
-    }
-*/
+    //int loop = 0;
+    //if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
+    //    log_warning("setsockopt(IPV6_MULTICAST_LOOP) %s\n", strerror(errno));
+    //}
 }
+*/
 
 static int send_l2_internal(struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)
 {
@@ -360,13 +397,13 @@ void send_bcasts_l2(const void* data, size_t data_len)
 int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 {
     assert(addr->family == AF_MAC);
-    int ifindex = addr->mac.ifindex;
+    unsigned ifindex = addr->mac.ifindex;
     const uint8_t *dst_addr = &addr->mac.addr.data[0];
 
     char sendbuf[ETH_FRAME_LEN] = {0};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
-    if (ifindex <= 0) {
+    if (ifindex == 0) {
         log_error("send_ucast_l2(): invalid ifindex");
         return 1;
     }
@@ -389,13 +426,14 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     }
 
     if (!found) {
-        log_error("send_raws(): ifindex not found: %d", ifindex);
+        log_error("send_raws(): ifindex not found: %u", ifindex);
         return 1;
     }
 
     return send_l2_internal(ifa, dst_addr, sendbuf, sizeof(struct ethhdr) + data_len);
 }
 
+/*
 void send_ucast_l3(const struct sockaddr_storage *addr, const void *data, size_t data_len)
 {
     socklen_t slen = sizeof(struct sockaddr_storage);
@@ -404,9 +442,9 @@ void send_ucast_l3(const struct sockaddr_storage *addr, const void *data, size_t
     }
 }
 
-int send_mcast_l3(int ifindex, const void* data, int data_len)
+int send_mcast_l3(unsigned ifindex, const void* data, int data_len)
 {
-    if (ifindex <= 0) {
+    if (ifindex == 0) {
         return 1;
     }
 
@@ -455,7 +493,7 @@ void send_mcasts_l3(const void* data, int data_len)
     }
 }
 
-ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, int *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
+ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
 {
     struct iovec iov[1];
     char cmsg6[CMSG_SPACE(sizeof(struct in6_pktinfo))];
@@ -499,7 +537,7 @@ ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, int *ifindex, str
     } else {
         return recv_length;
     }
-}
+}*/
 
 static void get_all_interfaces(int (*interface_add_cb)(const char *ifname))
 {
@@ -557,9 +595,9 @@ static void periodic_interfaces_handler(int _events, int _fd)
 
     struct interface *ifa = NULL;
     while ((ifa = utarray_prev(g_interfaces, ifa))) {
-        int ifindex = if_nametoindex(ifa->ifname);
-        if (ifindex == 0 || ifindex != ifa->ifindex) {
-            log_warning("%s changed ifindex: %d => %d", ifa->ifname, ifa->ifindex, ifindex);
+        unsigned ifindex = if_nametoindex(ifa->ifname);
+        if (ifindex != ifa->ifindex) {
+            log_warning("interface %s changed ifindex: %u => %u", ifa->ifname, ifa->ifindex, ifindex);
             interface_reset(ifa);
         }
 
