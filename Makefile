@@ -3,22 +3,10 @@ DEBUG := 1
 
 #########
 
-FILES := src/main.c \
-		 src/conf.c \
-		 src/log.c \
-		 src/utils.c \
-		 src/traffic.c \
-		 src/console.c \
-		 src/unix.c \
-		 src/tun.c \
-		 src/net.c \
-		 src/client.c \
-		 src/interfaces.c
-
 .PHONY: all clean install src/protocols.h
 
-# add all routing protocols
-FILES += $(wildcard src/*/*.c)
+# add all C files
+FILES += $(wildcard src/*.c) $(wildcard src/*/*.c)
 
 ifdef DEBUG
   CFLAGS += -g -O0 -DDEBUG
@@ -36,7 +24,7 @@ all: src/protocols.h $(OBJS)
 
 # generate this file
 src/protocols.h:
-	@echo "Creating src/protocols.h"
+	@echo "Create src/protocols.h"
 	@echo "// this file is auto-generated" > src/protocols.h
 	@awk 'FNR == 1{printf("#include \"%s\"\n", substr(FILENAME, 5))}' src/*/routing.h >> src/protocols.h
 	@echo >> src/protocols.h
