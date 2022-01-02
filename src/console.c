@@ -94,18 +94,18 @@ static int console_exec(FILE *fp, int argc, char *argv[])
     } else if (MATCH(1, "interfaces")) {
         interfaces_debug(fp);
     } else if (MATCH(1, "v")) {
-        gstate.log_verbosity = (gstate.log_verbosity + 1) % 3;
-        fprintf(fp, "%s enabled\n", verbosity_str(gstate.log_verbosity));
+        gstate.log_level = (gstate.log_level + 1) % (MAX_LOG_LEVEL + 1);
+        fprintf(fp, "log level is now %u\n", gstate.log_level);
     } else if (MATCH(1, "i")) {
-        fprintf(fp, "protocol: %s\n", gstate.protocol->name);
-        fprintf(fp, "own id: 0x%08x\n", gstate.own_id);
+        fprintf(fp, "protocol:   %s\n", gstate.protocol->name);
+        fprintf(fp, "own id:     0x%08x\n", gstate.own_id);
         if (gstate.gateway_id) {
             fprintf(fp, "gateway id: 0x%08x\n", gstate.gateway_id);
         } else {
             fprintf(fp, "gateway id: none\n");
         }
         fprintf(fp, "process id: %u\n", (unsigned) getpid());
-        fprintf(fp, "verbosity: %s\n", verbosity_str(gstate.log_verbosity));
+        fprintf(fp, "log level:  %u\n", gstate.log_level);
         fprintf(fp, "tun device: %s\n", gstate.tun_name);
         if (gstate.protocol->console) {
             gstate.protocol->console(fp, argc, argv);
@@ -128,6 +128,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
     } else {
         int rc = 1;
 
+        // call protocol specific console handler
         if (gstate.protocol->console) {
             rc = gstate.protocol->console(fp, argc, argv);
         }
