@@ -281,7 +281,7 @@ static void ext_handler_l2(int events, int fd)
         handle_DATA(&from_addr, &to_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr2(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr(&from_addr), str_ifindex(ifindex));
     }
 }
 
@@ -318,7 +318,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         HASH_ITER(hh, g_neighbors, cur, tmp) {
             fprintf(fp, "0x%08x %s %s %s %u\n",
                 cur->sender_id,
-                str_addr2(&cur->addr),
+                str_addr(&cur->addr),
                 format_duration(buf_duration, cur->last_updated, gstate.time_now),
                 format_bloom(&cur->bloom[0]),
                 (unsigned) cur->hop_cnt

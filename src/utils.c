@@ -194,9 +194,8 @@ int del_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex)
     return ioctl(gstate.sock_help, SIOCDIFADDR, &ifr6);
 }
 
-static const char *str_addr_buf(char *addrbuf, const struct sockaddr_storage *addr)
+static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_storage *addr)
 {
-    //static char buf[INET6_ADDRSTRLEN + 8];
     char buf[INET6_ADDRSTRLEN];
     int port;
 
@@ -218,16 +217,16 @@ static const char *str_addr_buf(char *addrbuf, const struct sockaddr_storage *ad
     return addrbuf;
 }
 
-const char *str_addr(const struct sockaddr_storage *addr)
+const char *str_addr_storage(const struct sockaddr_storage *addr)
 {
     static char addrbuf[2][INET6_ADDRSTRLEN + 8];
     static unsigned addrbuf_i = 0;
-    return str_addr_buf(addrbuf[++addrbuf_i % 2], addr);
+    return str_addr_storage_buf(addrbuf[++addrbuf_i % 2], addr);
 }
 
 const char *str_addr6(const struct sockaddr_in6 *addr)
 {
-    return str_addr((struct sockaddr_storage*) addr);
+    return str_addr_storage((struct sockaddr_storage*) addr);
 }
 
 const char *str_in4(const struct in_addr *addr)
@@ -535,21 +534,21 @@ const char *format_duration(char buf[64], time_t from, time_t to)
 const char *format_size(char buf[64], unsigned bytes)
 {
     if (bytes < 1000) {
-        sprintf(buf, "%u B", bytes);
+        sprintf(buf, "%uB", bytes);
     } else if (bytes < 1000000) {
-        sprintf(buf, "%.0f K", bytes / 1000.0);
+        sprintf(buf, "%.0fK", bytes / 1000.0);
     } else if (bytes < 1000000000) {
-        sprintf(buf, "%.1f M", bytes / 1000000.0);
+        sprintf(buf, "%.1fM", bytes / 1000000.0);
     } else if (bytes < 1000000000000) {
-        sprintf(buf, "%.2f G", bytes / 1000000000.0);
+        sprintf(buf, "%.2fG", bytes / 1000000000.0);
     } else {
-        sprintf(buf, "%.2f T", bytes / 1000000000000.0);
+        sprintf(buf, "%.2fT", bytes / 1000000000000.0);
     }
 
     return buf;
 }
 
-const char *str_addr2(const Address *addr)
+const char *str_addr(const Address *addr)
 {
     static char addrbuf[2][INET6_ADDRSTRLEN + 8];
     static unsigned addrbuf_i = 0;
@@ -558,7 +557,7 @@ const char *str_addr2(const Address *addr)
     switch (addr->family) {
     case AF_INET6:
     case AF_INET:
-        return str_addr_buf(buf, (struct sockaddr_storage*) addr);
+        return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
     case AF_MAC:
         return format_mac(buf, &addr->mac.addr);
     default:

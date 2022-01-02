@@ -147,7 +147,7 @@ static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
         return;
     }
 
-    log_debug("got comm packet: %s / 0x%08x", str_addr2(from_addr), p->sender_id);
+    log_debug("got COMM packet: %s / 0x%08x", str_addr(from_addr), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
         log_debug("own comm packet => drop");
@@ -284,7 +284,7 @@ static void ext_handler_l2(int events, int fd)
         handle_DATA(&from_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr2(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr(&from_addr), str_ifindex(ifindex));
     }
 }
 
@@ -355,7 +355,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         HASH_ITER(hh, g_entries, cur, tmp) {
             fprintf(fp, "  0x%08x %s %s %s\n",
                 cur->sender_id,
-                str_addr2(&cur->addr),
+                str_addr(&cur->addr),
                 format_duration(buf_duration, cur->last_updated, gstate.time_now),
                 format_bloom(buf_bloom, &cur->bloom[0])
             );

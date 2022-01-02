@@ -399,7 +399,7 @@ void send_ucast_l3(const struct sockaddr_storage *addr, const void *data, size_t
 {
     socklen_t slen = sizeof(struct sockaddr_storage);
     if (sendto(gstate.sock_udp, data, data_len, 0, (struct sockaddr*) addr, slen) == -1) {
-        log_error("Failed send packet to %s: %s", str_addr2((Address*) addr), strerror(errno));
+        log_error("Failed send packet to %s: %s", str_addr((Address*) addr), strerror(errno));
     }
 }
 

@@ -48,7 +48,7 @@ const int address_is_broadcast(const Address *addr);
 const char *address_type_str(const Address *addr);
 void init_macaddr(Address *dst, const void *mac_addr, int ifindex);
 
-const char *str_addr2(const Address *addr);
+const char *str_addr(const Address *addr);
 const char *str_addr6(const struct sockaddr_in6 *addr);
 
 const char *str_in4(const struct in_addr *addr);

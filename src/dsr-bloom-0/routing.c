@@ -85,8 +85,8 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
         return;
     }
 
-    log_debug("got data packet: %s / 0x%08x => 0x%08x",
-        str_addr2(addr), p->src_id, p->dst_id);
+    log_debug("got DATA packet: %s / 0x%08x => 0x%08x",
+        str_addr(addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
         log_debug("own source id => drop packet");
@@ -162,7 +162,7 @@ static void ext_handler_l2(int events, int fd)
         handle_DATA(ifindex, &from_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr2(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type %u from %s (%s)", (unsigned) buffer[0], str_addr(&from_addr), str_ifindex(ifindex));
     }
 }
 

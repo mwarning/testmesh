@@ -101,7 +101,7 @@ static void handle_DATA(const Address *from_addr, DATA *p, size_t recv_len)
     }
 
     log_debug("handle DATA: %s / 0x%08x => 0x%08x",
-        str_addr2(from_addr), p->src_id, p->dst_id);
+        str_addr(from_addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
         log_debug("own source id => drop packet");
@@ -214,7 +214,7 @@ static void ext_handler_l2(int events, int fd)
         handle_DATA(&from_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %d from %s (%s)", payload[0], str_addr2(&from_addr),  str_ifindex(ifindex));
+        log_warning("unknown packet type %d from %s (%s)", payload[0], str_addr(&from_addr),  str_ifindex(ifindex));
     }
 }
 
@@ -249,7 +249,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
                 (unsigned) cur->seq_num,
                 (unsigned) cur->hop_count,
                 format_duration(buf, gstate.time_started, cur->last_updated),
-                str_addr2(&cur->addr)
+                str_addr(&cur->addr)
             );
         }
     } else {
