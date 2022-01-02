@@ -12,13 +12,12 @@ Implemented Protocols:
 - [flood-0](src/flood-0/)
   - reactive
   - sequence number
-  - only broadcast
+  - broadcasta only
   - no metric
 - [flood-1](src/flood-1/)
   - reactive
   - sequence number
   - switch between broadcast and unicast
-  - hop count metric
 - [aodv-0](src/aodv-0/)
   - reactive
   - sequence number
@@ -102,10 +101,10 @@ or use `socat`:
 socat - UNIX-CONNECT:/tmp/geomesh.sock
 ```
 
-## Further Documents
+## Further Reading
 
-[Development Notes](docs/notes.md)
-[Further Ideas](docs/ideas.md)
+* [Development Notes](docs/notes.md)
+* [Further Ideas](docs/ideas.md)
 
 ## Other Mobile Ad-hoc Network Protocols
 
