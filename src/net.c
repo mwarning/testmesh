@@ -110,8 +110,11 @@ void net_loop(void)
 
 		for (int i = 0; i < g_count; i++) {
 			int revents = g_fds[i].revents;
-			if ((revents || all) && (g_cbs[i] != NULL)) {
-				g_cbs[i](revents, g_fds[i].fd);
+			int fd = g_fds[i].fd;
+			net_callback *cb = g_cbs[i];
+
+			if (cb && (revents || all)) {
+				cb(revents, fd);
 			}
 		}
 
