@@ -23,6 +23,9 @@
 #include "client.h"
 
 
+/*
+ * A separate program to control the routing daemon.
+ */
 
 int g_client_sock = -1;
 int g_shutdown_after_reply = 0;
@@ -31,12 +34,12 @@ void client_usage(const char *pname)
 {
     fprintf(stderr,
         "Usage:\n"
-        "  %s -c /tmp/command.sock [<commands-to-send>]\n"
+        "  %s -c /tmp/geomesh.sock [<commands-to-send>]\n"
         "\n"
         "-c <path>       Path to control socket.\n"
         "-h              Prints this help text.\n"
         "\n"
-        "If no command is given on the command, then an interactive shell will be started.\n",
+        "If no command is given as argument, then an interactive shell will be started.\n",
         pname
     );
 }
