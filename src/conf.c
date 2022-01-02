@@ -140,7 +140,7 @@ static int conf_set(const char *opt, const char *val)
         protocols_print(stdout);
         exit(0);
     case oVersion:
-        printf("1.0.0\n");
+        printf(GEOMESH_VERSION "\n");
         exit(0);
     case oProtocol:
         gstate.protocol = protocols_find(val);
