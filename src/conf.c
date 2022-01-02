@@ -42,7 +42,8 @@ static struct option_t g_options[] = {
     {"--own-id", 1, oOwnIdentifier},
     {"--ifname", 1, oInterface},
     {"-i", 1, oInterface},
-    {"--log", 1, oLogFile},
+    {"--log-file", 1, oLogFile},
+    {"-lf", 1, oLogFile},
     {"--ether-type", 1, oEtherType},
     {"--peer", 1, oPeer},
     {"--tun-name", 1, oTunName},
@@ -51,7 +52,7 @@ static struct option_t g_options[] = {
     {"--control", 1, oControlSocket},
     {"-c", 1, oControlSocket},
     {"--log-level", 1, oLogLevel},
-    {"-l", 1, oLogLevel},
+    {"-ll", 1, oLogLevel},
     {"--enable-ipv4", 1, oEnableIPv4},
     {"-4", 1, oEnableIPv4},
     {"--enable-ipv6", 1, oEnableIPv6},
@@ -60,8 +61,8 @@ static struct option_t g_options[] = {
     {"-d", 0, oDaemon},
     {"--help", 0, oHelp},
     {"-h", 0, oHelp},
-    {"-v", 1, oVersion},
     {"--version", 0, oVersion},
+    {"-v", 0, oVersion},
     {NULL, 0, 0}
 };
 
@@ -71,18 +72,18 @@ static const char *usage_str =
     "  --protocol,-p               Select routing protocol\n"
     "  --daemon,-d                 Run as daemon\n"
     "  --interface,-i <interface>  Limit to given interfaces\n"
-    "  --log <path>                Write log output to file\n"
     "  --peer <address>            Add a peer manually by address\n"
     "  --control,-c <path>         Control socket to connect to a daemon\n"
     "  --tun-name <ifname>         Set route device (Default: tun0)\n"
     "  --tun-setup <1/0>           Configure tun device (Default: 1)\n"
     "  --ether-type <hex>          Ethernet type (Default: 88b5)\n"
-    "  --log-level <level>         Logging level. From 0 to " STR(MAX_LOG_LEVEL) " (Default: 3).\n"
+    "  --log-file,-lf <path>       Write log output to file\n"
+    "  --log-level,-ll <level>     Log level. From 0 to " STR(MAX_LOG_LEVEL) " (Default: 3).\n"
     "  --disable-stdin             Disable interactive console on startup\n"
     "  --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)\n"
     "  --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)\n"
     "  --help,-h                   Prints this help text\n"
-    "  --version,-v                Print version";
+    "  --version                   Print version";
 
 static int parse_hex(uint64_t *ret, const char *val, int bytes)
 {

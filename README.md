@@ -66,19 +66,18 @@ Usage: geomesh -i eth0 -i wlan0
   --protocol,-p               Select routing protocol
   --daemon,-d                 Run as daemon
   --interface,-i <interface>  Limit to given interfaces
-  --log <path>                Write log output to file
   --peer <address>            Add a peer manually by address
   --control,-c <path>         Control socket to connect to a daemon
   --tun-name <ifname>         Set route device (Default: tun0)
   --tun-setup <1/0>           Configure tun device (Default: 1)
   --ether-type <hex>          Ethernet type (Default: 88b5)
-  --log-level <level>         Logging level. From 0 to 6 (Default: 3)
-  --verbosity <level>         Set verbosity to quiet, verbose or debug (Default: verbose)
+  --log-file,-lf <path>       Write log output to file
+  --log-level,-ll <level>     Log level. From 0 to 6 (Default: 3).
   --disable-stdin             Disable interactive console on startup
   --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)
   --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)
   --help,-h                   Prints this help text
-  --version,-v                Print version
+  --version                   Print version
 
 Valid protocols: dsr-0, flood-0, ...
 ```
