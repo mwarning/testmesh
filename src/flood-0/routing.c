@@ -36,9 +36,19 @@ typedef struct __attribute__((__packed__)) {
     uint16_t seq_num; // sequence number
     uint32_t src_id;
     uint32_t dst_id;
-    uint16_t length; // might not be needed
-    uint8_t payload[2000];
+    uint16_t payload_length; // might not be needed
+    //uint8_t payload[ETH_FRAME_LEN];
 } DATA;
+
+static uint8_t *get_data_payload(const DATA *data)
+{
+    return ((uint8_t*) data) + sizeof(DATA);
+}
+
+static size_t get_data_size(const DATA *data)
+{
+    return sizeof(DATA) + data->payload_length;
+}
 
 static uint16_t g_sequence_number = 0;
 static Entry *g_entries = NULL;
@@ -88,18 +98,18 @@ static Entry *entry_add(uint32_t id, uint16_t seq_num)
 
 static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
-    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
+    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("invalid DATA packet size => drop");
         return;
     }
-
-    log_debug("got DATA packet: %s / 0x%08x => 0x%08x",
-        str_addr(addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
         log_debug("own source id => drop packet");
         return;
     }
+
+    log_debug("got DATA packet: %s / 0x%08x => 0x%08x",
+        str_addr(addr), p->src_id, p->dst_id);
 
     Entry *entry = entry_find(p->src_id);
 
@@ -118,10 +128,10 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
     }
 
     if (p->dst_id == gstate.own_id) {
-        log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
+        log_debug("write %u bytes to %s", p->payload_length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
-        tun_write(p->payload, p->length);
+        tun_write(get_data_payload(p), p->payload_length);
     } else {
         log_debug("send all");
         send_bcasts_l2(p, recv_len);
@@ -131,29 +141,30 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 // read traffic from tun0 and send to peers
 static void tun_handler(int events, int fd)
 {
+    uint8_t buffer[ETH_FRAME_LEN];
     uint32_t dst_id;
-    DATA data = {
-        .type = TYPE_DATA,
-    };
+    DATA *data = (DATA*) &buffer[0];
 
     if (events <= 0) {
         return;
     }
 
     while (1) {
-        ssize_t read_len = tun_read(&dst_id, &data.payload[0], sizeof(data.payload));
+        uint8_t *payload = get_data_payload(data);
+        ssize_t read_len = tun_read(&dst_id, payload, ETH_FRAME_LEN - sizeof(DATA));
 
         if (read_len <= 0) {
             break;
         }
 
-        data.seq_num = g_sequence_number++;
-        data.src_id = gstate.own_id;
-        data.dst_id = dst_id;
-        data.length = read_len;
+        data->type = TYPE_DATA;
+        data->seq_num = g_sequence_number++;
+        data->src_id = gstate.own_id;
+        data->dst_id = dst_id;
+        data->payload_length = read_len;
 
         log_debug("send all");
-        send_bcasts_l2(&data, offsetof(DATA, payload) + read_len);
+        send_bcasts_l2(data, get_data_size(data));
     }
 }
 
@@ -180,7 +191,6 @@ static void ext_handler_l2(int events, int fd)
     init_macaddr(&from_addr, &eh->h_source, ifindex);
     init_macaddr(&to_addr, &eh->h_dest, ifindex);
 
-
     switch (payload[0]) {
     case TYPE_DATA:
         handle_DATA(&from_addr, (DATA*) payload, payload_len);
@@ -206,7 +216,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
         HASH_ITER(hh, g_entries, cur, tmp) {
             fprintf(fp, "0x%08x %u %s\n",
                 cur->id,
-                (unsigned) cur->seq_num,
+                cur->seq_num,
                 format_duration(buf, gstate.time_started, cur->last_updated)
             );
             count += 1;
