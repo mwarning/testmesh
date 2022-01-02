@@ -18,13 +18,21 @@
 
 static const char *protocol_str(int protocol)
 {
+    static char buf[6];
     switch (protocol) {
+        case 0x01: return "ICMP";
         case 0x06: return "TCP";
         case 0x11: return "UDP";
-        default: return "???";
+        case 0x3a: return "ICMP6";
+        default:
+            sprintf(buf, "0x%02x", protocol);
+            return buf;
     }
 }
 
+/*
+ * Write some payload information. It is usually an IP packet.
+ */
 static const char *debug_payload(uint8_t *buf, size_t buflen)
 {
     static char ret[200];
@@ -48,12 +56,12 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
             int sport = ntohs(*((uint16_t*) &buf[20]));
             int dport = ntohs(*((uint16_t*) &buf[22]));
 
-            snprintf(ret, sizeof(ret), "IPv4/%s, plen: %zu, %s:%d => %s:%d",
+            snprintf(ret, sizeof(ret), "IPv4/%s, iplen: %zu, %s:%d => %s:%d",
                 protocol_str(protocol), length, str_in4(saddr), sport, str_in4(daddr), dport
             );
         } else {
-            snprintf(ret, sizeof(ret), "IPv4/0x%02x, plen: %zu, %s => %s",
-                protocol, length, str_in4(saddr), str_in4(daddr)
+            snprintf(ret, sizeof(ret), "IPv4/%s, iplen: %zu, %s => %s",
+                protocol_str(protocol), length, str_in4(saddr), str_in4(daddr)
             );
         }
     } else if (ip_version == 6 && buflen >= 44) {
@@ -66,12 +74,12 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
         if (protocol == 0x06 || protocol == 0x11) {
             int sport = ntohs(*((uint16_t*) &buf[40]));
             int dport = ntohs(*((uint16_t*) &buf[42]));
-            snprintf(ret, sizeof(ret), "IPv6/%s, plen: %zu, [%s]:%d => [%s]:%d",
+            snprintf(ret, sizeof(ret), "IPv6/%s, iplen: %zu, [%s]:%d => [%s]:%d",
                 protocol_str(protocol), length, str_in6(saddr), sport, str_in6(daddr), dport
             );
         } else {
-            snprintf(ret, sizeof(ret), "IPv6/0x%02x, plen: %zu, %s=> %s",
-                protocol, length, str_in6(saddr), str_in6(daddr)
+            snprintf(ret, sizeof(ret), "IPv6/%s, iplen: %zu, %s => %s",
+                protocol_str(protocol), length, str_in6(saddr), str_in6(daddr)
             );
         }
     } else {
@@ -90,7 +98,7 @@ static int addr4_is_mesh(const struct in_addr *addr)
 }
 
 // is an IPv6 address to get a mesh ID from
-// e.g. 200::/8 or 300::/8
+// e.g. 200::/8 or 300::/8 or fe80::/16 (we skip the full /7 here)
 static int addr6_is_mesh(const struct in6_addr *addr)
 {
     uint8_t a1 = addr->s6_addr[0];
@@ -117,21 +125,28 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
         if (IN_MULTICAST(&daddr->s_addr)) {
             // no support for multicast traffic
-            log_debug("parse_ip_packet: IPv4 multicast => drop");
+            log_debug2("parse_ip_packet: IPv4 multicast => drop");
             return 1;
         }
 
+        // map destination IP address to mesh identifier
         if (addr4_is_mesh(daddr)) {
             dst_id = in4_addr_id(daddr);
         } else {
             dst_id = gstate.gateway_id;
         }
 
-        src_id = in4_addr_id(saddr);
+        // map source IP address to mesh identifier
+        if (addr4_is_mesh(saddr)) {
+            src_id = in4_addr_id(saddr);
+        } else {
+            log_warning("got packet with non-mesh IPv4 source address (%s) => drop", str_in4(saddr));
+            return 1;
+        }
 
         if (dst_id == 0) {
-            // invalid id
-            log_debug("parse_ip_packet: no destination for IPv4 packet => drop");
+            // invalid identifier
+            log_debug2("parse_ip_packet: no destination for IPv4 packet => drop");
             return 1;
         }
 
@@ -153,26 +168,31 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         struct in6_addr *daddr = (struct in6_addr *) &buf[24];
 
         if (IN6_IS_ADDR_MULTICAST(daddr)) {
-            log_debug("parse_ip_packet: IPv6 multicast => drop");
+            log_debug2("parse_ip_packet: IPv6 multicast => drop");
             // no support for multicast traffic
             return 1;
         }
 
+        // map destination IP destination to mesh id
         if (addr6_is_mesh(daddr)) {
             dst_id = in6_addr_id(daddr);
         } else {
             dst_id = gstate.gateway_id;
         }
 
-        src_id = in6_addr_id(saddr);
-
-        if (dst_id == 0) {
-            // invalid id
-            log_debug("parse_ip_packet: no destination for IPv6 packet => drop");
+        // map source IP address to mesh id
+        if (addr6_is_mesh(saddr)) {
+            src_id = in6_addr_id(saddr);
+        } else {
+            log_warning("got packet with non-mesh IPv6 source address (%s) => drop", str_in6(saddr));
             return 1;
         }
 
-        log_debug("got 0x%08x => 0x%08x", src_id, dst_id);
+        if (dst_id == 0) {
+            // invalid id
+            log_debug2("parse_ip_packet: no destination for IPv6 packet => drop");
+            return 1;
+        }
 
         if (read_len < length) {
             log_warning("parse_ip_packet: IPv6 packet bigger than received data (%zu < %zu). => drop", read_len, length);
