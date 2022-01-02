@@ -44,6 +44,7 @@ void hex_dump(const char *desc, const void *addr, const int len);
 
 int bytes_random(void *buffer, size_t size);
 
+const int address_is_broadcast(const Address *addr);
 const char *address_type_str(const Address *addr);
 void init_macaddr(Address *dst, const void *mac_addr, int ifindex);
 

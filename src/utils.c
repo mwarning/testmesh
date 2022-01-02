@@ -60,23 +60,54 @@ void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
     dst->mac.ifindex = ifindex;
 }
 
-const char *address_type_str(const Address *addr)
+const int address_is_multicast(const Address *addr)
 {
-    static const char *ucast = "unicast";
-    static const char *mcast = "multicast";
-    static const char *bcast = "broadcast";
-    static const uint8_t bmac[6] = {0,0,0,0,0,0};
+    switch (addr->family) {
+    case AF_MAC: {
+        const uint8_t *mac = &addr->mac.addr.data[0];
+        return mac[0] == 0x01 && mac[1] == 0x00 && mac[2] == 0x5e;
+    }
+    case AF_INET6:
+        return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr);
+    case AF_INET:
+        return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr));
+    default:
+        exit(1);
+    }
+}
+
+const int address_is_broadcast(const Address *addr)
+{
+    static const uint8_t bmac[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
     switch (addr->family) {
     case AF_MAC:
-        //TODO: distinguish broadcast/multicast
-        return memcmp(&addr->mac.addr, &bmac[0], sizeof(bmac)) ? ucast : bcast;
+        return 0 == memcmp(&addr->mac.addr, &bmac[0], sizeof(bmac));
     case AF_INET6:
-        return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr) ? mcast : ucast;
+        // there are no broadcasts in IPv6
+        return 0;
     case AF_INET:
-        return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr)) ? mcast : ucast;
+        return (ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr) & 0xff) == 0xff;
     default:
         exit(1);
+    }
+}
+
+const int address_is_unicast(const Address *addr)
+{
+    return !address_is_broadcast(addr) && !address_is_multicast(addr);
+}
+
+const char *address_type_str(const Address *addr)
+{
+    if (address_is_broadcast(addr)) {
+        return "broadcast";
+    }
+
+    if (address_is_multicast(addr)) {
+        return "multicast";
+    } else {
+        return "unicast";
     }
 }
 
