@@ -117,7 +117,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
             "interface-add <ifname>  Add interface.\n"
             "interface-del <ifname>  Remove interface.\n"
             "peer-add <address>      Add peer via IP address.\n"
-            "v                       Toggle verbosity.\n"
+            "v                       Increase verbosity.\n"
             "q                       Close this console.\n"
             "h                       Show this help.\n"
         );

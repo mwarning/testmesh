@@ -8,20 +8,22 @@
 #include "interfaces.h"
 #include "log.h"
 
+
 enum OPCODE {
     oProtocol,
     oInterface,
     oGatewayIdentifier,
     oOwnIdentifier,
     oDaemon,
-    oVerbosity,
+    oLogLevel,
     oEtherType,
     oControlSocket,
     oTunName,
+    oTunSetup,
     oDisableStdin,
     oLogFile,
-    oDisableIpv4,
-    oDisableIpv6,
+    oEnableIPv4,
+    oEnableIPv6,
     oPeer,
     oHelp,
     oVersion
@@ -44,12 +46,16 @@ static struct option_t g_options[] = {
     {"--ether-type", 1, oEtherType},
     {"--peer", 1, oPeer},
     {"--tun-name", 1, oTunName},
+    {"--tun-setup", 0, oTunSetup},
     {"--disable-stdin", 0, oDisableStdin},
     {"--control", 1, oControlSocket},
     {"-c", 1, oControlSocket},
-    {"--verbosity", 1, oVerbosity},
-    {"--disable-ipv4", 0, oDisableIpv4},
-    {"--disable-ipv6", 0, oDisableIpv6},
+    {"--log-level", 1, oLogLevel},
+    {"-l", 1, oLogLevel},
+    {"--enable-ipv4", 1, oEnableIPv4},
+    {"-4", 1, oEnableIPv4},
+    {"--enable-ipv6", 1, oEnableIPv6},
+    {"-6", 1, oEnableIPv6},
     {"--daemon", 0, oDaemon},
     {"-d", 0, oDaemon},
     {"--help", 0, oHelp},
@@ -62,46 +68,21 @@ static struct option_t g_options[] = {
 static const char *usage_str = 
     "Usage: geomesh -i eth0 -i wlan0\n"
     "\n"
-    "  --protocol,-p               Select routing protocol.\n"
-    "  --daemon,-d                 Run as daemon.\n"
-    "  --interface,-i <interface>  Limit to given interfaces.\n"
-    "  --log <path>                Write log output to file.\n"
-    "  --peer <address>            Add a peer manually by address.\n"
-    "  --control,-c <path>         Control socket to connect to a daemon.\n"
-    "  --tun-name <ifname>         Set route device (Default: tun0).\n"
-    "  --ether-type <hex>          Ethernet type. (Default: 88b5)\n"
-    "  --verbosity <level>         Set verbosity to quiet, verbose or debug (Default: verbose).\n"
-    "  --disable-stdin             Disable interactive console on startup.\n"
-    "  --disable-ipv4              Disable IPv4\n"
-    "  --disable-ipv6              Disable IPv6\n"
-    "  --help,-h                   Prints this help text.\n"
-    "  --version,-v                Print version.";
-
-static struct { const char *str; int i; } g_verbosity_map[] = {
-    {"QUIET", VERBOSITY_QUIET},
-    {"VERBOSE", VERBOSITY_VERBOSE},
-    {"DEBUG", VERBOSITY_DEBUG},
-};
-
-const char *verbosity_str(int verbosity)
-{
-    for (int i = 0; i < ARRAY_NELEMS(g_verbosity_map); i++) {
-        if (g_verbosity_map[i].i == verbosity) {
-            return g_verbosity_map[i].str;
-        }
-    }
-    return "UNKNOWN";
-}
-
-int verbosity_int(const char *verbosity)
-{
-    for (int i = 0; i < ARRAY_NELEMS(g_verbosity_map); i++) {
-        if (0 == strcasecmp(g_verbosity_map[i].str, verbosity)) {
-            return g_verbosity_map[i].i;
-        }
-    }
-    return -1;
-}
+    "  --protocol,-p               Select routing protocol\n"
+    "  --daemon,-d                 Run as daemon\n"
+    "  --interface,-i <interface>  Limit to given interfaces\n"
+    "  --log <path>                Write log output to file\n"
+    "  --peer <address>            Add a peer manually by address\n"
+    "  --control,-c <path>         Control socket to connect to a daemon\n"
+    "  --tun-name <ifname>         Set route device (Default: tun0)\n"
+    "  --tun-setup <1/0>           Configure tun device (Default: 1)\n"
+    "  --ether-type <hex>          Ethernet type (Default: 88b5)\n"
+    "  --log-level <level>         Logging level. From 0 to " STR(MAX_LOG_LEVEL) " (Default: 3).\n"
+    "  --disable-stdin             Disable interactive console on startup\n"
+    "  --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)\n"
+    "  --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)\n"
+    "  --help,-h                   Prints this help text\n"
+    "  --version,-v                Print version";
 
 static int parse_hex(uint64_t *ret, const char *val, int bytes)
 {
@@ -188,6 +169,9 @@ static int conf_set(const char *opt, const char *val)
     case oTunName:
         gstate.tun_name = strdup(val);
         break;
+    case oTunSetup:
+        gstate.tun_setup = 1;
+        break;
     case oControlSocket:
         gstate.control_socket_path = strdup(val);
         break;
@@ -216,26 +200,30 @@ static int conf_set(const char *opt, const char *val)
     case oDisableStdin:
         gstate.disable_stdin = 1;
         break;
-    case oDisableIpv4:
-        gstate.disable_ipv4 = 1;
+    case oEnableIPv4:
+        gstate.enable_ipv4 = n;
         break;
-    case oDisableIpv6:
-        gstate.disable_ipv6 = 1;
+    case oEnableIPv6:
+        gstate.enable_ipv6 = n;
         break;
     case oEtherType:
-        if (parse_hex(&n, val, sizeof(gstate.ether_type))) {
+        if (parse_hex(&n, val, sizeof(gstate.ether_type)) || n == 0) {
             log_error("Invalid hex value for %s: %s", opt, val);
             return EXIT_FAILURE;
         }
         gstate.ether_type = n;
         break;
-    case oVerbosity:
-        if (verbosity_int(val) < 0) {
-            log_error("Invalid verbosity: %s", val);
+    case oLogLevel: {
+        char *ptr = NULL;
+        const char *end = val + strlen(val);
+        long log_level = strtol(val, &ptr, 10);
+        if (ptr != end || log_level < 0 || log_level > MAX_LOG_LEVEL) {
+            log_error("Invalid log level: %s", val);
             return EXIT_FAILURE;
         }
-        gstate.log_verbosity = verbosity_int(val);
+        gstate.log_level = log_level;
         break;
+    }
     default:
         log_error("Unhandled option: %s", opt);
         return EXIT_FAILURE;

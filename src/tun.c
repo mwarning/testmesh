@@ -183,20 +183,20 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         return 0;
     }
 
-    log_debug("parse_ip_packet: invalid ip packet => drop");
+    log_debug2("parse_ip_packet: invalid ip packet => drop");
 
     // invalid IP packet
     return 1;
 }
 
-static int ip_disabled(uint8_t *data, ssize_t len)
+static int ip_enabled(uint8_t *data, ssize_t len)
 {
     int ip_version = (data[0] >> 4) & 0x0f;
     switch (ip_version) {
         case 4:
-            return gstate.disable_ipv4;
+            return gstate.enable_ipv4;
         case 6:
-            return gstate.disable_ipv6;
+            return gstate.enable_ipv6;
         default:
             return 0;
     }
@@ -204,35 +204,30 @@ static int ip_disabled(uint8_t *data, ssize_t len)
 
 ssize_t tun_write(uint8_t *buf, ssize_t buflen)
 {
-    if (buf == NULL || buflen <= 0 || ip_disabled(buf, buflen)) {
+    if (buf == NULL || buflen <= 0 || !ip_enabled(buf, buflen)) {
         return -1;
     }
 
-    if (gstate.log_verbosity == VERBOSITY_DEBUG) {
-        log_debug("tun_write: blen: %zu, %s", buflen, debug_payload(buf, buflen));
-    }
+    ssize_t write_len = write(gstate.tun_fd, buf, buflen);
 
-    ssize_t ret = write(gstate.tun_fd, buf, buflen);
-    if (ret != buflen) {
+    log_debug2("tun_write: %zu bytes, %s", write_len, debug_payload(buf, buflen));
+
+    if (write_len != buflen) {
         log_error("write() %s", strerror(errno));
-    } else {
-        //log_debug("write %u bytes to %s => accept packet", (unsigned) len, gstate.tun_name);
     }
 
-    return ret;
+    return write_len;
 }
 
 ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 {
     ssize_t read_len = read(gstate.tun_fd, buf, buflen);
 
-    if (buf == NULL || read_len <= 0 || ip_disabled(buf, buflen)) {
+    if (buf == NULL || read_len <= 0 || !ip_enabled(buf, buflen)) {
         return -1;
     }
 
-    if (gstate.log_verbosity == VERBOSITY_DEBUG) {
-        log_debug("tun_read: blen: %zu, %s", buflen, debug_payload(buf, buflen));
-    }
+    log_debug2("tun_read: %zu bytes, %s", read_len, debug_payload(buf, read_len));
 
     if (parse_ip_packet(dst_id, buf, read_len)) {
         return -1;
@@ -268,12 +263,49 @@ static int tun_alloc(const char *ifname)
     return fd;
 }
 
+static void execute(const char *fmt, ...)
+{
+    char cmd[128];
+    va_list vlist;
+
+    va_start(vlist, fmt);
+    vsnprintf(cmd, sizeof(cmd), fmt, vlist);
+    va_end(vlist);
+
+    if (system(cmd) != 0) {
+        log_error("Failed to execute: %s", cmd);
+        exit(1);
+    }
+}
+
+static void sanity_check()
+{
+    uint32_t id = 1234567890;
+    const uint8_t *addr = (const uint8_t*) &id;
+
+    char addr_str[INET6_ADDRSTRLEN];
+    sprintf(addr_str, "fe80::%02x%02x:%02x%02x", addr[3], addr[2], addr[1], addr[0]);
+    struct in6_addr addr_bin = {0};
+    if (inet_pton(AF_INET6, addr_str, &addr_bin) <= 0) {
+        log_error("invalid address");
+        exit(1);
+    }
+
+    uint32_t extracted_id = in6_addr_id(&addr_bin);
+    if (extracted_id != id) {
+        log_error("inconsistent id in sanity_check: 0x%08x != 0x%08x", extracted_id, id);
+        exit(1);
+    }
+}
+
 int tun_init(uint32_t id, const char *ifname)
 {
     if (id == 0) {
         log_error("No id set.");
         return EXIT_FAILURE;
     }
+
+    sanity_check();
 
     if (ifname == NULL) {
         log_error("No tunnel interface set.");
@@ -283,6 +315,33 @@ int tun_init(uint32_t id, const char *ifname)
     if ((gstate.tun_fd = tun_alloc(ifname)) < 0) {
         log_error("Error creating to %s interface: %s", ifname, strerror(errno));
         return EXIT_FAILURE;
+    }
+
+    if (gstate.tun_setup) {
+        execute("ip link set up %s", ifname);
+
+        // A smaller MTU is needed to make sure the IP stack leaves enough
+        // space for the extra mesh header. This is an issue with IPv4 only.
+        // IPv6 has autmatic MTU detection.
+        if (gstate.enable_ipv4) {
+            execute("ip link set dev %s mtu %u", ifname, gstate.tun_setup_ipv4_mtu);
+        }
+
+        const uint8_t *addr = (const uint8_t*) &id;
+
+        if (gstate.enable_ipv4) {
+            execute("ip -4 addr flush dev %s", ifname);
+            if (id < 0xffff) {
+                execute("ip -4 addr add 169.254.%u.%u/16 dev tun0", (unsigned) addr[1], (unsigned) addr[0]);
+            } else {
+                log_warning("Own identifier too big for use with IPv4!");
+            }
+        }
+
+        if (gstate.enable_ipv6) {
+            execute("ip -6 addr flush dev %s", ifname);
+            execute("ip -6 addr add fe80::%02x%02x:%02x%02x/64 dev tun0", addr[3], addr[2], addr[1], addr[0]);
+        }
     }
 
     return EXIT_SUCCESS;

@@ -43,18 +43,20 @@ struct state gstate = {
     .mcast_addr = {0},
     .ucast_addr = {0},
 
-    .disable_ipv4 = 0,
-    .disable_ipv6 = 0,
+    .enable_ipv4 = 0,
+    .enable_ipv6 = 1,
 
     .tun_name = "tun0",
     .tun_fd = -1,
+    .tun_setup = 1, // auto configure IP address/route
+    .tun_setup_ipv4_mtu = 1400, // only used if tun IPv4 setup is enabled
 
     .log_to_syslog = 0,
     .log_to_file = NULL,
     .log_to_terminal = 1, // disabled when running as daemon
     .log_to_socket = 1, // output log via domain socket
     .log_timestamp = 0, // log with timestamp
-    .log_verbosity = VERBOSITY_VERBOSE,
+    .log_level = 3,
 };
 
 // list of all supported protocols
@@ -228,28 +230,25 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (gstate.protocol == NULL) {
-        fprintf(stderr, "No protocol selected (-p):\n");
-        for (int i = 0; i < g_protocols_len; i += 1) {
-            fprintf(stderr, "%s\n", g_protocols[i]->name);
-        }
+    if (getuid() != 0) {
+        printf("Must run as root: %s\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    log_info("Protocol: %s", gstate.protocol->name);
+    log_info("Protocol:       %s", gstate.protocol->name);
     if (gstate.own_id) {
-        log_info("Own ID: 0x%08x", gstate.own_id);
+        log_info("Own ID:         0x%08x", gstate.own_id);
     }
 
     if (gstate.gateway_id) {
-        log_info("Gateway ID: 0x%08x", gstate.gateway_id);
+        log_info("Gateway ID:     0x%08x", gstate.gateway_id);
     } else {
-        log_info("Gateway ID: none");
+        log_info("Gateway ID:     none");
     }
 
-    log_info("Entry Device: %s", gstate.tun_name);
-    log_info("Verbosity: %s", verbosity_str(gstate.log_verbosity));
-    log_info("IPv4/IPv6: %s/%s", is_enabled(!gstate.disable_ipv4), is_enabled(!gstate.disable_ipv6));
+    log_info("Tunnel Device:  %s", gstate.tun_name);
+    log_info("Log Level:      %u", gstate.log_level);
+    log_info("IPv4/IPv6:      %s/%s", is_enabled(gstate.enable_ipv4), is_enabled(gstate.enable_ipv6));
 
     gstate.sock_help = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (gstate.sock_help < 0) {
@@ -282,7 +281,7 @@ int main(int argc, char *argv[])
     }
 
     if (gstate.protocol->ext_handler_l2) {
-        log_info("Ether-type: 0x%04x", gstate.ether_type);
+        log_info("Ether-type:     0x%04x", gstate.ether_type);
     }
 
     if (gstate.protocol->ext_handler_l3) {
@@ -293,7 +292,7 @@ int main(int argc, char *argv[])
         net_add_handler(gstate.sock_mcast_receive, gstate.protocol->ext_handler_l3);
 
         log_info("Listen on multicast: %s", str_addr6(&gstate.mcast_addr));
-        log_info("Listen on unicast: %s", str_addr6(&gstate.ucast_addr));
+        log_info("Listen on unicast:   %s", str_addr6(&gstate.ucast_addr));
     }
 
     if (gstate.protocol->tun_handler) {
