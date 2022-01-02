@@ -1,9 +1,11 @@
 # Geomesh - Basic Mesh Routing Protocols
 
 A code base to quickly implement mesh routing protocols. A collection of basic protocols have been implemented already.
-Included is also a OpenWrt package.
+Included is also a OpenWrt package that is ready to be used in real networks, albeit not being production ready.
 
-The goal is to help to develop better mesh routing protocols, so that community networks such as Freifunk can scale better.
+The goal of this project is to help to develop better mesh routing protocols, so that community networks such as Freifunk can scale better.
+
+Note: These implementations use simplified algorithms that do not adhere to any technical publication.
 
 Implemented Protocols:
 
@@ -17,6 +19,13 @@ Implemented Protocols:
   - sequence number
   - switch between broadcast and unicast
   - hop count metric
+- [aodv-0](src/aodv-0/)
+  - reactive
+  - sequence number
+- [dsr-0](src/dsr-0/)
+  - reactive
+  - sequence number
+  - uses paths of MAC/IP
 - [dsr-bloom-0](src/dsr-bloom-0/)
   - reactive
   - Bloom filter in packet
@@ -38,8 +47,11 @@ Implemented Protocols:
   - incomplete!
 
 Notes:
- - the numbers differentiate between variants / compensate for the lack of creativity
- - DSR stands for Dynamic Source Routing (the path is encoded in the packet)
+ - node identifiers are mapped to the tunnels IP address
+ - the hop count metric is used in all examples
+ - DSR stands for Dynamic Source Routing
+ - AODV stands for Ad-hoc Distance Vector
+ - the number after a routing protocol name differentiates variants
 
 ## Usage
 
@@ -54,17 +66,26 @@ Use the `tun0` interface to exchange packets with other instances.
 
 ```
 $ ./build/geomesh -h
-Usage:  ./build/geomesh -i eth0 -i wlan0
+Usage: geomesh -i eth0 -i wlan0
 
-  -a              Routing algorithm.
-  -d              Run as daemon.
-  -i <interface>  Limit to given interfaces.
-  -l <path>       Write log output to file.
-  -p <peer>       Add a peer manually by address.
-  -s <path>       Domain socket to control the instance.
-  -d              Set route device (Default: tun0).
-  -v              Set verbosity (QUIET, VERBOSE, DEBUG).
-  -h              Prints this help text.
+  --protocol,-p               Select routing protocol
+  --daemon,-d                 Run as daemon
+  --interface,-i <interface>  Limit to given interfaces
+  --log <path>                Write log output to file
+  --peer <address>            Add a peer manually by address
+  --control,-c <path>         Control socket to connect to a daemon
+  --tun-name <ifname>         Set route device (Default: tun0)
+  --tun-setup <1/0>           Configure tun device (Default: 1)
+  --ether-type <hex>          Ethernet type (Default: 88b5)
+  --log-level <level>         Logging level. From 0 to 6 (Default: 3)
+  --verbosity <level>         Set verbosity to quiet, verbose or debug (Default: verbose)
+  --disable-stdin             Disable interactive console on startup
+  --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)
+  --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)
+  --help,-h                   Prints this help text
+  --version,-v                Print version
+
+Valid protocols: dsr-0, flood-0, ...
 ```
 
 ## Daemon Control
@@ -81,22 +102,22 @@ or use `socat`:
 socat - UNIX-CONNECT:/tmp/geomesh.sock
 ```
 
-## Development Notes
+## Further Documents
 
-To add a new routing protocol, add:
-- add a new folder `src/<routing-protocol>/routing.c`
-- add a register method in `routing.h` and call `register_protocol`
+[Development Notes](docs/notes.md)
+[Further Ideas](docs/ideas.md)
 
-Just use other protcols as template. For arrays/list/maps, feel free to use the data structures included from [ut_hash](https://troydhanson.github.io/uthash/).
+## Other Mobile Ad-hoc Network Protocols
 
-Testing can be done on real hardware (using [OpenWrt](https://openwrt.org/)) or by using a network simulator (e.g. [meshnet-lab](https://github.com/mwarning/meshnet-lab)).
+Some popular or interesting Mobile Ad-hoc mesh routing protocols.
 
-Currently, packets are send/received via UDP only. It will be beneficial to support raw Ethernet frames, with only a MAC addresses as sender/receiver address.
+* [OLSR](https://datatracker.ietf.org/doc/html/rfc3626) (proactive, Link State)
+* [Batman-adv](https://www.open-mesh.org/projects/batman-adv/wiki/Wiki) (proactive, Distance Vector)
+* [Babel](https://www.irif.fr/~jch/software/babel/) (proactive, Distance Vector)
+* [Yggdrasil](https://yggdrasil-network.github.io/) (Spanning Tree/Distance Vector)
 
-## TODO
+Interesting projects for low bandwidth networks:
 
-- use `htonl` to make sure tha byte order is correct on different platform
-- add internal tester/simulator
-- [NS3](https://www.nsnam.org/) support
-- implement AODV, it is the routing protocol used e.g. for the ZigBee.
-  - RFC3561: [Ad hoc On-Demand Distance Vector (AODV) Routing](https://tools.ietf.org/html/rfc3561)
+* [Disaster Radio](https://disaster.radio/)
+* [GoTenna](https://gotenna.com/)
+* [Reticulum](https://unsigned.io/projects/reticulum/)
