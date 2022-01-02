@@ -194,14 +194,14 @@ static void vivaldi_update_simple(float *local_pos, const float *remote_pos, flo
 static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
 {
     if (recv_len != sizeof(COMM)) {
-        log_debug("invalid packet size => drop");
+        log_debug("COMM: invalid packet size => drop");
         return;
     }
 
-    log_debug("got comm packet: %s / 0x%08x", str_addr2(from_addr), p->sender_id);
+    log_debug("COMM: got packet: %s / 0x%08x", str_addr(from_addr), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
-        log_debug("own comm packet => drop");
+        log_debug("COMM: recevied own packet => drop");
         return;
     }
 
@@ -254,12 +254,12 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
 static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid packet size => drop");
+        log_debug("DATA: invalid packet size => drop");
         return;
     }
 
     if (p->sender_id == gstate.own_id) {
-        log_debug("own data packet => drop");
+        log_debug("DATA: own packet => drop");
         return;
     }
 
