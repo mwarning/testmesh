@@ -174,7 +174,9 @@ void console_client_handler(int rc, int fd)
         ret = console_exec(fp, argc, argv);
     }
 
-    fclose(fp);
+    if (fp) {
+        fclose(fp);
+    }
 
     // close connection
     if (ret == 1) {
