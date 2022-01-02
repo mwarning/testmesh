@@ -62,7 +62,16 @@ static const Protocol *g_protocols[32];
 static int g_protocols_len = 0;
 
 
-const Protocol *find_protocol(const char *protocol)
+void protocols_print(FILE *fd)
+{
+    fprintf(fd, "Valid protocols: ");
+    for (int i = 0; i < g_protocols_len; i += 1) {
+        fprintf(fd, i ? ", %s" : "%s", g_protocols[i]->name);
+    }
+    fprintf(fd, "\n");
+}
+
+const Protocol *protocols_find(const char *protocol)
 {
     for (int i = 0; i < g_protocols_len; i += 1) {
         if (0 == strcmp(g_protocols[i]->name, protocol)) {
@@ -73,14 +82,14 @@ const Protocol *find_protocol(const char *protocol)
     return NULL;
 }
 
-void register_protocol(const Protocol *p)
+void protocols_register(const Protocol *p)
 {
     if (g_protocols_len == ARRAY_NELEMS(g_protocols)) {
         log_error("Too many protocols.");
         exit(1);
     }
 
-    if (find_protocol(p->name)) {
+    if (protocols_find(p->name)) {
         log_error("Duplicate protocol: %s", p->name);
         exit(1);
     }
@@ -213,8 +222,9 @@ int main(int argc, char *argv[])
         gstate.protocol = g_protocols[0];
     }
 
-    if (getuid() != 0) {
-        printf("Must run as root: %s\n", argv[0]);
+    if (gstate.protocol == NULL) {
+        fprintf(stderr, "No protocol selected (-p)\n");
+        protocols_print(stderr);
         return EXIT_FAILURE;
     }
 

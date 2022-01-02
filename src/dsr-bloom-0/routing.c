@@ -180,5 +180,5 @@ void dsr_bloom_0_register()
         .ext_handler_l2 = &ext_handler_l2,
     };
 
-    register_protocol(&p);
+    protocols_register(&p);
 }

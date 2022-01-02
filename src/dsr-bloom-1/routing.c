@@ -361,5 +361,5 @@ void dsr_bloom_1_register()
         .console = &console_handler,
     };
 
-    register_protocol(&p);
+    protocols_register(&p);
 }

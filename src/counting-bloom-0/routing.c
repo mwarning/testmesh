@@ -390,5 +390,5 @@ void counting_bloom_0_register()
         .console = &console_handler,
     };
 
-    register_protocol(&p);
+    protocols_register(&p);
 }

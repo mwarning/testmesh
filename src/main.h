@@ -24,8 +24,9 @@ typedef struct {
     int (*console)(FILE* file, int argc, char *argv[]);
 } Protocol;
 
-void register_protocol(const Protocol *p);
-const Protocol *find_protocol(const char *protocol);
+void protocols_register(const Protocol *p);
+const Protocol *protocols_find(const char *protocol);
+void protocols_print(FILE *fd);
 
 struct state {
     const Protocol *protocol;

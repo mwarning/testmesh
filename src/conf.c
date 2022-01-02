@@ -155,13 +155,14 @@ static int conf_set(const char *opt, const char *val)
     switch (option->code)
     {
     case oHelp:
-        printf("%s\n", usage_str);
+        printf("%s\n\n", usage_str);
+        protocols_print(stdout);
         exit(0);
     case oVersion:
         printf("1.0.0\n");
         exit(0);
     case oProtocol:
-        gstate.protocol = find_protocol(val);
+        gstate.protocol = protocols_find(val);
         if (gstate.protocol == NULL) {
             log_error("Unknown protocol: %s", val);
             return EXIT_FAILURE;
