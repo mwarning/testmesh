@@ -25,7 +25,7 @@
  * Dynamic Source Routing
  */
 
-#define MAX_PATH_COUNT 20
+#define MAX_PATH_COUNT 30
 #define PATH_CACHE_TIMEOUT_SECONDS 60
 #define SEQNUM_CACHE_TIMEOUT_SECONDS 5
 
@@ -190,7 +190,7 @@ static Addr* get_data_path(DATA *p)
 
 static char *format_path(const Addr *path, uint32_t path_count)
 {
-    static char buf[MAX_PATH_COUNT * 20];
+    static char buf[MAX_PATH_COUNT * 25];
     char mac_buf[18];
     char *cur = buf;
     cur[0] = 0;
