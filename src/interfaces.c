@@ -106,33 +106,18 @@ const char *str_ifindex(unsigned ifindex)
 }
 
 // get mac address of an interface
-static int if_nametomac2(struct mac *addr, const char *ifname)
+static struct mac if_nametomac(const char *ifname)
 {
     struct ifreq if_mac = { 0 };
 
     strncpy(if_mac.ifr_name, ifname, IFNAMSIZ - 1);
     if (ioctl(gstate.sock_help, SIOCGIFHWADDR, &if_mac) < 0) {
-        return 1;
+        return g_nullmac;
     }
 
-    memcpy(addr, &if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
-
-    return 0;
-}
-
-// get interface index of an interface
-static int if_nametoindex2(unsigned *ifindex, const char *ifname)
-{
-    struct ifreq if_idx = { 0 };
-
-    strncpy(if_idx.ifr_name, ifname, IFNAMSIZ - 1);
-    if (ioctl(gstate.sock_help, SIOCGIFINDEX, &if_idx) < 0) {
-        return 1;
-    }
-
-    *ifindex = if_idx.ifr_ifindex;
-
-    return 0;
+    struct mac addr;
+    memcpy(&addr, &if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
+    return addr;
 }
 
 // for raw socket
@@ -196,13 +181,16 @@ static int interface_setup(struct interface *ifa, int quiet)
 {
     const char *ifname = ifa->ifname;
 
-    if (if_nametoindex2(&ifa->ifindex, ifname)) {
-        if (!quiet)
-            log_warning("Interface not found: %s", ifname);
+    ifa->ifindex = if_nametoindex(ifname);
+    if (ifa->ifindex == 0) {
+        if (!quiet) {
+            log_warning("interface not found: %s", ifname);
+        }
         return 1;
     }
 
-    if (if_nametomac2(&ifa->ifmac, ifname)) {
+    ifa->ifmac = if_nametomac(ifname);
+    if (memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) == 0) {
         if (!quiet)
            log_warning("Failed to get interface MAC address: %s", ifname);
         return 1;
