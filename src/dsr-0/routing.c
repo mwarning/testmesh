@@ -355,7 +355,7 @@ static void handle_RREQ(int ifindex, const Address *addr, RREQ *p, unsigned recv
 {
     if (recv_len < offsetof(RREQ, path)
             || recv_len != get_rreq_size(p)
-            || p->path_count > MAX_PATH_COUNT
+            || p->path_count >= MAX_PATH_COUNT
             || p->hop_count != p->path_count) {
         log_debug("RREQ: invalid packet size => drop");
         return;   
