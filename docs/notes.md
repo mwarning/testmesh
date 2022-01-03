@@ -25,6 +25,10 @@ Distance Vector protocols (also known as Table Driven) only maintain a routing t
 
 There are also a lot of hybrid approaches.
 
+## Bi- vs. Unidirectional
+
+Most routing protocols expect a link to allow data to flow in both directions. The link is then called bidirectional.
+
 ## TODO
 
 - use `htonl` to make sure tha byte order is correct on different platforms
