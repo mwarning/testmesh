@@ -316,20 +316,19 @@ static void handle_RREP(int ifindex, const Address *addr, RREP *p, unsigned recv
         str_addr(addr), p->src_id, p->dst_id, p->seq_num, p->hop_count, format_path(path, p->path_count));
 
     if (p->dst_id == gstate.own_id) {
-        log_debug("RREP: arrived at destination");
-
         p->hop_count += 1;
 
-        // for debugging
         if (p->path_count != p->hop_count) {
             log_error("RREP: packet invalid => drop");
-            exit(1);
+            return;
         }
+
+        log_debug("RREP: arrived at destination => accept");
 
         // set sender to path
         memcpy(&path[p->path_count - p->hop_count], address2addr(addr), sizeof(Address));
 
-        // add reverse path to cache
+        // add path to cache
         path_cache_update(p->src_id, path, p->path_count);
 
         send_cached_packet(p->src_id, path, p->path_count);
@@ -369,7 +368,7 @@ static void handle_RREQ(int ifindex, const Address *addr, RREQ *p, unsigned recv
     Addr path[MAX_PATH_COUNT];
     memcpy(path, &p->path[0], sizeof(Addr) * p->path_count);
 
-    log_debug("RREQ: got packet: %s / 0x%08x => 0x%08x / seq_num: %u / hop_count: %u / [%s]",
+    log_debug("RREQ: got packet from %s / 0x%08x => 0x%08x / seq_num: %u / hop_count: %u / [%s]",
         str_addr(addr), p->src_id, p->dst_id, p->seq_num, p->hop_count, format_path(path, p->path_count));
 
     if (p->dst_id == gstate.own_id) {
