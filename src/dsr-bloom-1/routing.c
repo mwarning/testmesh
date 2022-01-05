@@ -48,12 +48,22 @@ typedef struct __attribute__((__packed__)) {
     uint8_t bloom[BLOOM_M];
     uint8_t hop_cnt; // we usually want a bandwidth metric here
     uint16_t seq_num; // not needed, but useful for debugging
-    uint16_t length;
-    uint8_t payload[2000];
+    uint16_t payload_length;
+    //uint8_t payload[ETH_FRAME_LEN]; // invisible
 } DATA;
 
 static Entry *g_neighbors = NULL;
 static uint16_t g_seq_num = 0;
+
+static uint8_t *get_data_payload(const DATA *data)
+{
+    return ((uint8_t*) data) + sizeof(DATA);
+}
+
+static size_t get_data_size(const DATA *data)
+{
+    return sizeof(DATA) + data->payload_length;
+}
 
 // set BLOOM_K bits based on id
 static void bloom_init(uint8_t *bloom, uint64_t id)
@@ -174,8 +184,8 @@ static void forward_DATA(DATA *p, unsigned recv_len)
 
 static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *p, size_t recv_len)
 {
-    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid DATA size => drop");
+    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+        log_debug("DATA: invalid size => drop");
         return;
     }
 
@@ -184,25 +194,27 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
         return;
     }
 
-    log_debug("got DATA packet from neighbor 0x%08x => 0x%08x (seq_num: %d, hop_cnt: %d, %s)",
+    uint8_t *payload = get_data_payload(p);
+
+    log_debug("DATA: got packet from neighbor 0x%08x => 0x%08x (seq_num: %d, hop_cnt: %d, %s)",
         p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, address_type_str(to_addr));
 
     if (p->dst_id == gstate.own_id) {
-        log_debug("write %u bytes to %s => accept", (unsigned) p->length, gstate.tun_name);
+        log_debug("DATA: write %u bytes to %s => accept", (unsigned) p->payload_length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
-        tun_write(p->payload, p->length);
+        tun_write(payload, p->payload_length);
         return;
     }
 
     if (bloom_test(&p->bloom[0], gstate.own_id)) {
-        log_debug("own id in packets bloom filter => drop");
+        log_debug("DATA: own id in packets bloom filter => drop");
         return;
     }
 
     // limit bloom filter fill rate to BLOOM_LIMIT percent
     if (bloom_ones(&p->bloom[0]) > (int) ((BLOOM_M * 8) * BLOOM_LIMIT) / 100) {
-        log_debug("bloom filter occupancy reached => drop");
+        log_debug("DATA: bloom filter occupancy reached => drop");
         return;
     }
 
@@ -219,6 +231,8 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
 
     p->hop_cnt += 1;
 
+    log_debug("DATA: not for us => forward");
+
     forward_DATA(p, recv_len);
 }
 
@@ -226,30 +240,30 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
 static void tun_handler(int events, int fd)
 {
     uint32_t dst_id;
-
-    DATA data = {
-        .type = TYPE_DATA,
-    };
+    uint8_t buffer[ETH_FRAME_LEN];
+    DATA *data = (DATA*) &buffer[0];
 
     if (events <= 0) {
         return;
     }
 
     while (1) {
-        ssize_t read_len = tun_read(&dst_id, &data.payload[0], sizeof(data.payload));
+        uint8_t *payload = get_data_payload(data);
+        ssize_t read_len = tun_read(&dst_id, payload, sizeof(buffer) - sizeof(DATA));
 
         if (read_len <= 0) {
             break;
         }
 
-        data.sender_id = gstate.own_id;
-        data.hop_cnt = 0;
-        data.seq_num = g_seq_num++;
-        data.dst_id = dst_id;
-        data.length = read_len;
-        bloom_init(&data.bloom[0], gstate.own_id);
+        data->type = TYPE_DATA;
+        data->sender_id = gstate.own_id;
+        data->hop_cnt = 0;
+        data->seq_num = g_seq_num++;
+        data->dst_id = dst_id;
+        data->payload_length = read_len;
+        bloom_init(&data->bloom[0], gstate.own_id);
 
-        forward_DATA(&data, offsetof(DATA, payload) + read_len);
+        forward_DATA(data, get_data_size(data));
     }
 }
 
