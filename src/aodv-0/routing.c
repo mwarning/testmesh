@@ -19,8 +19,6 @@
 
 #include "routing.h"
 
-// incomplete
-
 enum {
     TYPE_DATA,
     TYPE_RREQ,
@@ -84,7 +82,7 @@ static void routing_entry_timeout()
 
     HASH_ITER(hh, g_routing_entries, cur, tmp) {
         if ((cur->last_updated + TIMEOUT_ROUTING_ENTRY) < gstate.time_now) {
-            log_debug("timeout routing entry 0x%08x", cur->dst_id);
+            log_debug("timeout routing entry for id 0x%08x", cur->dst_id);
             HASH_DEL(g_routing_entries, cur);
             free(cur);
         }
@@ -337,7 +335,6 @@ static void ext_handler_l2(int events, int fd)
     Address to_addr;
     init_macaddr(&from_addr, &eh->h_source, ifindex);
     init_macaddr(&to_addr, &eh->h_dest, ifindex);
-
 
     switch (payload[0]) {
     case TYPE_DATA:
