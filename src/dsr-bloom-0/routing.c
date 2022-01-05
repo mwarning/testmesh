@@ -33,15 +33,26 @@ typedef struct __attribute__((__packed__)) {
     uint32_t src_id; //needed for the IP header that is contructed on the other end
     uint32_t dst_id;
     uint8_t bloom[BLOOM_M];
-    uint16_t length; // might not be needed
-    uint8_t payload[2000];
+    uint16_t payload_length; // might not be needed
+    //uint8_t payload[ETH_FRAME_LEN]; // invisible
 } DATA;
+
+static uint8_t *get_data_payload(const DATA *data)
+{
+    return ((uint8_t*) data) + sizeof(DATA);
+}
+
+static size_t get_data_size(const DATA *data)
+{
+    return sizeof(DATA) + data->payload_length;
+}
 
 static void bloom_init(uint8_t *bloom, uint32_t id)
 {
     memset(bloom, 0, BLOOM_M);
 
     uint64_t next = id;
+    // pseudo random generator
     for (int i = 0; i < BLOOM_K; i++) {
         next = next * 1103515245 + 12345;
         uint32_t r = (next / 65536) % 32768;
@@ -80,29 +91,31 @@ static void bloom_add(uint8_t *bloom, uint32_t id)
 
 static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
 {
-    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
-        log_debug("invalid DATA packet size => drop");
+    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+        log_debug("DATA: invalid packet size => drop");
         return;
     }
 
-    log_debug("got DATA packet: %s / 0x%08x => 0x%08x",
+    log_debug("DATA: got packet: %s / 0x%08x => 0x%08x",
         str_addr(addr), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
-        log_debug("own source id => drop packet");
+        log_debug("DATA: own source id => drop");
         return;
     }
 
+    uint8_t *payload = get_data_payload(p);
+
     if (p->dst_id == gstate.own_id) {
-        log_debug("write %u bytes to %s", (unsigned) p->length, gstate.tun_name);
+        log_debug("DATA: write %u bytes to %s => accept", (unsigned) p->payload_length, gstate.tun_name);
 
         // destination is the local tun0 interface => write packet to tun0
-        tun_write(p->payload, p->length);
+        tun_write(payload, p->payload_length);
     } else if (!bloom_test(&p->bloom[0], gstate.own_id)) {
         bloom_add(&p->bloom[0], gstate.own_id);
         send_bcasts_l2(p, recv_len);
     } else {
-        // drop packet
+        log_debug("DATA: own id in bloom filter => drop");
     }
 }
 
@@ -110,27 +123,28 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
 static void tun_handler(int events, int fd)
 {
     uint32_t dst_id;
-    DATA data = {
-        .type = TYPE_DATA,
-    };
+    uint8_t buffer[ETH_FRAME_LEN];
+    DATA *data = (DATA*) &buffer[0];
 
     if (events <= 0) {
         return;
     }
 
     while (1) {
-        ssize_t read_len = tun_read(&dst_id, &data.payload[0], sizeof(data.payload));
+        uint8_t *payload = get_data_payload(data);
+        ssize_t read_len = tun_read(&dst_id, payload, sizeof(buffer) - sizeof(DATA));
 
         if (read_len <= 0) {
             break;
         }
 
-        data.src_id = gstate.own_id;
-        data.dst_id = dst_id;
-        data.length = read_len;
-        memset(&data.bloom, 0, sizeof(data.bloom));
+        data->type = TYPE_DATA;
+        data->src_id = gstate.own_id;
+        data->dst_id = dst_id;
+        data->payload_length = read_len;
+        memset(&data->bloom, 0, sizeof(data->bloom));
 
-        send_bcasts_l2(&data, offsetof(DATA, payload) + read_len);
+        send_bcasts_l2(data, get_data_size(data));
     }
 }
 
