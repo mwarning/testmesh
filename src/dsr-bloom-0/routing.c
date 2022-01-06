@@ -112,6 +112,7 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
         // destination is the local tun0 interface => write packet to tun0
         tun_write(payload, p->payload_length);
     } else if (!bloom_test(&p->bloom[0], gstate.own_id)) {
+        log_debug("DATA: own id not in bloom filter => forward");
         bloom_add(&p->bloom[0], gstate.own_id);
         send_bcasts_l2(p, recv_len);
     } else {
