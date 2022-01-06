@@ -172,11 +172,11 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     }
 
     if (next) {
-        log_debug("send as unicast to 0x%08x (seq_num: %d, hop_cnt: %d)",
+        log_debug("DATA: send as unicast to 0x%08x (seq_num: %d, hop_cnt: %d)",
             next->sender_id, (int) p->seq_num, (int) p->hop_cnt);
         send_ucast_l2(&next->addr, p, recv_len);
     } else {
-        log_debug("send as broadcast (seq_num: %d, hop_cnt: %d)",
+        log_debug("DATA: send as broadcast (seq_num: %d, hop_cnt: %d)",
             (int) p->seq_num, (int) p->hop_cnt);
         send_bcasts_l2(p, recv_len);
     }
