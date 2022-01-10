@@ -1,4 +1,4 @@
-#Ideas
+# Ideas
 
 There are several desirable properties of mesh routing protocols:
 
