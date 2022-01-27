@@ -9,11 +9,11 @@
 #include "../main.h"
 
 
-typedef struct NeighborCacheEntry_ {
+typedef struct NeighborCacheEntry {
     uint32_t id;
     Address addr;
     time_t updated;
-    struct NeighborCacheEntry_ *next;
+    struct NeighborCacheEntry *next;
 } NeighborCacheEntry;
 
 static NeighborCacheEntry *g_neighbor_cache = NULL;
