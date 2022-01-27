@@ -84,10 +84,10 @@ Valid protocols: dsr-0, flood-0, ...
 
 ## Daemon Control
 
-If geomesh is started as daemon (`-d`), a control socket can be used `./geomesh ... -s /tmp/geomesh.sock` to inspect the state.
+If geomesh is started with the control socket option (`./geomesh -c /tmp/geomesh.sock`), the instance can be controlled remotely:
 
 ```
-geomesh-ctl -s /tmp/geomesh.sock
+geomesh-ctl -c /tmp/geomesh.sock
 ```
 
 or use `socat`:
