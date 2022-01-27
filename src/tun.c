@@ -140,7 +140,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (addr4_is_mesh(saddr)) {
             src_id = in4_addr_id(saddr);
         } else {
-            log_warning("got packet with non-mesh IPv4 source address (%s) => drop", str_in4(saddr));
+            log_warning("read packet with non-mesh IPv4 source address (%s) on %s => drop", str_in4(saddr), gstate.tun_name);
             return 1;
         }
 
@@ -184,7 +184,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (addr6_is_mesh(saddr)) {
             src_id = in6_addr_id(saddr);
         } else {
-            log_warning("got packet with non-mesh IPv6 source address (%s) => drop", str_in6(saddr));
+            log_warning("read packet with non-mesh IPv6 source address (%s) on %s => drop", str_in6(saddr), gstate.tun_name);
             return 1;
         }
 
@@ -313,7 +313,7 @@ static void sanity_check()
 
     uint32_t extracted_id = in6_addr_id(&addr_bin);
     if (extracted_id != id) {
-        log_error("inconsistent id in sanity_check: 0x%08x != 0x%08x", extracted_id, id);
+        log_error("inconsistent id in sanity_check(): 0x%08x != 0x%08x", extracted_id, id);
         exit(1);
     }
 }
@@ -321,14 +321,14 @@ static void sanity_check()
 int tun_init(uint32_t id, const char *ifname)
 {
     if (id == 0) {
-        log_error("No id set.");
+        log_error("No own identifier set.");
         return EXIT_FAILURE;
     }
 
     sanity_check();
 
     if (ifname == NULL) {
-        log_error("No tunnel interface set.");
+        log_error("No tunnel interface name set.");
         return EXIT_FAILURE;
     }
 
@@ -337,6 +337,7 @@ int tun_init(uint32_t id, const char *ifname)
         return EXIT_FAILURE;
     }
 
+    // tun interface setup
     if (gstate.tun_setup) {
         execute("ip link set up %s", ifname);
 
