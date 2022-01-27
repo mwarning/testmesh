@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
 {
     gstate.time_started = time(0);
 
-    if (is_client(argv[0])) {
+    if (argc > 0 && is_client(argv[0])) {
         // called as control client
         return client_main(argc, argv);
     }
@@ -231,7 +231,7 @@ int main(int argc, char *argv[])
     }
 
     if (getuid() != 0) {
-        printf("Must run as root: %s\n", argv[0]);
+        printf("Must run as root.\n");
         return EXIT_FAILURE;
     }
 
