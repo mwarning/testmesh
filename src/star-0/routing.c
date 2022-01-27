@@ -462,7 +462,6 @@ static void tun_handler(int events, int fd)
             DATA *p = (DATA*) buffer;
             p->type = TYPE_DATA;
             p->src_id = gstate.own_id;
-            //p->src_root_hop_count = g_current_root.hop_count;
             p->dst_id = dst_id;
             p->dst_root_hop_count = node->hop_count;
             p->payload_length = read_len;
@@ -541,8 +540,8 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 
     if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp,
-        	"r: print root\n"
-        	"n: print routing table"
+            "r: print root\n"
+            "n: print routing table"
         );
     } else if (argc == 1 && !strcmp(argv[0], "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
