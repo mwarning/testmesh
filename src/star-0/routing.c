@@ -26,9 +26,9 @@
 //https://www.open-mesh.org/projects/batman-adv/wiki/DistributedArpTable
 
 
-#define TIMEOUT_ROOTS_SEC 5
-#define MAX_PATH_COUNT 20
-#define PATH_CACHE_TIMEOUT_SECONDS 60
+#define ROOT_TIMEOUT_SECONDS 5
+#define TIMEOUT_ROOTS_SECONDS 3
+#define NODE_TIMEOUT_SECONDS 30
 #define PACKET_CACHE_TIMEOUT_SECONDS 5
 
 enum {
@@ -113,7 +113,7 @@ static void dht_node_timeout()
     Node *cur;
 
     LL_FOREACH_SAFE(g_dht_nodes, cur, tmp) {
-        if ((cur->updated + TIMEOUT_ROOTS_SEC) < gstate.time_now) {
+        if ((cur->updated + NODE_TIMEOUT_SECONDS) < gstate.time_now) {
             log_debug("timeout dht entry for id 0x%08x", cur->id);
             LL_DELETE(g_dht_nodes, cur);
         }
@@ -577,7 +577,7 @@ static void send_root()
 
     // timeout foreign root
     if (g_current_root.id != gstate.own_id) {
-        if ((g_current_root.updated + TIMEOUT_ROOTS_SEC) <= gstate.time_now) {
+        if ((g_current_root.updated + ROOT_TIMEOUT_SECONDS) <= gstate.time_now) {
             log_debug("timeout root 0x%08x", g_current_root.id);
             current_root_init();
         }
@@ -585,8 +585,8 @@ static void send_root()
 
     // send own root
     if (g_current_root.id == gstate.own_id) {
-        // only send every TIMEOUT_ROOTS_SEC
-        if (g_root_last_send && gstate.time_now < (g_root_last_send + TIMEOUT_ROOTS_SEC)) {
+        // only send every TIMEOUT_ROOTS_SECONDS
+        if (g_root_last_send && gstate.time_now < (g_root_last_send + TIMEOUT_ROOTS_SECONDS)) {
             return;
         }
         g_root_last_send = gstate.time_now;
