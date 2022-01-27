@@ -37,6 +37,10 @@ Implemented Protocols:
   - degrade filter on every hop
   - send routing information as one hop bradcast to neighbors
   - send payload as unicast along gradient
+- [star-0](src/star-0/)
+  - reactive
+  - route via distance to a single root
+  - uses a naive DHT
 - [vivaldi-0](src/vivaldi-0/)
   - proactive
   - incomplete!
