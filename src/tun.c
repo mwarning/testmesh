@@ -129,24 +129,22 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             return 1;
         }
 
-        // map destination IP address to mesh identifier
+        // map destination IP address to mesh id
         if (addr4_is_mesh(daddr)) {
             dst_id = in4_addr_id(daddr);
-        } else {
+        } else if (gstate.gateway_id_set){
             dst_id = gstate.gateway_id;
+        } else {
+            // invalid id
+            log_debug2("parse_ip_packet: no mesh destination for IPv4 packet => drop");
+            return 1;
         }
 
-        // map source IP address to mesh identifier
+        // map source IP address to mesh id
         if (addr4_is_mesh(saddr)) {
             src_id = in4_addr_id(saddr);
         } else {
             log_warning("read packet with non-mesh IPv4 source address (%s) on %s => drop", str_in4(saddr), gstate.tun_name);
-            return 1;
-        }
-
-        if (dst_id == 0) {
-            // invalid identifier
-            log_debug2("parse_ip_packet: no destination for IPv4 packet => drop");
             return 1;
         }
 
@@ -176,8 +174,12 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         // map destination IP destination to mesh id
         if (addr6_is_mesh(daddr)) {
             dst_id = in6_addr_id(daddr);
-        } else {
+        } else if (gstate.gateway_id_set) {
             dst_id = gstate.gateway_id;
+        } else {
+            // invalid id
+            log_debug2("parse_ip_packet: no mesh destination for IPv6 packet => drop");
+            return 1;
         }
 
         // map source IP address to mesh id
@@ -185,12 +187,6 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             src_id = in6_addr_id(saddr);
         } else {
             log_warning("read packet with non-mesh IPv6 source address (%s) on %s => drop", str_in6(saddr), gstate.tun_name);
-            return 1;
-        }
-
-        if (dst_id == 0) {
-            // invalid id
-            log_debug2("parse_ip_packet: no destination for IPv6 packet => drop");
             return 1;
         }
 

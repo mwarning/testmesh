@@ -35,6 +35,7 @@ struct state gstate = {
     .ether_type = 0x88b5, // "Local Experiment Ethertype 1"
 
     .gateway_id = 0,
+    .gateway_id_set = 0,
     .own_id = 0,
 
     .is_running = 1,
@@ -240,7 +241,7 @@ int main(int argc, char *argv[])
         log_info("Own ID:         0x%08x", gstate.own_id);
     }
 
-    if (gstate.gateway_id) {
+    if (gstate.gateway_id_set) {
         log_info("Gateway ID:     0x%08x", gstate.gateway_id);
     } else {
         log_info("Gateway ID:     none");

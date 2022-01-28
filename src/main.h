@@ -39,6 +39,7 @@ struct state {
     uint16_t ether_type;
 
     uint32_t gateway_id;
+    uint8_t gateway_id_set;
     uint32_t own_id;
 
     uint8_t do_fork;

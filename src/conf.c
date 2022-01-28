@@ -177,7 +177,7 @@ static int conf_set(const char *opt, const char *val)
         gstate.control_socket_path = strdup(val);
         break;
     case oGatewayIdentifier:
-        if (parse_hex(&n, val, sizeof(gstate.gateway_id)) || n == 0) {
+        if (parse_hex(&n, val, sizeof(gstate.gateway_id))) {
             log_error("Invalid hex value for %s: %s", opt, val);
             return EXIT_FAILURE;
         }
@@ -186,13 +186,14 @@ static int conf_set(const char *opt, const char *val)
             return EXIT_FAILURE;
         }
         gstate.gateway_id = n;
+        gstate.gateway_id_set = 1;
         break;
     case oOwnIdentifier:
-        if (parse_hex(&n, val, sizeof(gstate.own_id)) || n == 0) {
+        if (parse_hex(&n, val, sizeof(gstate.own_id))) {
             log_error("Invalid hex value for %s: %s", opt, val);
             return EXIT_FAILURE;
         }
-        if (gstate.gateway_id == n) {
+        if (gstate.gateway_id_set && gstate.gateway_id == n) {
             log_error("Gateway and own id are the same: %08x", n);
             return EXIT_FAILURE;
         }

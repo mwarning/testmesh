@@ -99,7 +99,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
     } else if (MATCH(1, "i")) {
         fprintf(fp, "protocol:   %s\n", gstate.protocol->name);
         fprintf(fp, "own id:     0x%08x\n", gstate.own_id);
-        if (gstate.gateway_id) {
+        if (gstate.gateway_id_set) {
             fprintf(fp, "gateway id: 0x%08x\n", gstate.gateway_id);
         } else {
             fprintf(fp, "gateway id: none\n");
