@@ -226,6 +226,10 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
 
     ssize_t write_len = write(gstate.tun_fd, buf, buflen);
 
+    if (write_len > 0) {
+        gstate.tun_write_bytes += write_len;
+    }
+
     log_debug2("tun_write: %zu bytes, %s", write_len, debug_payload(buf, buflen));
 
     if (write_len != buflen) {
@@ -241,6 +245,10 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 
     if (buf == NULL || read_len <= 0 || !ip_enabled(buf[0])) {
         return -1;
+    }
+
+    if (read_len > 0) {
+        gstate.tun_read_bytes += read_len;
     }
 
     log_debug2("tun_read: %zu bytes, %s", read_len, debug_payload(buf, read_len));
