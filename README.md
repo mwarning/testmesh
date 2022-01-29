@@ -105,7 +105,7 @@ socat - UNIX-CONNECT:/tmp/geomesh.sock
 ## Further Reading
 
 * [Development Notes](docs/notes.md)
-* [Further Ideas](docs/ideas.md)
+* [Whish List](docs/whishes.md)
 
 ## Other Mobile Ad-hoc Network Protocols
 

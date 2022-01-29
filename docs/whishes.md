@@ -1,6 +1,6 @@
-# Ideas
+# Whish List
 
-There are several desirable properties of mesh routing protocols:
+A list of several desirable properties of a mesh routing protocol:
 
 - usable also in huge sized networks
   - reachability of a node increases:
