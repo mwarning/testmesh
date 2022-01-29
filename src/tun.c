@@ -205,9 +205,9 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
     return 1;
 }
 
-static int ip_enabled(uint8_t *data, ssize_t len)
+static int ip_enabled(const uint8_t ip_byte)
 {
-    int ip_version = (data[0] >> 4) & 0x0f;
+    int ip_version = (ip_byte >> 4) & 0x0f;
     switch (ip_version) {
         case 4:
             return gstate.enable_ipv4;
@@ -220,7 +220,7 @@ static int ip_enabled(uint8_t *data, ssize_t len)
 
 ssize_t tun_write(uint8_t *buf, ssize_t buflen)
 {
-    if (buf == NULL || buflen <= 0 || !ip_enabled(buf, buflen)) {
+    if (buf == NULL || buflen <= 0 || !ip_enabled(buf[0])) {
         return -1;
     }
 
@@ -239,7 +239,7 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 {
     ssize_t read_len = read(gstate.tun_fd, buf, buflen);
 
-    if (buf == NULL || read_len <= 0 || !ip_enabled(buf, buflen)) {
+    if (buf == NULL || read_len <= 0 || !ip_enabled(buf[0])) {
         return -1;
     }
 
