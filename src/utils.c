@@ -496,7 +496,7 @@ const char *format_mac(char buf[18], const struct mac *addr)
     return buf;
 }
 
-const char *format_duration(char buf[64], time_t from, time_t to)
+const char *format_duration(char buf[32], time_t from, time_t to)
 {
     int days, hours, minutes, seconds;
     long long int secs;
@@ -531,7 +531,7 @@ const char *format_duration(char buf[64], time_t from, time_t to)
     return buf;
 }
 
-const char *format_size(char buf[64], uint64_t bytes)
+const char *format_size(char buf[32], uint64_t bytes)
 {
     if (bytes < 1000) {
         sprintf(buf, "%uB", (unsigned) bytes);
