@@ -41,6 +41,7 @@ static struct option_t g_options[] = {
     {"--gateway-id", 1, oGatewayIdentifier},
     {"--own-id", 1, oOwnIdentifier},
     {"--ifname", 1, oInterface},
+    {"--interface", 1, oInterface},
     {"-i", 1, oInterface},
     {"--log-file", 1, oLogFile},
     {"-lf", 1, oLogFile},
@@ -72,6 +73,8 @@ static const char *usage_str =
     "  --protocol,-p               Select routing protocol\n"
     "  --daemon,-d                 Run as daemon\n"
     "  --interface,-i <interface>  Limit to given interfaces\n"
+    "  --own-id <id>               32 bit hex identifier of this node. (default: random)\n"
+    "  --gateway-id <id>           32 bit hex identifier of the gateway node. (default: none)\n"
     "  --peer <address>            Add a peer manually by address\n"
     "  --control,-c <path>         Control socket to connect to a daemon\n"
     "  --tun-name <ifname>         Set route device (Default: tun0)\n"

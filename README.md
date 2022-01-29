@@ -70,6 +70,8 @@ Usage: geomesh -i eth0 -i wlan0
   --protocol,-p               Select routing protocol
   --daemon,-d                 Run as daemon
   --interface,-i <interface>  Limit to given interfaces
+  --own-id <id>               32 bit hex identifier of this node. (default: random)
+  --gateway-id <id>           32 bit hex identifier of the gateway node. (default: none)
   --peer <address>            Add a peer manually by address
   --control,-c <path>         Control socket to connect to a daemon
   --tun-name <ifname>         Set route device (Default: tun0)
