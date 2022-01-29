@@ -531,10 +531,10 @@ const char *format_duration(char buf[64], time_t from, time_t to)
     return buf;
 }
 
-const char *format_size(char buf[64], unsigned bytes)
+const char *format_size(char buf[64], uint64_t bytes)
 {
     if (bytes < 1000) {
-        sprintf(buf, "%uB", bytes);
+        sprintf(buf, "%uB", (unsigned) bytes);
     } else if (bytes < 1000000) {
         sprintf(buf, "%.0fK", bytes / 1000.0);
     } else if (bytes < 1000000000) {
