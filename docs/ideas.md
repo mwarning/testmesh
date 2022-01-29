@@ -19,7 +19,7 @@ There are several desirable properties of mesh routing protocols:
 - use timing information
   - agree on individual send/receive times to support very low powered devices
 - hard to interfere by malicious peers
-  - prevent broadcast storm / resource exhaustion
+  - prevent resource exhaustion (e.g. broadcast storms) / DDOS attacks
   - prevent traffic to be intentionally dropped / blackholed
 - incentive for nodes to participate
   => a nodes that forwards traffic gets it's own traffic forwarded with priority
