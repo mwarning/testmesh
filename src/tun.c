@@ -316,11 +316,6 @@ static void sanity_check()
 
 int tun_init(uint32_t id, const char *ifname)
 {
-    if (id == 0) {
-        log_error("No own identifier set.");
-        return EXIT_FAILURE;
-    }
-
     sanity_check();
 
     if (ifname == NULL) {

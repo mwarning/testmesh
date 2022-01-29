@@ -184,7 +184,7 @@ static int conf_set(const char *opt, const char *val)
             log_error("Invalid hex value for %s: %s", opt, val);
             return EXIT_FAILURE;
         }
-        if (gstate.own_id == n) {
+        if (gstate.own_id_set && gstate.own_id == n) {
             log_error("Own and gateway id are the same: %08x", n);
             return EXIT_FAILURE;
         }
@@ -201,6 +201,7 @@ static int conf_set(const char *opt, const char *val)
             return EXIT_FAILURE;
         }
         gstate.own_id = n;
+        gstate.own_id_set = 1;
         break;
     case oDisableStdin:
         gstate.disable_stdin = 1;

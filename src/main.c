@@ -37,6 +37,7 @@ struct state gstate = {
     .gateway_id = 0,
     .gateway_id_set = 0,
     .own_id = 0,
+    .own_id_set = 0,
 
     .is_running = 1,
     .control_socket_path = NULL,
@@ -208,7 +209,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (gstate.own_id == 0) {
+    if (!gstate.own_id_set) {
         if (!bytes_random(&gstate.own_id, sizeof(gstate.own_id))) {
             log_error("Cannot create random identifier.");
             return EXIT_FAILURE;

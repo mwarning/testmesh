@@ -41,6 +41,7 @@ struct state {
     uint32_t gateway_id;
     uint8_t gateway_id_set;
     uint32_t own_id;
+    uint32_t own_id_set;
 
     uint8_t do_fork;
     // state
