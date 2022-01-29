@@ -335,6 +335,10 @@ int main(int argc, char *argv[])
 
     log_info("Shutting down...");
 
+    if (gstate.protocol->exit) {
+        gstate.protocol->exit();
+    }
+
     if (gstate.log_to_file) {
         fclose(gstate.log_to_file);
     }
