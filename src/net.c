@@ -100,7 +100,9 @@ void net_loop(void)
 		rc = poll(g_fds, g_count, 1000);
 
 		if (rc < 0) {
-			//log_error("poll(): %s", strerror(errno));
+			if (gstate.is_running) {
+				log_error("poll(): %s", strerror(errno));
+			}
 			break;
 		}
 
