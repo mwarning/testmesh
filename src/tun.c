@@ -296,7 +296,7 @@ static void execute(const char *fmt, ...)
 
 static void sanity_check()
 {
-    uint32_t id = 1234567890;
+    uint32_t id = 0x12345678;
     const uint8_t *addr = (const uint8_t*) &id;
 
     char addr_str[INET6_ADDRSTRLEN];
