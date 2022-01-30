@@ -90,7 +90,7 @@ void packet_cache_init(uint32_t timeout)
     net_add_handler(-1, &packet_cache_timeout);
 }
 
-void packet_cache_exit()
+void packet_cache_clear()
 {
     struct PacketCacheEntry *cur;
     struct PacketCacheEntry *tmp;
