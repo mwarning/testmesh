@@ -73,7 +73,7 @@ static int tokenizer(char *argv[], int argc_max, char *input)
 static int console_exec(FILE *fp, int argc, char *argv[])
 {
     char bytes_buf[32];
-    #define MATCH(n, cmd) (n == argc && !strcmp(argv[0], cmd))
+    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
 
     int ret = 0;
 
@@ -108,8 +108,8 @@ static int console_exec(FILE *fp, int argc, char *argv[])
         fprintf(fp, "process id: %u\n", (unsigned) getpid());
         fprintf(fp, "log level:  %u\n", gstate.log_level);
         fprintf(fp, "tun device: %s\n", gstate.tun_name);
-        fprintf(fp, "tun read: %s\n", format_size(bytes_buf, gstate.tun_read_bytes));
-        fprintf(fp, "tun write: %s\n", format_size(bytes_buf, gstate.tun_write_bytes));
+        fprintf(fp, "tun read:   %s\n", format_size(bytes_buf, gstate.tun_read_bytes));
+        fprintf(fp, "tun write:  %s\n", format_size(bytes_buf, gstate.tun_write_bytes));
         if (gstate.protocol->console) {
             gstate.protocol->console(fp, argc, argv);
         }

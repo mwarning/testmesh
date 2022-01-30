@@ -1,6 +1,8 @@
 #ifndef _SEQNUM_CACHE_H_
 #define _SEQNUM_CACHE_H_
 
+#include <stdint.h>
+
 /*
  * Track sequence numbers to detect duplicate packets.
  */

@@ -182,6 +182,15 @@ static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_sto
     return addrbuf;
 }
 
+const char *str_addr(const Address *addr)
+{
+    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
+    static unsigned addrbuf_i = 0;
+    char *buf = addrbuf[++addrbuf_i % 2];
+
+    return format_address(buf, addr);
+}
+
 const char *str_addr_storage(const struct sockaddr_storage *addr)
 {
     static char addrbuf[2][INET6_ADDRSTRLEN + 8];
@@ -453,6 +462,19 @@ int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2)
     return memcmp(addr1, addr2, sizeof(struct in6_addr));
 }
 
+const char *format_address(char buf[64], const Address *addr)
+{
+    switch (addr->family) {
+    case AF_INET6:
+    case AF_INET:
+        return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
+    case AF_MAC:
+        return format_mac(buf, &addr->mac.addr);
+    default:
+        return NULL;
+    }
+}
+
 const char *format_mac(char buf[18], const struct mac *addr)
 {
     sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
@@ -511,21 +533,4 @@ const char *format_size(char buf[32], uint64_t bytes)
     }
 
     return buf;
-}
-
-const char *str_addr(const Address *addr)
-{
-    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
-    static unsigned addrbuf_i = 0;
-    char *buf = addrbuf[++addrbuf_i % 2];
-
-    switch (addr->family) {
-    case AF_INET6:
-    case AF_INET:
-        return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
-    case AF_MAC:
-        return format_mac(buf, &addr->mac.addr);
-    default:
-        return NULL;
-    }
 }

@@ -359,11 +359,13 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     char buf_duration[64];
     char buf_pos[8 * DIM];
 
-    if (argc == 1 && !strcmp(argv[0], "h")) {
+    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
+
+    if (MATCH(1, "h")) {
         fprintf(fp, "n: print neighbor table\n");
-    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+    } else if (MATCH(1, "i")) {
         fprintf(fp, "  own pos: %s\n", format_pos(buf_pos, g_own_pos));
-    } else if (argc == 1 && !strcmp(argv[0], "n")) {
+    } else if (MATCH(1, "n")) {
         unsigned counter = 0;
         Neighbor *cur;
         Neighbor *tmp;

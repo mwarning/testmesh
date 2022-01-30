@@ -330,11 +330,13 @@ static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 
 static int console_handler(FILE* fp, int argc, char *argv[])
 {
-    if (argc == 1 && !strcmp(argv[0], "h")) {
+    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
+
+    if (MATCH(1, "h")) {
         fprintf(fp, "n: print routing table\n");
-    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+    } else if (MATCH(1, "i")) {
         fprintf(fp, "routing entry timeout: %ds\n", TIMEOUT_ROUTING_ENTRY);
-    } else if (argc == 1 && !strcmp(argv[0], "n")) {
+    } else if (MATCH(1, "n")) {
         RoutingEntry *cur;
         RoutingEntry *tmp;
         char buf[64];

@@ -66,6 +66,7 @@ int addr_len(const struct sockaddr_storage *addr);
 int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2);
 int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2);
 
+const char *format_address(char buf[64], const Address *addr);
 const char *format_mac(char buf[18], const struct mac *addr);
 const char *format_duration(char buf[32], time_t from, time_t to);
 const char *format_size(char buf[32], uint64_t bytes);

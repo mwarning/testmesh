@@ -199,25 +199,6 @@ static int interface_setup(struct interface *ifa, int quiet)
     return 0;
 }
 
-unsigned interface_get_ifindex_by_name(const char *ifname)
-{
-    struct interface *ifa;
-
-    if (ifname == NULL) {
-        return 0;
-    }
-
-    ifa = g_interfaces;
-    while (ifa) {
-        if (0 == strcmp(ifa->ifname, ifname)) {
-            return ifa->ifindex;
-        }
-        ifa = ifa->next;
-    }
-
-    return if_nametoindex(ifname);
-}
-
 static struct interface *get_interface_by_fd(int fd)
 {
     struct interface *ifa = NULL;
@@ -235,19 +216,6 @@ static struct interface *get_interface_by_fd(int fd)
     }
 
     return NULL;
-}
-
-// TODO: replace by interface_get_ifindex_by_name, as ifindex might chance when wifi gets up/down
-unsigned interface_get_ifindex(int fd)
-{
-    struct interface *ifa = get_interface_by_fd(fd);
-    return ifa ? ifa->ifindex : 0;
-}
-
-struct mac interface_get_ifmac(int fd)
-{
-    struct interface *ifa = get_interface_by_fd(fd);
-    return ifa ? ifa->ifmac : g_nullmac;
 }
 
 static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
@@ -305,7 +273,6 @@ int interface_del(const char *ifname)
     if (g_interfaces == NULL) {
         return 1;
     }
-
 
     ifa_prev = NULL;
     ifa = g_interfaces;
