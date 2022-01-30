@@ -45,7 +45,7 @@ void packet_cache_get_and_remove(uint8_t *data_ret, size_t *data_length_ret, uin
 {
     PacketCacheEntry *cur;
 
-    HASH_FIND_INT(g_packet_cache, &id, cur);
+    HASH_FIND(hh, g_packet_cache, &id, sizeof(uint32_t), cur);
 
     if (cur) {
         // copy entry
@@ -63,7 +63,7 @@ void packet_cache_add(uint32_t id, uint8_t *data, size_t data_length)
     PacketCacheEntry *e;
 
     // find existing entry
-    HASH_FIND_INT(g_packet_cache, &id, e);
+    HASH_FIND(hh, g_packet_cache, &id, sizeof(uint32_t), e);
 
     int found = (e != NULL);
 
@@ -80,7 +80,7 @@ void packet_cache_add(uint32_t id, uint8_t *data, size_t data_length)
     e->updated = gstate.time_now;
 
     if (found) {
-        HASH_ADD_INT(g_packet_cache, id, e);
+        HASH_ADD(hh, g_packet_cache, id, sizeof(uint32_t), e);
     }
 }
 
