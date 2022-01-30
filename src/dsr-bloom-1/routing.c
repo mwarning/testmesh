@@ -249,54 +249,31 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
     forward_DATA(p, recv_len);
 }
 
-// read traffic from tun0 and send to peers
-static void tun_handler(int events, int fd)
+// receive traffic from tun0 and send to peers
+static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint32_t dst_id;
-    uint8_t buffer[ETH_FRAME_LEN];
-    DATA *data = (DATA*) &buffer[0];
+    DATA *data = (DATA*) (packet - sizeof(DATA));
 
-    if (events <= 0) {
-        return;
-    }
+    data->type = TYPE_DATA;
+    data->sender_id = gstate.own_id;
+    data->hop_cnt = 0;
+    data->seq_num = g_seq_num++;
+    data->dst_id = dst_id;
+    data->payload_length = packet_length;
+    bloom_init(&data->bloom[0], gstate.own_id);
 
-    while (1) {
-        uint8_t *payload = get_data_payload(data);
-        ssize_t read_len = tun_read(&dst_id, payload, sizeof(buffer) - sizeof(DATA));
-
-        if (read_len <= 0) {
-            break;
-        }
-
-        data->type = TYPE_DATA;
-        data->sender_id = gstate.own_id;
-        data->hop_cnt = 0;
-        data->seq_num = g_seq_num++;
-        data->dst_id = dst_id;
-        data->payload_length = read_len;
-        bloom_init(&data->bloom[0], gstate.own_id);
-
-        forward_DATA(data, get_data_size(data));
-    }
+    forward_DATA(data, get_data_size(data));
 }
 
-static void ext_handler_l2(int events, int fd)
+static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 {
-    if (events <= 0) {
+    if (packet_length <= sizeof(struct ethhdr)) {
         return;
     }
 
-    uint8_t buffer[ETH_FRAME_LEN];
-    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    if (numbytes <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
-    int ifindex = interface_get_ifindex(fd);
+    uint8_t *payload = &packet[sizeof(struct ethhdr)];
+    size_t payload_len = packet_length - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &packet[0];
 
     Address from_addr;
     Address to_addr;
@@ -308,7 +285,7 @@ static void ext_handler_l2(int events, int fd)
         handle_DATA(&from_addr, &to_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s (%s)", payload[0], str_addr(&from_addr), str_ifindex(ifindex));
     }
 }
 

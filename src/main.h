@@ -18,9 +18,9 @@ typedef struct {
     const char *name;
     void (*init)();
     void (*exit)();
-    void (*tun_handler)(int events, int fd); // packet from the local virtual interface
-    void (*ext_handler_l2)(int events, int fd); // receive Ethernet frames
-    void (*ext_handler_l3)(int events, int fd); // receive IP frames
+    void (*tun_handler)(uint32_t dst_id, uint8_t *packet, size_t length);
+    void (*ext_handler_l2)(int ifindex, uint8_t *packet, size_t length); // receive Ethernet frames
+    void (*ext_handler_l3)(int ifindex, uint8_t *packet, size_t length); // receive IP frames
     int (*add_peer)(FILE* fp, const char *str);
     int (*console)(FILE* file, int argc, char *argv[]);
 } Protocol;

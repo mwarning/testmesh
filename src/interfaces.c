@@ -35,10 +35,13 @@ static struct interface *g_interfaces = NULL;
 static int g_dynamic_interfaces = 0;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
+// forward declaration
+static void read_l2_interal(int events, int fd);
+
 static void interface_reset_handler(struct interface *ifa)
 {
     if (ifa->ifsock_l2 != -1) {
-        net_remove_handler(ifa->ifsock_l2, gstate.protocol->ext_handler_l2);
+        net_remove_handler(ifa->ifsock_l2, &read_l2_interal);
         close(ifa->ifsock_l2);
         ifa->ifsock_l2 = -1;
     }
@@ -122,7 +125,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 
     if (sock != -1) {
         close(sock);
-        net_remove_handler(sock, gstate.protocol->ext_handler_l2);
+        net_remove_handler(sock, &read_l2_interal);
     }
 
     if ((sock = socket(PF_PACKET, SOCK_RAW, htons(gstate.ether_type))) == -1) {
@@ -155,7 +158,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 
     *sock_ret = sock;
 
-    net_add_handler(sock, gstate.protocol->ext_handler_l2);
+    net_add_handler(sock, &read_l2_interal);
 
     return 0;
 }
@@ -340,6 +343,34 @@ static void join_mcast(int sock, int ifindex)
     //}
 }
 */
+
+static void read_l2_interal(int events, int fd)
+{
+    struct interface *ifa;
+    ssize_t readlen;
+    uint8_t buffer[ETH_FRAME_LEN];
+
+    if (events <= 0) {
+        return;
+    }
+
+    readlen = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
+    ifa = get_interface_by_fd(fd);
+
+    if (readlen < 0) {
+        log_error("recvfrom() for %s returned %lld: %s", (ifa ? ifa->ifname : "???"), readlen, strerror(errno));
+        return;
+    }
+
+    if (!is_valid_ifa(ifa)) {
+        log_error("recvfrom() on invalid interface %s", (ifa ? ifa->ifname : "???"));
+        return;
+    }
+
+    ifa->bytes_in += readlen;
+
+    gstate.protocol->ext_handler_l2(ifa->ifindex, &buffer[0], readlen);
+}
 
 static int send_l2_internal(struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)
 {

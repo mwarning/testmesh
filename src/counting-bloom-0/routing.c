@@ -44,7 +44,7 @@ typedef struct __attribute__((__packed__)) {
     uint32_t dst_id;
     uint32_t sender_id;  // to prevent loops - might not be need
     uint16_t length; // might not be needed
-    uint8_t payload[2000];
+    //uint8_t payload[ETH_FRAME_LEN];
 } DATA;
 
 // only travels one hop to the neighbors
@@ -59,6 +59,17 @@ static uint8_t g_own_id_bloom[BLOOM_M]; // does not change
 static uint8_t g_own_bloom[BLOOM_M]; // changes over time
 static Neighbor *g_entries = NULL;
 
+/*
+static uint8_t *get_data_payload(const DATA *data)
+{
+    return ((uint8_t*) data) + sizeof(DATA);
+}
+*/
+
+static size_t get_data_size(const DATA *data)
+{
+    return sizeof(DATA) + data->length;
+}
 
 // degrade a random byte
 static void bloom_degrade(uint8_t *new_bloom, const uint8_t *old_bloom)
@@ -202,7 +213,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
 
 static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
-    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
+    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("invalid DATA packet size => drop");
         return;
     }
@@ -224,52 +235,28 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
     forward_DATA(p, recv_len);
 }
 
-// read traffic from tun0 and send to peers
-static void tun_handler(int events, int fd)
+// receive traffic from tun0 and send to peers
+static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint32_t dst_id;
+    DATA *data = (DATA*) (packet - sizeof(DATA));
 
-    DATA data = {
-        .type = TYPE_DATA,
-    };
+    data->dst_id = dst_id;
+    data->sender_id = gstate.own_id;
+    data->hop_count = 0;
+    data->length = packet_length;
 
-    if (events <= 0) {
-        return;
-    }
-
-    while (1) {
-        ssize_t read_len = tun_read(&dst_id, &data.payload[0], sizeof(data.payload));
-
-        if (read_len <= 0) {
-            break;
-        }
-
-        data.dst_id = dst_id;
-        data.sender_id = gstate.own_id;
-        data.hop_count = 0;
-        data.length = read_len;
-
-        forward_DATA(&data, offsetof(DATA, payload) + read_len);
-    }
+    forward_DATA(data, get_data_size(data));
 }
 
-static void ext_handler_l2(int events, int fd)
+static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 {
-    if (events <= 0) {
+    if (packet_length <= sizeof(struct ethhdr)) {
         return;
     }
 
-    uint8_t buffer[ETH_FRAME_LEN];
-    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    if (numbytes <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
-    int ifindex = interface_get_ifindex(fd);
+    uint8_t *payload = &packet[sizeof(struct ethhdr)];
+    size_t payload_len = packet_length - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &packet[0];
 
     Address from_addr;
     Address to_addr;
@@ -284,7 +271,7 @@ static void ext_handler_l2(int events, int fd)
         handle_DATA(&from_addr, (DATA*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type %u from %s (%s)", (unsigned) payload[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s (%s)", payload[0], str_addr(&from_addr), str_ifindex(ifindex));
     }
 }
 

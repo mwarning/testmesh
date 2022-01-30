@@ -138,53 +138,30 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
     }
 }
 
-// read traffic from tun0 and send to peers
-static void tun_handler(int events, int fd)
+// receive traffic from tun0 and send to peers
+static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint8_t buffer[ETH_FRAME_LEN];
-    uint32_t dst_id;
-    DATA *data = (DATA*) &buffer[0];
+    DATA *data = (DATA*) (packet - sizeof(DATA));
 
-    if (events <= 0) {
-        return;
-    }
+    data->type = TYPE_DATA;
+    data->seq_num = g_sequence_number++;
+    data->src_id = gstate.own_id;
+    data->dst_id = dst_id;
+    data->payload_length = packet_length;
 
-    while (1) {
-        uint8_t *payload = get_data_payload(data);
-        ssize_t read_len = tun_read(&dst_id, payload, ETH_FRAME_LEN - sizeof(DATA));
-
-        if (read_len <= 0) {
-            break;
-        }
-
-        data->type = TYPE_DATA;
-        data->seq_num = g_sequence_number++;
-        data->src_id = gstate.own_id;
-        data->dst_id = dst_id;
-        data->payload_length = read_len;
-
-        log_debug("send DATA packet as broadcast");
-        send_bcasts_l2(data, get_data_size(data));
-    }
+    log_debug("send DATA packet as broadcast");
+    send_bcasts_l2(data, get_data_size(data));
 }
 
-static void ext_handler_l2(int events, int fd)
+static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 {
-    if (events <= 0) {
+    if (packet_length <= sizeof(struct ethhdr)) {
         return;
     }
 
-    uint8_t buffer[ETH_FRAME_LEN];
-    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    if (numbytes <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
-    int ifindex = interface_get_ifindex(fd);
+    uint8_t *payload = &packet[sizeof(struct ethhdr)];
+    size_t payload_len = packet_length - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &packet[0];
 
     Address from_addr;
     Address to_addr;

@@ -262,74 +262,51 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
     }
 }
 
-// read traffic from tun0 and send to peers
-static void tun_handler(int events, int fd)
+// receive traffic from tun0 and send to peers
+static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint32_t dst_id;
-    uint8_t buffer[ETH_FRAME_LEN];
-    DATA *data = (DATA*) &buffer[0];
+    RoutingEntry *e = routing_entry_find(dst_id);
+    if (e) {
+        DATA *data = (DATA*) (packet - sizeof(DATA));
 
-    if (events <= 0) {
-        return;
-    }
+        data->type = TYPE_DATA;
+        data->seq_num = g_sequence_number++;
+        data->src_id = gstate.own_id;
+        data->dst_id = dst_id;
+        data->payload_length = packet_length;
 
-    while (1) {
-        uint8_t *payload = get_data_payload(data);
-        ssize_t read_len = tun_read(&dst_id, payload, sizeof(buffer) - sizeof(DATA));
+        // avoid processing of this packet again
+        seqnum_cache_update(data->src_id, data->seq_num);
 
-        if (read_len <= 0) {
-            break;
-        }
+        send_ucast_l2(&e->next_hop, data, get_data_size(data));
+    } else {
+        RREQ rreq = {
+            .type = TYPE_RREQ,
+            .seq_num = g_sequence_number++,
+            .src_id = gstate.own_id,
+            .dst_id = dst_id,
+        };
 
-        RoutingEntry *e = routing_entry_find(dst_id);
-        if (e) {
-            data->type = TYPE_DATA;
-            data->seq_num = g_sequence_number++;
-            data->src_id = gstate.own_id;
-            data->dst_id = dst_id;
-            data->payload_length = read_len;
+        // avoid processing of this packet again
+        seqnum_cache_update(rreq.src_id, rreq.seq_num);
 
-            // avoid processing of this packet again
-            seqnum_cache_update(data->src_id, data->seq_num);
+        packet_cache_add(dst_id, packet, packet_length);
 
-            send_ucast_l2(&e->next_hop, data, get_data_size(data));
-        } else {
-            RREQ rreq = {
-                .type = TYPE_RREQ,
-                .seq_num = g_sequence_number++,
-                .src_id = gstate.own_id,
-                .dst_id = dst_id,
-            };
+        log_debug("send new RREQ (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
-            // avoid processing of this packet again
-            seqnum_cache_update(rreq.src_id, rreq.seq_num);
-
-            packet_cache_add(dst_id, payload, read_len);
-
-            log_debug("send new RREQ (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
-
-            send_bcasts_l2(&rreq, sizeof(RREQ));
-        }
+        send_bcasts_l2(&rreq, sizeof(RREQ));
     }
 }
 
-static void ext_handler_l2(int events, int fd)
+static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 {
-    if (events <= 0) {
+    if (packet_length <= sizeof(struct ethhdr)) {
         return;
     }
 
-    uint8_t buffer[ETH_FRAME_LEN];
-    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    if (numbytes <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
-    int ifindex = interface_get_ifindex(fd);
+    uint8_t *payload = &packet[sizeof(struct ethhdr)];
+    size_t payload_len = packet_length - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &packet[0];
 
     Address from_addr;
     Address to_addr;

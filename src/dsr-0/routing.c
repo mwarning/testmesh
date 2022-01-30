@@ -454,80 +454,57 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
     }
 }
 
-// read traffic from tun0 and send to peers
-static void tun_handler(int events, int fd)
+// receive traffic from tun0 and send to peers
+static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint32_t dst_id;
-    uint8_t buffer[ETH_FRAME_LEN];
-    DATA *data = (DATA*) buffer;
+    PathCacheEntry *e = path_cache_lookup(dst_id);
+    if (e) {
+        DATA *data = (DATA*) (packet - sizeof(DATA));
 
-    if (events <= 0) {
-        return;
-    }
+        data->type = TYPE_DATA;
+        data->hop_count = 0;
+        data->src_id = gstate.own_id;
+        data->dst_id = dst_id;
+        data->path_count = e->path_count;
+        data->payload_length = packet_length;
 
-    while (1) {
-        uint8_t *payload = get_data_payload(data);
-        ssize_t read_len = tun_read(&dst_id, payload, sizeof(buffer) - sizeof(DATA));
+        memcpy(get_data_path(data), &e->path[0], sizeof(Addr) * e->path_count);
 
-        if (read_len <= 0) {
-            break;
-        }
+        log_debug("send new DATA 0x%08x => 0x%08x [%s]",
+            data->src_id, data->dst_id, format_path(get_data_path(data), data->path_count));
 
-        PathCacheEntry *e = path_cache_lookup(dst_id);
-        if (e) {
-            data->type = TYPE_DATA;
-            data->hop_count = 0;
-            data->src_id = gstate.own_id;
-            data->dst_id = dst_id;
-            data->path_count = e->path_count;
-            data->payload_length = read_len;
+        send_ucast_l2(addr2address(&e->path[0]), data, get_data_size(data));
+    } else {
+        RREQ rreq = {
+            .type = TYPE_RREQ,
+            .hop_count = 0,
+            .seq_num = g_sequence_number++,
+            .src_id = gstate.own_id,
+            .dst_id = dst_id,
+            .path_count = 0,
+        };
 
-            memcpy(get_data_path(data), &e->path[0], sizeof(Addr) * e->path_count);
+        // avoid processing of this packet again
+        seqnum_cache_update(rreq.src_id, rreq.seq_num);
 
-            log_debug("send new DATA 0x%08x => 0x%08x [%s]",
-                data->src_id, data->dst_id, format_path(get_data_path(data), data->path_count));
+        packet_cache_add(dst_id, packet, packet_length);
 
-            send_ucast_l2(addr2address(&e->path[0]), data, get_data_size(data));
-        } else {
-            RREQ rreq = {
-                .type = TYPE_RREQ,
-                .hop_count = 0,
-                .seq_num = g_sequence_number++,
-                .src_id = gstate.own_id,
-                .dst_id = dst_id,
-                .path_count = 0,
-            };
+        log_debug("send new RREQ (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
-            // avoid processing of this packet again
-            seqnum_cache_update(rreq.src_id, rreq.seq_num);
-
-            packet_cache_add(dst_id, payload, read_len);
-
-            log_debug("send new RREQ (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
-
-            // we drop data until the path is discovered?
-            send_bcasts_l2(&rreq, get_rreq_size(&rreq));
-        }
+        // we drop data until the path is discovered?
+        send_bcasts_l2(&rreq, get_rreq_size(&rreq));
     }
 }
 
-static void ext_handler_l2(int events, int fd)
+static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 {
-    if (events <= 0) {
+    if (packet_length <= sizeof(struct ethhdr)) {
         return;
     }
 
-    uint8_t buffer[ETH_FRAME_LEN];
-    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    if (numbytes <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
-    int ifindex = interface_get_ifindex(fd);
+    uint8_t *payload = &packet[sizeof(struct ethhdr)];
+    size_t payload_len = packet_length - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &packet[0];
 
     Address from_addr;
     Address to_addr;
@@ -545,7 +522,7 @@ static void ext_handler_l2(int events, int fd)
         handle_RREP(ifindex, &from_addr, (RREP*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", buffer[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s (%s)", payload[0], str_addr(&from_addr), str_ifindex(ifindex));
     }
 }
 

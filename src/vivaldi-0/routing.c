@@ -274,48 +274,22 @@ static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
     forward_DATA(p, recv_len);
 }
 
-// read traffic from tun0 and send to peers
-static void tun_handler(int events, int fd)
+// receive traffic from tun0 and send to peers
+static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint32_t dst_id;
-
-    DATA data = {
-        .type = TYPE_DATA,
-    };
-
-    if (events <= 0) {
-        return;
-    }
-
-    while (1) {
-        ssize_t read_len = tun_read(&dst_id, &data.payload[0], sizeof(data.payload));
-
-        if (read_len <= 0) {
-            break;
-        }
-
-        // TODO:
-        //forward_DATA();
-    }
+    // TODO:
+    //forward_DATA();
 }
 
-static void ext_handler_l2(int events, int fd)
+static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 {
-    if (events <= 0) {
+    if (packet_length <= sizeof(struct ethhdr)) {
         return;
     }
 
-    uint8_t buffer[ETH_FRAME_LEN];
-    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    if (numbytes <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
-    int ifindex = interface_get_ifindex(fd);
+    uint8_t *payload = &packet[sizeof(struct ethhdr)];
+    size_t payload_len = packet_length - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &packet[0];
 
     Address from_addr;
     Address to_addr;

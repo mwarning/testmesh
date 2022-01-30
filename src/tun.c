@@ -13,6 +13,7 @@
 
 #include "ext/uthash.h"
 #include "log.h"
+#include "net.h"
 #include "utils.h"
 
 
@@ -263,6 +264,38 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
     return write_len;
 }
 
+static void tun_read_internal(int events, int fd)
+{
+    uint8_t buffer[100 + ETH_FRAME_LEN];
+    uint8_t *buf = &buffer[100];
+    uint32_t dst_id;
+
+    if (events <= 0) {
+        return;
+    }
+
+    while (1) {
+        ssize_t read_len = read(gstate.tun_fd, buf, ETH_FRAME_LEN);
+
+        if (read_len <= 0) {
+            break;
+        }
+
+        if (!ip_enabled(buf[0])) {
+            continue;
+        }
+
+        log_debug2("tun_read_internal: %zu bytes, %s", read_len, debug_payload(buf, read_len));
+        gstate.tun_read_bytes += read_len;
+
+        if (parse_ip_packet(&dst_id, buf, read_len)) {
+            continue;
+        }
+
+        gstate.protocol->tun_handler(dst_id, buf, read_len);
+    }
+}
+
 ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 {
     ssize_t read_len = read(gstate.tun_fd, buf, buflen);
@@ -387,6 +420,13 @@ int tun_init(uint32_t id, const char *ifname)
             execute("ip -6 addr add fe80::%02x%02x:%02x%02x/64 dev tun0", addr[3], addr[2], addr[1], addr[0]);
         }
     }
+
+    if (gstate.protocol->tun_handler == NULL) {
+        log_error("tun_handler not set for protocol %s", gstate.protocol->name);
+        return EXIT_FAILURE;
+    }
+
+    net_add_handler(gstate.tun_fd, &tun_read_internal);
 
     return EXIT_SUCCESS;
 }

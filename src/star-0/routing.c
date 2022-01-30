@@ -437,79 +437,58 @@ static void handle_ROOT(int ifindex, const Address *addr, ROOT *p, unsigned recv
     send_bcasts_l2(p, sizeof(ROOT));
 }
 
-// read traffic from tun0 and send to peers
-static void tun_handler(int events, int fd)
+// receive traffic from tun0 and send to peers
+static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint32_t dst_id;
-    uint8_t buffer[ETH_FRAME_LEN];
+    Node *node = nodes_find_by_id_exact(dst_id);
 
-    if (events <= 0) {
+    if (node) {
+        DATA *p = (DATA*) (packet - sizeof(DATA)); // we have around 100 bytes padding ^.^
+        p->type = TYPE_DATA;
+        p->src_id = gstate.own_id;
+        p->dst_id = dst_id;
+        p->dst_root_hop_count = node->hop_count;
+        p->payload_length = packet_length;
+
+        log_debug("tun_handler: send DATA to 0x%08x (%s)",
+            dst_id, str_addr(&node->next_hop_addr));
+
+        send_ucast_l2(&node->next_hop_addr, p, get_data_size(p));
         return;
     }
 
-    while (1) {
-        ssize_t max_payload = sizeof(buffer) - sizeof(DATA);
-        uint8_t *payload = buffer + sizeof(DATA);
-        ssize_t read_len = tun_read(&dst_id, payload, max_payload);
+    // cache packet
+    packet_cache_add(dst_id, packet, packet_length);
 
-        if (read_len <= 0 || read_len > max_payload) {
-            break;
-        }
+    node = nodes_find_by_id_space(dst_id);
+    if (node) {
+        // search for coordionates of destination
+        RREQ rreq = {
+            .type = TYPE_RREQ,
+            .src_id = gstate.own_id,
+            .src_root_hop_count = g_current_root.hop_count,
+            .dst_id = node->id,
+            .dst_root_hop_count = node->hop_count,
+            .ask_id = dst_id,
+        };
 
-        Node *node = nodes_find_by_id_exact(dst_id);
-
-        if (node) {
-            DATA *p = (DATA*) buffer;
-            p->type = TYPE_DATA;
-            p->src_id = gstate.own_id;
-            p->dst_id = dst_id;
-            p->dst_root_hop_count = node->hop_count;
-            p->payload_length = read_len;
-
-            send_ucast_l2(&node->next_hop_addr, p, get_data_size(p));
-            return;
-        }
-
-        // cache packet
-        packet_cache_add(dst_id, payload, read_len);
-
-        node = nodes_find_by_id_space(dst_id);
-        if (node) {
-            // search for coordionates of destination
-            RREQ rreq = {
-                .type = TYPE_RREQ,
-                .src_id = gstate.own_id,
-                .src_root_hop_count = g_current_root.hop_count,
-                .dst_id = node->id,
-                .dst_root_hop_count = node->hop_count,
-                .ask_id = dst_id,
-            };
-
-            send_ucast_l2(&node->next_hop_addr, &rreq, sizeof(RREQ));
-        } else {
-            log_debug("cannot find destiantion for 0x%08x", dst_id);
-        }
+        log_debug("tun_handler: send RREQ to 0x%08x (%s)",
+            dst_id, str_addr(&node->next_hop_addr));
+        send_ucast_l2(&node->next_hop_addr, &rreq, sizeof(RREQ));
+    } else {
+        log_debug("tun_handler: cannot find destination for 0x%08x", dst_id);
     }
 }
 
-// read traffic from other interfaces
-static void ext_handler_l2(int events, int fd)
+static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 {
-    if (events <= 0) {
+    if (packet_length <= sizeof(struct ethhdr)) {
         return;
     }
 
-    uint8_t buffer[ETH_FRAME_LEN];
-    ssize_t numbytes = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-
-    if (numbytes <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &buffer[sizeof(struct ethhdr)];
-    size_t payload_len = numbytes - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &buffer[0];
-    int ifindex = interface_get_ifindex(fd);
+    uint8_t *payload = &packet[sizeof(struct ethhdr)];
+    size_t payload_len = packet_length - sizeof(struct ethhdr);
+    struct ethhdr *eh = (struct ethhdr *) &packet[0];
 
     Address from_addr;
     Address to_addr;

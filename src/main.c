@@ -299,10 +299,6 @@ int main(int argc, char *argv[])
         log_info("Listen on unicast:   %s", str_addr6(&gstate.ucast_addr));
     }
 
-    if (gstate.protocol->tun_handler) {
-        net_add_handler(gstate.tun_fd, gstate.protocol->tun_handler);
-    }
-
     interfaces_init();
 
     if (gstate.control_socket_path) {
