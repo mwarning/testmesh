@@ -23,9 +23,6 @@
 
 // incomplete
 
-//https://www.open-mesh.org/projects/batman-adv/wiki/DistributedArpTable
-
-
 #define ROOT_TIMEOUT_SECONDS 5
 #define TIMEOUT_ROOTS_SECONDS 3
 #define NODE_TIMEOUT_SECONDS 30
@@ -76,6 +73,7 @@ typedef struct __attribute__((__packed__)) {
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
     uint32_t src_id;
+    uint16_t src_root_hop_count;
     uint32_t dst_id;
     uint16_t dst_root_hop_count;
     uint16_t payload_length; // length in bytes
@@ -91,7 +89,7 @@ typedef struct CurrentRoot {
     time_t updated;
 } CurrentRoot;
 
-static CurrentRoot g_current_root;
+static CurrentRoot g_current_root = {0};
 static uint16_t g_sequence_number = 0;
 
 // all neighbors and some nodes further away
@@ -187,10 +185,10 @@ static void dht_add_node(uint32_t id, uint32_t hop_count, const Address *next_ho
     Node *node = nodes_find_by_id_exact(id);
 
     if (node) {
+        // update
         node->updated = gstate.time_now;
         node->hop_count = hop_count;
         memcpy(&node->next_hop_addr, next_hop_addr, sizeof(Address));
-        // update
         return;
     }
 
@@ -205,13 +203,7 @@ static void dht_add_node(uint32_t id, uint32_t hop_count, const Address *next_ho
     node->hop_count = hop_count;
     memcpy(&node->next_hop_addr, next_hop_addr, sizeof(Address));
 
-    if (g_dht_nodes) {
-        node->next = g_dht_nodes;
-        g_dht_nodes = node;
-    } else {
-        g_dht_nodes = node;
-        node->next = NULL;
-    }
+    LL_PREPEND(g_dht_nodes, node);
 
     g_dht_nodes_count += 1;
 }
@@ -242,16 +234,18 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
         return;
     }
 
-    log_debug("DATA: got packet: %s / 0x%08x => 0x%08x / %u",
-        str_addr(addr), p->src_id, p->dst_id, p->dst_root_hop_count);
-
     if (p->src_id == gstate.own_id) {
-        log_debug("DATA: own source id => drop");
+        log_debug2("DATA: own source id => drop");
         return;
     }
 
+    log_debug("DATA: got packet: %s / 0x%08x => 0x%08x / %u",
+        str_addr(addr), p->src_id, p->dst_id, p->dst_root_hop_count);
+
+    dht_add_node(p->src_id, p->src_root_hop_count, addr);
+
     if (p->dst_id == gstate.own_id) {
-        log_debug("DATA: packet arrived at destiantion => accept");
+        log_debug("DATA: packet arrived at destination => accept");
 
         // destination is the local tun0 interface => write packet to tun0
         uint8_t *payload = get_data_payload(p);
@@ -259,10 +253,10 @@ static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv
     } else {
         Node *node = nodes_find_by_hop_count(p->dst_id);
         if (node) {
-            log_debug("DATA: next hop found => forward");
+            log_debug("DATA: next hop found (%s) => forward", str_addr(&node->next_hop_addr));
             send_ucast_l2(&node->next_hop_addr, p, get_data_size(p));
         } else {
-            log_debug("DATA: no next hop found => drop");
+            log_debug("DATA: next hop not found => drop");
         }
     }
 }
@@ -283,11 +277,12 @@ static void send_cached_packet(uint32_t dst_id, uint16_t dst_hop_count, const Ad
 
     data->type = TYPE_DATA;
     data->src_id = gstate.own_id;
+    data->src_root_hop_count = g_current_root.hop_count; // needed?
     data->dst_id = dst_id;
     data->dst_root_hop_count = dst_hop_count;
     data->payload_length = data_payload_length;
 
-    log_debug("send DATA (0x%08x => 0x%08x:%u) via %s ",
+    log_debug("send DATA (0x%08x => 0x%08x, root-hops: %u) via %s ",
         data->src_id, data->dst_id, dst_hop_count, str_addr(addr));
 
     send_ucast_l2(addr, data, get_data_size(data));
@@ -397,12 +392,21 @@ static void handle_ROOT(int ifindex, const Address *addr, ROOT *p, unsigned recv
         return;
     }
 
-    // feed the DHT
-    if (p->hop_count > 0 && p->sender_id != gstate.own_id) {
-    	dht_add_node(p->sender_id, p->hop_count, addr);
+    if (p->sender_id == gstate.own_id) {
+        log_debug2("ROOT: packet already seen => drop");
+        return;
     }
 
+    log_debug("ROOT: got packet: %s / 0x%08x / %u",
+        str_addr(addr), p->id, p->hop_count);
+
     p->hop_count += 1;
+
+    // feed the DHT
+    dht_add_node(p->id, 0, addr); // root node is 0 hops from itself
+    if (p->id != p->sender_id) {
+        dht_add_node(p->sender_id, p->hop_count, addr);
+    }
 
     if (p->id < g_current_root.id) {
         log_debug("ROOT: got lower id (0x%08x < 0x%08x) => ignore", p->id, g_current_root.id);
@@ -415,15 +419,16 @@ static void handle_ROOT(int ifindex, const Address *addr, ROOT *p, unsigned recv
         // p->id == g_current_root.id
         if (is_newer_seqnum(g_current_root.seq_num, p->seq_num)) {
             if (p->hop_count <= g_current_root.hop_count) {
-                log_debug("ROOT: got root update => accept");
+                log_debug2("ROOT: update root => accept", p->id);
                 memcpy(&g_current_root.next_hop_addr, addr, sizeof(Address));
             } else {
                 // longer route, but it might still be good as a fallback
-                log_debug("ROOT: got longer root => ignore");
+                log_debug2("ROOT: got longer root (%u < %u) => ignore",
+                    p->id, p->hop_count, g_current_root.hop_count);
                 return;
             }
         } else {
-            log_debug("ROOT: old root update => ignore");
+            log_debug2("ROOT: old root update for 0x%08x => ignore", p->id);
             return;
         }
     }
@@ -432,7 +437,7 @@ static void handle_ROOT(int ifindex, const Address *addr, ROOT *p, unsigned recv
     g_current_root.seq_num = p->seq_num;
     g_current_root.updated = gstate.time_now;
 
-    p->hop_count += 1;
+    p->sender_id = gstate.own_id;
 
     send_bcasts_l2(p, sizeof(ROOT));
 }
@@ -509,32 +514,34 @@ static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
         handle_RREP(ifindex, &from_addr, (RREP*) payload, payload_len);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", buffer[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(&from_addr), str_ifindex(ifindex));
     }
 }
 
 static int console_handler(FILE *fp, int argc, char *argv[])
 {
+    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
+
     char buf_duration[64];
 
-    if (argc == 1 && !strcmp(argv[0], "h")) {
+    if (MATCH(1, "h")) {
         fprintf(fp,
             "r: print root\n"
             "n: print routing table"
         );
-    } else if (argc == 1 && !strcmp(argv[0], "r")) {
+    } else if (MATCH(1, "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
             g_current_root.id, g_current_root.hop_count, g_current_root.seq_num,
             format_duration(buf_duration, g_current_root.updated, gstate.time_now));
-    } else if (argc == 1 && !strcmp(argv[0], "n")) {
+    } else if (MATCH(1, "n")) {
         int counter = 0;
         Node *cur;
 
-        fprintf(fp, "id        hop-count    next-hop-addr   updated\n");
+        fprintf(fp, "id         hop-count   next-hop-addr          updated\n");
         LL_FOREACH(g_dht_nodes, cur) {
-            fprintf(fp, "0x%08x %u %s %s\n",
+            fprintf(fp, "0x%08x %u       %s      %s\n",
                 cur->id,
-                (unsigned) cur->hop_count,
+                cur->hop_count,
                 str_addr(&cur->next_hop_addr),
                 format_duration(buf_duration, cur->updated, gstate.time_now)
             );
@@ -569,14 +576,17 @@ static void send_root()
         }
         g_root_last_send = gstate.time_now;
 
-        log_debug("send root packet");
+
         ROOT root = {
             .type = TYPE_ROOT,
             .id = g_current_root.id,
             .seq_num = g_sequence_number++, // g_current_root.seq_num,
             .hop_count = 0, //g_current_root.hop_count,
-            .sender_id = 0,
+            .sender_id = g_current_root.id,
         };
+
+        log_debug("send root packet: 0x%08x", root.id);
+
         g_current_root.seq_num = g_sequence_number - 1;
         g_current_root.updated = gstate.time_now;
 
@@ -584,7 +594,7 @@ static void send_root()
     }
 }
 
-static void init()
+static void init_handler()
 {
     current_root_init();
     packet_cache_init(PACKET_CACHE_TIMEOUT_SECONDS);
@@ -592,11 +602,25 @@ static void init()
     net_add_handler(-1, &dht_node_timeout);
 }
 
+// not strictly need, but makes valgrind happy
+static void exit_handler()
+{
+    packet_cache_clear();
+
+    Node *cur;
+    Node *tmp;
+    LL_FOREACH_SAFE(g_dht_nodes, cur, tmp) {
+        LL_DELETE(g_dht_nodes, cur);
+        free(cur);
+    }
+}
+
 void star_0_register()
 {
     static const Protocol p = {
         .name = "star-0",
-        .init = &init,
+        .init = &init_handler,
+        .exit = &exit_handler,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
         .console = &console_handler,
