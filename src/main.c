@@ -184,6 +184,12 @@ static void setup_unicast_socket(int *sock)
     *sock = fd;
 }
 
+static void read_l3_internal(int events, int fd)
+{
+    // TODO
+    // gstate.protocol->ext_handler_l3(ifa->ifindex, &buffer[0], readlen);
+}
+
 // program name matches *-ctl
 static int is_client(const char *cmd)
 {
@@ -292,8 +298,8 @@ int main(int argc, char *argv[])
         setup_unicast_socket(&gstate.sock_udp);
         setup_mcast_socket_receive(&gstate.sock_mcast_receive);
 
-        net_add_handler(gstate.sock_udp, gstate.protocol->ext_handler_l3);
-        net_add_handler(gstate.sock_mcast_receive, gstate.protocol->ext_handler_l3);
+        net_add_handler(gstate.sock_udp, &read_l3_internal);
+        net_add_handler(gstate.sock_mcast_receive, &read_l3_internal);
 
         log_info("Listen on multicast: %s", str_addr6(&gstate.mcast_addr));
         log_info("Listen on unicast:   %s", str_addr6(&gstate.ucast_addr));
