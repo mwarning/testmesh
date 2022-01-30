@@ -60,7 +60,7 @@ void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
     dst->mac.ifindex = ifindex;
 }
 
-const int address_is_multicast(const Address *addr)
+int address_is_multicast(const Address *addr)
 {
     switch (addr->family) {
     case AF_MAC: {
@@ -76,7 +76,7 @@ const int address_is_multicast(const Address *addr)
     }
 }
 
-const int address_is_broadcast(const Address *addr)
+int address_is_broadcast(const Address *addr)
 {
     static const uint8_t bmac[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
@@ -93,22 +93,9 @@ const int address_is_broadcast(const Address *addr)
     }
 }
 
-const int address_is_unicast(const Address *addr)
+int address_is_unicast(const Address *addr)
 {
     return !address_is_broadcast(addr) && !address_is_multicast(addr);
-}
-
-const char *address_type_str(const Address *addr)
-{
-    if (address_is_broadcast(addr)) {
-        return "broadcast";
-    }
-
-    if (address_is_multicast(addr)) {
-        return "multicast";
-    } else {
-        return "unicast";
-    }
 }
 
 void hex_dump(const char *desc, const void *addr, const int len)

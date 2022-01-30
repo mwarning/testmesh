@@ -120,6 +120,19 @@ static void bloom_add(uint8_t *bloom, uint32_t id)
     bloom_merge(bloom, &bloom_id[0]);
 }
 
+static const char *address_type_str(const Address *addr)
+{
+    if (address_is_broadcast(addr)) {
+        return "broadcast";
+    }
+
+    if (address_is_multicast(addr)) {
+        return "multicast";
+    } else {
+        return "unicast";
+    }
+}
+
 static void entry_timeout()
 {
     Entry *tmp;
