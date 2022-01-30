@@ -159,28 +159,6 @@ struct in6_ifreq {
     unsigned int ifindex;
 };
 
-// configure interface
-int add_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex)
-{
-    struct in6_ifreq ifr6;
-
-    memcpy(&ifr6.addr, addr, sizeof(struct in6_addr));
-    ifr6.ifindex = ifindex;
-    ifr6.prefixlen = prefixlen;
-    return ioctl(gstate.sock_help, SIOCSIFADDR, &ifr6);
-}
-
-// configure interface
-int del_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex)
-{
-    struct in6_ifreq ifr6;
-
-    memcpy(&ifr6.addr, addr, sizeof(struct in6_addr));
-    ifr6.ifindex = ifindex;
-    ifr6.prefixlen = prefixlen;
-    return ioctl(gstate.sock_help, SIOCDIFADDR, &ifr6);
-}
-
 static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_storage *addr)
 {
     char buf[INET6_ADDRSTRLEN];

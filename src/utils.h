@@ -56,9 +56,6 @@ const char *str_addr6(const struct sockaddr_in6 *addr);
 const char *str_in4(const struct in_addr *addr);
 const char *str_in6(const struct in6_addr *addr);
 
-int add_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex);
-int del_addr6(struct in6_addr *addr, int prefixlen, unsigned ifindex);
-
 int addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, int subnet_len);
 int addr_is_localhost(const struct sockaddr_storage *addr);
 int addr_is_multicast(const struct sockaddr_storage *addr);
