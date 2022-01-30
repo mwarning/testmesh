@@ -28,6 +28,7 @@
 #define MAX_PATH_COUNT 30
 #define PATH_CACHE_TIMEOUT_SECONDS 60
 #define SEQNUM_CACHE_TIMEOUT_SECONDS 5
+#define PACKET_CACHE_TIMEOUT_SECONDS 5
 
 enum {
     ADDR_TYPE_MAC,
@@ -557,6 +558,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 static void init()
 {
     seqnum_cache_init(SEQNUM_CACHE_TIMEOUT_SECONDS);
+    packet_cache_init(PACKET_CACHE_TIMEOUT_SECONDS);
     net_add_handler(-1, &path_cache_timeout);
 }
 
