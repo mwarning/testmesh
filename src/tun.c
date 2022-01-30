@@ -106,6 +106,30 @@ static int addr6_is_mesh(const struct in6_addr *addr)
     return (a1 == 0x02) || (a1 == 0x03) || (a1 == 0xfe && a2 == 0x80);
 }
 
+static uint32_t in6_addr_id(const struct in6_addr *addr)
+{
+    uint32_t id = 0;
+    const uint8_t* p = (const uint8_t*) &addr->s6_addr;
+
+    ((uint8_t*) &id)[0] = p[15];
+    ((uint8_t*) &id)[1] = p[14];
+    ((uint8_t*) &id)[2] = p[13];
+    ((uint8_t*) &id)[3] = p[12];
+
+    return id;
+}
+
+static uint32_t in4_addr_id(const struct in_addr *addr)
+{
+    uint32_t id = 0;
+    const uint8_t* p = (const uint8_t*) &addr->s_addr;
+    // ignore p[0], it should be always 10 as in 10.x.y.z
+    ((uint8_t*) &id)[2] = p[1];
+    ((uint8_t*) &id)[1] = p[2];
+    ((uint8_t*) &id)[0] = p[3];
+    return id;
+}
+
 int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 {
     uint32_t src_id = 0;
