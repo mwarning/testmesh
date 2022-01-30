@@ -23,27 +23,19 @@
 
 struct interface {
     unsigned ifindex;
-    char *ifname;
     struct mac ifmac;
     int ifsock_l2;
+    char *ifname;       // persistent
+    uint64_t bytes_in;  // presistent
+    uint64_t bytes_out; // persistent
+    struct interface *next;
 };
 
-static UT_array *g_interfaces = NULL;
+static struct interface *g_interfaces = NULL;
 static int g_dynamic_interfaces = 0;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
-static void interface_copy(void *_dst, const void *_src)
-{
-    struct interface *dst = (struct interface*) _dst;
-    const struct interface *src = (const struct interface*) _src;
-
-    dst->ifname = strdup(src->ifname);
-    dst->ifindex = src->ifindex;
-    dst->ifsock_l2 = src->ifsock_l2;
-    memcpy(&dst->ifmac, &src->ifmac, ETH_ALEN);
-}
-
-static void interface_reset(struct interface *ifa)
+static void interface_reset_handler(struct interface *ifa)
 {
     if (ifa->ifsock_l2 != -1) {
         net_remove_handler(ifa->ifsock_l2, gstate.protocol->ext_handler_l2);
@@ -55,19 +47,6 @@ static void interface_reset(struct interface *ifa)
     ifa->ifindex = 0;
 }
 
-static void interface_dtor(void *_ifa)
-{
-    struct interface *ifa = (struct interface*) _ifa;
-
-    interface_reset(ifa);
-
-    if (ifa->ifname) {
-        free(ifa->ifname);
-    }
-}
-
-static UT_icd interface_icd = {sizeof(struct interface), NULL, interface_copy, interface_dtor};
-
 static int is_valid_ifa(const struct interface *ifa)
 {
     return (ifa->ifindex > 0 && memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) != 0);
@@ -75,13 +54,16 @@ static int is_valid_ifa(const struct interface *ifa)
 
 static int find_interface(const char *ifname)
 {
+    struct interface *ifa;
     int i = 0;
-    struct interface *ifa = NULL;
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
+
+    ifa = g_interfaces;
+    while (ifa) {
         if (0 == strcmp(ifa->ifname, ifname)) {
             return i;
         }
         i += 1;
+        ifa = ifa->next;
     }
 
     return -1;
@@ -95,11 +77,12 @@ const char *str_ifindex(unsigned ifindex)
         return NULL;
     }
 
-    ifa = NULL;
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
+    ifa = g_interfaces;
+    while (ifa) {
         if (ifa->ifindex == ifindex) {
             return ifa->ifname;
         }
+        ifa = ifa->next;
     }
 
     return NULL;
@@ -192,14 +175,14 @@ static int interface_setup(struct interface *ifa, int quiet)
     ifa->ifmac = if_nametomac(ifname);
     if (memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) == 0) {
         if (!quiet)
-           log_warning("Failed to get interface MAC address: %s", ifname);
+           log_warning("failed to get interface MAC address: %s", ifname);
         return 1;
     }
 
     if (gstate.protocol->ext_handler_l2) {
         if (set_promisc_mode(ifname)) {
             if (!quiet)
-                log_warning("Failed to set interface into promisc mode: %s", ifname);
+                log_warning("failed to set interface into promisc mode: %s", ifname);
             return 1;
         }
 
@@ -208,7 +191,7 @@ static int interface_setup(struct interface *ifa, int quiet)
         }
     }
 
-    log_info("Interface added: %s", ifa->ifname);
+    log_info("interface added: %s", ifa->ifname);
 
     return 0;
 }
@@ -221,11 +204,12 @@ unsigned interface_get_ifindex_by_name(const char *ifname)
         return 0;
     }
 
-    ifa = NULL;
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
+    ifa = g_interfaces;
+    while (ifa) {
         if (0 == strcmp(ifa->ifname, ifname)) {
             return ifa->ifindex;
         }
+        ifa = ifa->next;
     }
 
     return if_nametoindex(ifname);
@@ -239,10 +223,12 @@ static struct interface *get_interface_by_fd(int fd)
         return NULL;
     }
 
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
+    ifa = g_interfaces;
+    while (ifa) {
         if (ifa->ifsock_l2 == fd) {
             return ifa;
         }
+        ifa = ifa->next;
     }
 
     return NULL;
@@ -261,12 +247,20 @@ struct mac interface_get_ifmac(int fd)
     return ifa ? ifa->ifmac : g_nullmac;
 }
 
-int interface_add(const char *ifname)
+static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
 {
-    if (g_interfaces == NULL) {
-        utarray_new(g_interfaces, &interface_icd);
+    if (ifa == g_interfaces) {
+        g_interfaces = ifa->next;
+    } else {
+        ifa_prev->next = ifa->next;
     }
 
+    free(ifa->ifname);
+    free(ifa);
+}
+
+int interface_add(const char *ifname)
+{
     if (0 == strcmp(ifname, gstate.tun_name)) {
         log_error("Cannot add own tun interface: %s", ifname);
         return 1;
@@ -277,31 +271,48 @@ int interface_add(const char *ifname)
         return 1;
     }
 
-    struct interface ifa = {
+    struct interface *ifa = (struct interface*) malloc(sizeof(struct interface));
+    *ifa = (struct interface) {
         .ifindex = 0,
         .ifname = strdup(ifname),
         .ifmac = g_nullmac,
         .ifsock_l2 = -1,
+        .bytes_in = 0,
+        .bytes_out = 0,
     };
 
-    interface_setup(&ifa, 1);
+    interface_setup(ifa, 1);
 
-    utarray_push_back(g_interfaces, &ifa);
+    // prepend
+    if (g_interfaces == NULL) {
+        ifa->next = NULL;
+    } else {
+        ifa->next = g_interfaces;
+    }
+    g_interfaces = ifa;
 
     return 0;
 }
 
 int interface_del(const char *ifname)
 {
+    struct interface *ifa_prev;
+    struct interface *ifa;
+
     if (g_interfaces == NULL) {
         return 1;
     }
 
-    int idx = find_interface(ifname);
 
-    if (idx != -1) {
-       utarray_erase(g_interfaces, idx, 1);
-       return 0;
+    ifa_prev = NULL;
+    ifa = g_interfaces;
+    while (ifa) {
+        if (0 == strcmp(ifa->ifname, ifname)) {
+            interface_remove(ifa_prev, ifa);
+            return 0;
+        }
+        ifa_prev = ifa;
+        ifa = ifa->next;
     }
 
     return 1;
@@ -354,19 +365,21 @@ static int send_l2_internal(struct interface *ifa, const uint8_t *dst_addr, cons
 
     if (sendto(ifa->ifsock_l2, sendbuf, sendlen, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0) {
         log_warning("sendto() failed on raw socket: %s", strerror(errno));
-        interface_reset(ifa);
+        interface_reset_handler(ifa);
         return 1;
     }
+
+    ifa->bytes_out += sendlen;
 
     return 0;
 }
 
 void send_bcasts_l2(const void* data, size_t data_len)
 {
-    log_debug("send_raws: %d bytes on %d interfaces", (int) data_len, (int) utarray_len(g_interfaces));
-
-    char sendbuf[ETH_FRAME_LEN] = {0};
     static uint8_t dst_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    struct interface *ifa;
+    int count;
+    char sendbuf[ETH_FRAME_LEN] = {0};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
     if (sendlen >= sizeof(sendbuf)) {
@@ -376,14 +389,21 @@ void send_bcasts_l2(const void* data, size_t data_len)
 
     memcpy(&sendbuf[sizeof(struct ethhdr)], data, data_len);
 
-    struct interface *ifa = NULL;
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
+    count = 0;
+    ifa = g_interfaces;
+    while (ifa) {
         send_l2_internal(ifa, &dst_addr[0], &sendbuf[0], sendlen);
+        count += 1;
+        ifa = ifa->next;
     }
+
+    log_debug("send_raws: %d bytes on %d interfaces", (int) data_len, count);
 }
 
 int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 {
+    struct interface *ifa;
+
     assert(addr->family == AF_MAC);
     unsigned ifindex = addr->mac.ifindex;
     const uint8_t *dst_addr = &addr->mac.addr.data[0];
@@ -403,18 +423,29 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 
     memcpy(&sendbuf[sizeof(struct ethhdr)], data, data_len);
 
+    // debug code
     int found = 0;
-
-    struct interface *ifa = NULL;
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
+    ifa = g_interfaces;
+    while (ifa) {
         if (ifa->ifindex == ifindex) {
             found = 1;
             break;
         }
+        ifa = ifa->next;
     }
 
     if (!found) {
         log_error("send_raws(): ifindex not found: %u", ifindex);
+
+        // debug code
+        int i = 0;
+        ifa = g_interfaces;
+        while (ifa) {
+            if (ifa->ifindex == ifindex) {
+                log_error("%d %s %u", i++, ifa->ifname, ifa->ifindex);
+            }
+            ifa = ifa->next;
+        }
         return 1;
     }
 
@@ -570,6 +601,8 @@ static void get_all_interfaces(int (*interface_add_cb)(const char *ifname))
 static void periodic_interfaces_handler(int _events, int _fd)
 {
     static time_t check_time = 0;
+    struct interface *ifa_prev;
+    struct interface *ifa;
 
     if (check_time != 0 && check_time >= gstate.time_now) {
         return;
@@ -581,22 +614,30 @@ static void periodic_interfaces_handler(int _events, int _fd)
         get_all_interfaces(&interface_add);
     }
 
-    struct interface *ifa = NULL;
-    while ((ifa = utarray_prev(g_interfaces, ifa))) {
+    // detect vanished interfaces
+    // - reset if added via configuration
+    // - remove if added dynamically
+    ifa_prev = NULL;
+    ifa = g_interfaces;
+    while (ifa) {
         unsigned ifindex = if_nametoindex(ifa->ifname);
         if (ifindex != ifa->ifindex) {
             log_warning("interface %s changed ifindex: %u => %u", ifa->ifname, ifa->ifindex, ifindex);
-            interface_reset(ifa);
+            interface_reset_handler(ifa);
         }
 
         if (!is_valid_ifa(ifa)) {
-            int rc = interface_setup(ifa, g_dynamic_interfaces);
-            if (rc != 0 && g_dynamic_interfaces) {
-                // remove failing dynamic interfaces
-                int pos = utarray_eltidx(g_interfaces, ifa);
-                utarray_erase(g_interfaces, pos, 1);
+            int quiet = g_dynamic_interfaces;
+            int rc = interface_setup(ifa, quiet);
+            if (rc && g_dynamic_interfaces) {
+                struct interface *next = ifa->next;
+                interface_remove(ifa_prev, ifa);
+                ifa = next;
+                continue;
             }
         }
+        ifa_prev = ifa;
+        ifa = ifa->next;
     }
 }
 
@@ -604,18 +645,24 @@ int interfaces_debug(FILE *fd)
 {
     int count = 0;
     char mac_buf[18];
-    struct interface *ifa = NULL;
+    char size_buf1[32];
+    char size_buf2[32];
+    struct interface *ifa;
 
-    fprintf(fd, "name\tmac\tstatus\tmisc\n");
-    while ((ifa = utarray_next(g_interfaces, ifa))) {
-        fprintf(fd, "%s\t%s\t%s\t(fd: %d, ifindex: %d)\n",
+    fprintf(fd, "name\tstatus\tin\tout\tmac\t\t\tifsocket\tifindex\n");
+    ifa = g_interfaces;
+    while (ifa) {
+        fprintf(fd, "%s\t%s\t%s\t%s\t%s\t%d\t\t%d\n",
             ifa->ifname,
-            format_mac(mac_buf, &ifa->ifmac),
             is_valid_ifa(ifa) ? "up" : "down",
+            format_size(size_buf1, ifa->bytes_in),
+            format_size(size_buf2, ifa->bytes_out),
+            format_mac(mac_buf, &ifa->ifmac),
             ifa->ifsock_l2,
             ifa->ifindex
         );
         count += 1;
+        ifa = ifa->next;
     }
     fprintf(fd, " %d interfaces\n", count);
 
@@ -625,10 +672,6 @@ int interfaces_debug(FILE *fd)
 void interfaces_init()
 {
     if (g_interfaces == NULL) {
-        utarray_new(g_interfaces, &interface_icd);
-    }
-
-    if (utarray_len(g_interfaces) == 0) {
         log_info("No interface given => add all");
         g_dynamic_interfaces = 1;
     }
