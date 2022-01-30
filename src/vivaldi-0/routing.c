@@ -7,13 +7,13 @@
 #include <sys/time.h>
 #include <math.h>
 
+#include "../ext/uthash.h"
 #include "../log.h"
 #include "../utils.h"
 #include "../tun.h"
 #include "../net.h"
 #include "../unix.h"
 #include "../console.h"
-#include "../uthash.h"
 #include "../main.h"
 #include "../interfaces.h"
 

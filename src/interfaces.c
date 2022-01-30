@@ -14,10 +14,10 @@
 #include <linux/if_ether.h>   // ETH_ALEN(6), ETH_HLEN(14), ETH_FRAME_LEN(1514), struct ethhdr
 #include <linux/if_packet.h>  // struct sockaddr_ll
 
+#include "ext/utarray.h"
 #include "net.h"
 #include "log.h"
 #include "utils.h"
-#include "utarray.h"
 #include "interfaces.h"
 
 

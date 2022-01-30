@@ -7,7 +7,9 @@
 #include <sys/time.h>
 #include <linux/if_ether.h>   //ETH_ALEN(6),ETH_HLEN(14),ETH_FRAME_LEN(1514),struct ethhdr
 
-#include "../utlist.h"
+#include "../ext/utlist.h"
+#include "../ext/seqnum_cache.h"
+#include "../ext/packet_cache.h"
 #include "../log.h"
 #include "../utils.h"
 #include "../net.h"
@@ -16,8 +18,6 @@
 #include "../console.h"
 #include "../main.h"
 #include "../interfaces.h"
-#include "../ext/seqnum_cache.h"
-#include "../ext/packet_cache.h"
 
 #include "routing.h"
 

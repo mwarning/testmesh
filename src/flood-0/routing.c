@@ -6,6 +6,7 @@
 #include <net/if.h>
 #include <sys/time.h>
 
+#include "../ext/uthash.h"
 #include "../log.h"
 #include "../utils.h"
 #include "../net.h"
@@ -13,7 +14,6 @@
 #include "../unix.h"
 #include "../console.h"
 #include "../main.h"
-#include "../uthash.h"
 #include "../interfaces.h"
 
 #include "routing.h"

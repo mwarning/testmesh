@@ -11,7 +11,7 @@
 #include <fcntl.h> // open(), O_RDWR
 #include <stdarg.h>
 
-#include "uthash.h"
+#include "ext/uthash.h"
 #include "log.h"
 #include "utils.h"
 

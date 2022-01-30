@@ -6,16 +6,16 @@
 #include <net/if.h>
 #include <sys/time.h>
 
+#include "../ext/uthash.h"
+#include "../ext/seqnum_cache.h"
+#include "../ext/packet_cache.h"
 #include "../log.h"
 #include "../utils.h"
 #include "../net.h"
 #include "../tun.h"
 #include "../console.h"
 #include "../main.h"
-#include "../uthash.h"
 #include "../interfaces.h"
-#include "../ext/seqnum_cache.h"
-#include "../ext/packet_cache.h"
 
 #include "routing.h"
 

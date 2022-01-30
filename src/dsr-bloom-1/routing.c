@@ -13,8 +13,8 @@
 #include "../unix.h"
 #include "../console.h"
 #include "../main.h"
-#include "../uthash.h"
 #include "../interfaces.h"
+#include "../ext/uthash.h"
 
 #include "routing.h"
 

@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "../uthash.h"
+#include "uthash.h"
 #include "../utils.h"
 #include "../log.h"
 #include "../net.h"
