@@ -36,12 +36,12 @@ static int g_dynamic_interfaces = 0;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
 // forward declaration
-static void read_l2_interal(int events, int fd);
+static void read_internal_l2(int events, int fd);
 
 static void interface_reset_handler(struct interface *ifa)
 {
     if (ifa->ifsock_l2 != -1) {
-        net_remove_handler(ifa->ifsock_l2, &read_l2_interal);
+        net_remove_handler(ifa->ifsock_l2, &read_internal_l2);
         close(ifa->ifsock_l2);
         ifa->ifsock_l2 = -1;
     }
@@ -52,24 +52,22 @@ static void interface_reset_handler(struct interface *ifa)
 
 static int is_valid_ifa(const struct interface *ifa)
 {
-    return (ifa->ifindex > 0 && memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) != 0);
+    return ifa && (ifa->ifindex > 0) && (memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) != 0);
 }
 
-static int find_interface(const char *ifname)
+static struct interface *get_interface_by_name(const char *ifname)
 {
     struct interface *ifa;
-    int i = 0;
 
     ifa = g_interfaces;
     while (ifa) {
         if (0 == strcmp(ifa->ifname, ifname)) {
-            return i;
+            return ifa;
         }
-        i += 1;
         ifa = ifa->next;
     }
 
-    return -1;
+    return NULL;
 }
 
 const char *str_ifindex(unsigned ifindex)
@@ -125,7 +123,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 
     if (sock != -1) {
         close(sock);
-        net_remove_handler(sock, &read_l2_interal);
+        net_remove_handler(sock, &read_internal_l2);
     }
 
     if ((sock = socket(PF_PACKET, SOCK_RAW, htons(gstate.ether_type))) == -1) {
@@ -158,7 +156,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 
     *sock_ret = sock;
 
-    net_add_handler(sock, &read_l2_interal);
+    net_add_handler(sock, &read_internal_l2);
 
     return 0;
 }
@@ -237,19 +235,16 @@ int interface_add(const char *ifname)
         return 1;
     }
 
-    if (-1 != find_interface(ifname)) {
+    if (get_interface_by_name(ifname)) {
         log_error("Cannot add duplicate interface: %s", ifname);
         return 1;
     }
 
-    struct interface *ifa = (struct interface*) malloc(sizeof(struct interface));
+    struct interface *ifa = (struct interface*) calloc(1, sizeof(struct interface));
     *ifa = (struct interface) {
-        .ifindex = 0,
         .ifname = strdup(ifname),
         .ifmac = g_nullmac,
         .ifsock_l2 = -1,
-        .bytes_in = 0,
-        .bytes_out = 0,
     };
 
     interface_setup(ifa, 1);
@@ -288,30 +283,7 @@ int interface_del(const char *ifname)
     return 1;
 }
 
-/*
-static void join_mcast(int sock, int ifindex)
-{
-    struct ipv6_mreq group = {0};
-    //group.ipv6mr_multiaddr = get_ip_addr(fd, interface->ifname);
-    group.ipv6mr_interface = ifindex; // if_nametoindex("vboxnet0"); //hm, works 
-    memcpy(&group.ipv6mr_multiaddr, &gstate.mcast_addr.sin6_addr, sizeof(struct in6_addr));
-
-    if (setsockopt(sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &group, sizeof(group)) < 0) {
-        if (errno != EADDRINUSE) {
-            log_error("setsockopt(IPV6_ADD_MEMBERSHIP) %s", strerror(errno));
-            exit(1);
-        }
-    }
-
-    // do not reseive own packets send to a multicast group (remove if we have multiple instances on the same host)
-    //int loop = 0;
-    //if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
-    //    log_warning("setsockopt(IPV6_MULTICAST_LOOP) %s\n", strerror(errno));
-    //}
-}
-*/
-
-static void read_l2_interal(int events, int fd)
+static void read_internal_l2(int events, int fd)
 {
     struct interface *ifa;
     ssize_t readlen;
@@ -339,7 +311,7 @@ static void read_l2_interal(int events, int fd)
     gstate.protocol->ext_handler_l2(ifa->ifindex, &buffer[0], readlen);
 }
 
-static int send_l2_internal(struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)
+static int send_internal_l2(struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)
 {
     if (!is_valid_ifa(ifa)) {
         return 1;
@@ -362,7 +334,7 @@ static int send_l2_internal(struct interface *ifa, const uint8_t *dst_addr, cons
     memcpy(&socket_address.sll_addr, dst_addr, ETH_ALEN);
 
     if (sendto(ifa->ifsock_l2, sendbuf, sendlen, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0) {
-        log_warning("sendto() failed on raw socket: %s", strerror(errno));
+        log_warning("sendto() failed on raw socket for %s: %s", ifa->ifname, strerror(errno));
         interface_reset_handler(ifa);
         return 1;
     }
@@ -390,19 +362,23 @@ void send_bcasts_l2(const void* data, size_t data_len)
     count = 0;
     ifa = g_interfaces;
     while (ifa) {
-        send_l2_internal(ifa, &dst_addr[0], &sendbuf[0], sendlen);
+        send_internal_l2(ifa, &dst_addr[0], &sendbuf[0], sendlen);
         count += 1;
         ifa = ifa->next;
     }
 
-    log_debug("send_raws: %d bytes on %d interfaces", (int) data_len, count);
+    log_debug2("send_raws: %d bytes on %d interfaces", (int) data_len, count);
 }
 
 int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 {
     struct interface *ifa;
 
-    assert(addr->family == AF_MAC);
+    if (addr->family != AF_MAC) {
+        log_error("send_ucast_l2: used wrong address type");
+        return 1;
+    }
+
     unsigned ifindex = addr->mac.ifindex;
     const uint8_t *dst_addr = &addr->mac.addr.data[0];
 
@@ -421,7 +397,6 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 
     memcpy(&sendbuf[sizeof(struct ethhdr)], data, data_len);
 
-    // debug code
     int found = 0;
     ifa = g_interfaces;
     while (ifa) {
@@ -434,29 +409,75 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 
     if (!found) {
         log_error("send_raws(): ifindex not found: %u", ifindex);
-
-        // debug code
-        int i = 0;
-        ifa = g_interfaces;
-        while (ifa) {
-            if (ifa->ifindex == ifindex) {
-                log_error("%d %s %u", i++, ifa->ifname, ifa->ifindex);
-            }
-            ifa = ifa->next;
-        }
         return 1;
     }
 
-    return send_l2_internal(ifa, dst_addr, sendbuf, sizeof(struct ethhdr) + data_len);
+    return send_internal_l2(ifa, dst_addr, sendbuf, sizeof(struct ethhdr) + data_len);
+}
+
+static void read_internal_l3(int events, int fd)
+{
+    Address peer_addr;
+    ssize_t readlen;
+    uint8_t buffer[ETH_FRAME_LEN];
+    socklen_t addr_len;
+
+    if (events <= 0) {
+        return;
+    }
+
+    addr_len = sizeof(Address);
+    readlen = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &peer_addr, &addr_len);
+    //static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
+
+    if (readlen <= 0) {
+        return;
+    }
+
+    // what interface to assign this to?
+    //ifa->bytes_in += readlen;
+
+    if (!(peer_addr.family == AF_INET6 || peer_addr.family == AF_INET)) {
+        log_warning("read_l3_internal: received no IPv4 or IPv6 packet");
+        return;
+    }
+
+    gstate.protocol->ext_handler_l3(&peer_addr, &buffer[0], readlen);
+}
+
+void send_ucast_l3(const Address *addr, const void *data, size_t data_len)
+{
+    if (!(addr->family == AF_INET || addr->family == AF_INET6)) {
+        log_error("send_ucast_l3: used wrong address type");
+        return;
+    }
+
+    socklen_t slen = sizeof(struct sockaddr_storage);
+    if (sendto(gstate.sock_udp, data, data_len, 0, (struct sockaddr*) addr, slen) == -1) {
+        log_error("failed send packet to %s: %s", str_addr(addr), strerror(errno));
+    }
 }
 
 /*
-void send_ucast_l3(const struct sockaddr_storage *addr, const void *data, size_t data_len)
+static void join_mcast(int sock, int ifindex)
 {
-    socklen_t slen = sizeof(struct sockaddr_storage);
-    if (sendto(gstate.sock_udp, data, data_len, 0, (struct sockaddr*) addr, slen) == -1) {
-        log_error("Failed send packet to %s: %s", str_addr((Address*) addr), strerror(errno));
+    struct ipv6_mreq group = {0};
+    //group.ipv6mr_multiaddr = get_ip_addr(fd, interface->ifname);
+    group.ipv6mr_interface = ifindex; // if_nametoindex("vboxnet0"); //hm, works 
+    memcpy(&group.ipv6mr_multiaddr, &gstate.mcast_addr.sin6_addr, sizeof(struct in6_addr));
+
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &group, sizeof(group)) < 0) {
+        if (errno != EADDRINUSE) {
+            log_error("setsockopt(IPV6_ADD_MEMBERSHIP) %s", strerror(errno));
+            exit(1);
+        }
     }
+
+    // do not reseive own packets send to a multicast group (remove if we have multiple instances on the same host)
+    //int loop = 0;
+    //if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
+    //    log_warning("setsockopt(IPV6_MULTICAST_LOOP) %s\n", strerror(errno));
+    //}
 }
 
 int send_mcast_l3(unsigned ifindex, const void* data, int data_len)
@@ -510,7 +531,7 @@ void send_mcasts_l3(const void* data, int data_len)
     }
 }
 
-ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
+static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
 {
     struct iovec iov[1];
     char cmsg6[CMSG_SPACE(sizeof(struct in6_pktinfo))];
@@ -585,7 +606,7 @@ static void get_all_interfaces(int (*interface_add_cb)(const char *ifname))
         }
 
         // avoid to add interfaces multiple times
-        if (-1 != find_interface(ifa->ifa_name)) {
+        if (get_interface_by_name(ifa->ifa_name)) {
             continue;
         }
 
@@ -620,7 +641,7 @@ static void periodic_interfaces_handler(int _events, int _fd)
     while (ifa) {
         unsigned ifindex = if_nametoindex(ifa->ifname);
         if (ifindex != ifa->ifindex) {
-            log_warning("interface %s changed ifindex: %u => %u", ifa->ifname, ifa->ifindex, ifindex);
+            log_warning("interface %s changed ifindex: %d => %d", ifa->ifname, ifa->ifindex, ifindex);
             interface_reset_handler(ifa);
         }
 
@@ -672,6 +693,14 @@ void interfaces_init()
     if (g_interfaces == NULL) {
         log_info("No interface given => add all");
         g_dynamic_interfaces = 1;
+    }
+
+    if (gstate.sock_udp > 0) {
+        net_add_handler(gstate.sock_udp, &read_internal_l3);
+    }
+
+    if (gstate.sock_mcast_receive > 0) {
+        net_add_handler(gstate.sock_mcast_receive, &read_internal_l3);
     }
 
     net_add_handler(-1, &periodic_interfaces_handler);

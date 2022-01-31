@@ -8,6 +8,8 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
+#include "utils.h"
+
 #define MAIN_SRVNAME "mesh"
 #define MULTICAST_ADDR "ff12::114"
 #define MULTICAST_PORT 4321
@@ -20,7 +22,7 @@ typedef struct {
     void (*exit)();
     void (*tun_handler)(uint32_t dst_id, uint8_t *packet, size_t length);
     void (*ext_handler_l2)(int ifindex, uint8_t *packet, size_t length); // receive Ethernet frames
-    void (*ext_handler_l3)(int ifindex, uint8_t *packet, size_t length); // receive IP frames
+    void (*ext_handler_l3)(Address *src_addr, uint8_t *packet, size_t length); // receive IP frames
     int (*add_peer)(FILE* fp, const char *str);
     int (*console)(FILE* file, int argc, char *argv[]);
 } Protocol;
