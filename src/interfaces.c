@@ -285,15 +285,19 @@ int interface_del(const char *ifname)
 
 static void read_internal_l2(int events, int fd)
 {
+    // some offset to prepend a header before forwarding
+    #define OFFSET 100
+
     struct interface *ifa;
     ssize_t readlen;
-    uint8_t buffer[ETH_FRAME_LEN];
+    uint8_t buffer[OFFSET + ETH_FRAME_LEN];
+    uint8_t *buf = &buffer[OFFSET];
 
     if (events <= 0) {
         return;
     }
 
-    readlen = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
+    readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, NULL, NULL);
     ifa = get_interface_by_fd(fd);
 
     if (readlen < 0) {
@@ -308,7 +312,7 @@ static void read_internal_l2(int events, int fd)
 
     ifa->bytes_in += readlen;
 
-    gstate.protocol->ext_handler_l2(ifa->ifindex, &buffer[0], readlen);
+    gstate.protocol->ext_handler_l2(ifa->ifindex, buf, readlen);
 }
 
 static int send_internal_l2(struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)

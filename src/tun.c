@@ -266,8 +266,11 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
 
 static void tun_read_internal(int events, int fd)
 {
-    uint8_t buffer[100 + ETH_FRAME_LEN];
-    uint8_t *buf = &buffer[100];
+    // some offset to prepend a header before forwarding
+    #define OFFSET 100
+
+    uint8_t buffer[OFFSET + ETH_FRAME_LEN];
+    uint8_t *buf = &buffer[OFFSET];
     uint32_t dst_id;
 
     if (events <= 0) {
