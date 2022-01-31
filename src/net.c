@@ -92,7 +92,7 @@ static void compress_entries()
 
 void net_loop(void)
 {
-	time_t n;
+	time_t now;
 	int all;
 	int rc;
 
@@ -106,9 +106,9 @@ void net_loop(void)
 			break;
 		}
 
-		n = time(NULL);
-		all = (n > gstate.time_now);
-		gstate.time_now = n;
+		now = time(NULL);
+		all = (now > gstate.time_now);
+		gstate.time_now = now;
 
 		for (int i = 0; i < g_count; i++) {
 			int revents = g_fds[i].revents;
