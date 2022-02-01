@@ -120,4 +120,5 @@ Interesting projects for low bandwidth networks:
 
 * [Disaster Radio](https://disaster.radio/)
 * [GoTenna](https://gotenna.com/)
+* [Meshtastic](https://meshtastic.org/)
 * [Reticulum](https://unsigned.io/projects/reticulum/)
