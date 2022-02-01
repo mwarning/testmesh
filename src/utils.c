@@ -182,6 +182,24 @@ static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_sto
     return addrbuf;
 }
 
+const char *str_duration(time_t from, time_t to)
+{
+    static char sizeduration[2][32];
+    static unsigned durationbuf_i = 0;
+    char *buf = sizeduration[++durationbuf_i % 2];
+
+    return format_duration(buf, from, to);
+}
+
+const char *str_size(uint64_t bytes)
+{
+    static char sizebuf[2][32];
+    static unsigned sizebuf_i = 0;
+    char *buf = sizebuf[++sizebuf_i % 2];
+
+    return format_size(buf, bytes);
+}
+
 const char *str_addr(const Address *addr)
 {
     static char addrbuf[2][INET6_ADDRSTRLEN + 8];

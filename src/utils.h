@@ -50,6 +50,8 @@ int address_is_broadcast(const Address *addr);
 
 void init_macaddr(Address *dst, const void *mac_addr, int ifindex);
 
+const char *str_size(uint64_t bytes);
+const char *str_duration(time_t from, time_t to);
 const char *str_addr(const Address *addr);
 const char *str_addr6(const struct sockaddr_in6 *addr);
 
