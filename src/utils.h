@@ -50,7 +50,8 @@ int address_is_broadcast(const Address *addr);
 
 void init_macaddr(Address *dst, const void *mac_addr, int ifindex);
 
-const char *str_size(uint64_t bytes);
+const char *str_mac(const struct mac *addr);
+const char *str_bytes(uint64_t bytes);
 const char *str_duration(time_t from, time_t to);
 const char *str_addr(const Address *addr);
 const char *str_addr6(const struct sockaddr_in6 *addr);
@@ -67,10 +68,5 @@ int addr_port(const struct sockaddr_in6 *addr);
 int addr_len(const struct sockaddr_storage *addr);
 int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2);
 int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2);
-
-const char *format_address(char buf[64], const Address *addr);
-const char *format_mac(char buf[18], const struct mac *addr);
-const char *format_duration(char buf[32], time_t from, time_t to);
-const char *format_size(char buf[32], uint64_t bytes);
 
 #endif // _UTILS_H_

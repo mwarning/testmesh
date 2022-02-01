@@ -189,16 +189,70 @@ const char *str_duration(time_t from, time_t to)
     static unsigned durationbuf_i = 0;
     char *buf = sizeduration[++durationbuf_i % 2];
 
-    return format_duration(buf, from, to);
+    int days, hours, minutes, seconds;
+    long long int secs;
+    const char *neg = "";
+
+    if (from <= to) {
+        secs = to - from;
+    } else {
+        secs = from - to;
+        // Prepend minus sign
+        neg = "-";
+    }
+
+    days = secs / (24 * 60 * 60);
+    secs -= days * (24 * 60 * 60);
+    hours = secs / (60 * 60);
+    secs -= hours * (60 * 60);
+    minutes = secs / 60;
+    secs -= minutes * 60;
+    seconds = secs;
+
+    if (days > 0) {
+        snprintf(buf, 64, "%s%dd%dh", neg, days, hours);
+    } else if (hours > 0) {
+        snprintf(buf, 64, "%s%dh%dm", neg, hours, minutes);
+    } else if (minutes > 0) {
+        snprintf(buf, 64, "%s%dm%ds", neg, minutes, seconds);
+    } else {
+        snprintf(buf, 64, "%s%ds", neg, seconds);
+    }
+
+    return buf;
 }
 
-const char *str_size(uint64_t bytes)
+const char *str_bytes(uint64_t bytes)
 {
     static char sizebuf[2][32];
     static unsigned sizebuf_i = 0;
     char *buf = sizebuf[++sizebuf_i % 2];
 
-    return format_size(buf, bytes);
+    if (bytes < 1000) {
+        sprintf(buf, "%uB", (unsigned) bytes);
+    } else if (bytes < 1000000) {
+        sprintf(buf, "%.0fK", bytes / 1000.0);
+    } else if (bytes < 1000000000) {
+        sprintf(buf, "%.1fM", bytes / 1000000.0);
+    } else if (bytes < 1000000000000) {
+        sprintf(buf, "%.2fG", bytes / 1000000000.0);
+    } else {
+        sprintf(buf, "%.2fT", bytes / 1000000000000.0);
+    }
+
+    return buf;
+}
+
+const char *str_mac(const struct mac *addr)
+{
+    static char macbuf[2][18];
+    static unsigned macbuf_i = 0;
+    char *buf = macbuf[++macbuf_i % 2];
+
+    sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
+            addr->data[0], addr->data[1], addr->data[2],
+            addr->data[3], addr->data[4], addr->data[5]);
+    return buf;
 }
 
 const char *str_addr(const Address *addr)
@@ -207,7 +261,20 @@ const char *str_addr(const Address *addr)
     static unsigned addrbuf_i = 0;
     char *buf = addrbuf[++addrbuf_i % 2];
 
-    return format_address(buf, addr);
+    switch (addr->family) {
+    case AF_INET6:
+    case AF_INET:
+        return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
+    case AF_MAC: {
+        const struct mac *a = &addr->mac.addr;
+        sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
+            a->data[0], a->data[1], a->data[2],
+            a->data[3], a->data[4], a->data[5]);
+        return buf;
+    }
+    default:
+        return NULL;
+    }
 }
 
 const char *str_addr_storage(const struct sockaddr_storage *addr)
@@ -481,75 +548,10 @@ int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2)
     return memcmp(addr1, addr2, sizeof(struct in6_addr));
 }
 
-const char *format_address(char buf[64], const Address *addr)
-{
-    switch (addr->family) {
-    case AF_INET6:
-    case AF_INET:
-        return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
-    case AF_MAC:
-        return format_mac(buf, &addr->mac.addr);
-    default:
-        return NULL;
-    }
-}
-
 const char *format_mac(char buf[18], const struct mac *addr)
 {
     sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
         addr->data[0], addr->data[1], addr->data[2],
         addr->data[3], addr->data[4], addr->data[5]);
-    return buf;
-}
-
-const char *format_duration(char buf[32], time_t from, time_t to)
-{
-    int days, hours, minutes, seconds;
-    long long int secs;
-    const char *neg = "";
-
-    if (from <= to) {
-        secs = to - from;
-    } else {
-        secs = from - to;
-        // Prepend minus sign
-        neg = "-";
-    }
-
-    days = secs / (24 * 60 * 60);
-    secs -= days * (24 * 60 * 60);
-    hours = secs / (60 * 60);
-    secs -= hours * (60 * 60);
-    minutes = secs / 60;
-    secs -= minutes * 60;
-    seconds = secs;
-
-    if (days > 0) {
-        snprintf(buf, 64, "%s%dd%dh", neg, days, hours);
-    } else if (hours > 0) {
-        snprintf(buf, 64, "%s%dh%dm", neg, hours, minutes);
-    } else if (minutes > 0) {
-        snprintf(buf, 64, "%s%dm%ds", neg, minutes, seconds);
-    } else {
-        snprintf(buf, 64, "%s%ds", neg, seconds);
-    }
-
-    return buf;
-}
-
-const char *format_size(char buf[32], uint64_t bytes)
-{
-    if (bytes < 1000) {
-        sprintf(buf, "%uB", (unsigned) bytes);
-    } else if (bytes < 1000000) {
-        sprintf(buf, "%.0fK", bytes / 1000.0);
-    } else if (bytes < 1000000000) {
-        sprintf(buf, "%.1fM", bytes / 1000000.0);
-    } else if (bytes < 1000000000000) {
-        sprintf(buf, "%.2fG", bytes / 1000000000.0);
-    } else {
-        sprintf(buf, "%.2fT", bytes / 1000000000000.0);
-    }
-
     return buf;
 }

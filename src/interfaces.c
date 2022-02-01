@@ -669,7 +669,6 @@ static void periodic_interfaces_handler(int _events, int _fd)
 int interfaces_debug(FILE *fd)
 {
     int count = 0;
-    char mac_buf[18];
     struct interface *ifa;
 
     fprintf(fd, "name\tstatus\tmac\t\t\tifsocket\tifindex\n");
@@ -678,7 +677,7 @@ int interfaces_debug(FILE *fd)
         fprintf(fd, "%s\t%s\t%s\t%d\t\t%d\n",
             ifa->ifname,
             is_valid_ifa(ifa) ? "up" : "down",
-            format_mac(mac_buf, &ifa->ifmac),
+            str_mac(&ifa->ifmac),
             ifa->ifsock_l2,
             ifa->ifindex
         );

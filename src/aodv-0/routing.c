@@ -339,7 +339,6 @@ static int console_handler(FILE* fp, int argc, char *argv[])
     } else if (MATCH(1, "n")) {
         RoutingEntry *cur;
         RoutingEntry *tmp;
-        char buf[64];
         int count = 0;
 
         fprintf(fp, "dst_id\t\tseq_num\tnext_hop\t\tlast_updated\n");
@@ -348,7 +347,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
                 cur->dst_id,
                 cur->seq_num,
                 str_addr(&cur->next_hop),
-                format_duration(buf, cur->last_updated, gstate.time_now)
+                str_duration(cur->last_updated, gstate.time_now)
             );
             count += 1;
         }

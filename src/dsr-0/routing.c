@@ -192,14 +192,13 @@ static Addr* get_data_path(DATA *p)
 static char *format_path(const Addr *path, uint32_t path_count)
 {
     static char buf[MAX_PATH_COUNT * 25];
-    char mac_buf[18];
     char *cur = buf;
     cur[0] = 0;
     for (int i = 0; i < path_count; i++) {
         ssize_t left = (buf + sizeof(buf)) - cur;
         switch (path[i].type) {
             case ADDR_TYPE_MAC:
-                cur += snprintf(cur, left, i ? ", %s/%u" : "%s/%u", format_mac(mac_buf, &path[i].addr.mac), path[i].ifindex);
+                cur += snprintf(cur, left, i ? ", %s/%u" : "%s/%u", str_mac(&path[i].addr.mac), path[i].ifindex);
                 break;
             default:
                 exit(1);
@@ -529,8 +528,6 @@ static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
 
 static int console_handler(FILE *fp, int argc, char *argv[])
 {
-    char buf_duration[64];
-
     if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "n: print routing table\n");
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
@@ -541,7 +538,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         LL_FOREACH(g_path_cache, cur) {
             fprintf(fp, "0x%08x\t%s\t%u\t[%s]\n",
                 cur->dst_id,
-                format_duration(buf_duration, cur->last_updated, gstate.time_now),
+                str_duration(cur->last_updated, gstate.time_now),
                 (unsigned) cur->path_count,
                 format_path(&cur->path[0], cur->path_count)
             );

@@ -56,13 +56,13 @@ void traffic_debug(FILE* out)
     HASH_ITER(hh, g_traffic, cur, tmp) {
         fprintf(out, "%s: %s %s %s ago\n",
             str_addr(&cur->addr),
-            str_size(cur->bytes_in),
-            str_size(cur->bytes_out),
+            str_bytes(cur->bytes_in),
+            str_bytes(cur->bytes_out),
             str_duration(cur->updated, gstate.time_now));
         bytes_in += cur->bytes_in;
         bytes_out += cur->bytes_out;
         count += 1;
     }
 
-    fprintf(out, "%d addresses, %s %s \n", count, str_size(bytes_in), str_size(bytes_out));
+    fprintf(out, "%d addresses, %s %s \n", count, str_bytes(bytes_in), str_bytes(bytes_out));
 }

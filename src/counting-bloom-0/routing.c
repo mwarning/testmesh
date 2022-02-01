@@ -324,7 +324,6 @@ static char *format_bloom(char *buf, const uint8_t *bloom)
 
 static int console_handler(FILE *fp, int argc, char *argv[])
 {
-    char buf_duration[64];
     char buf_bloom[BLOOM_M * 6];
 
     if (argc == 1 && !strcmp(argv[0], "h")) {
@@ -343,7 +342,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
             fprintf(fp, "  0x%08x %s %s %s\n",
                 cur->sender_id,
                 str_addr(&cur->addr),
-                format_duration(buf_duration, cur->last_updated, gstate.time_now),
+                str_duration(cur->last_updated, gstate.time_now),
                 format_bloom(buf_bloom, &cur->bloom[0])
             );
             counter += 1;

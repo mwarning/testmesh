@@ -522,8 +522,6 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 {
     #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
 
-    char buf_duration[64];
-
     if (MATCH(1, "h")) {
         fprintf(fp,
             "r: print root\n"
@@ -532,7 +530,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     } else if (MATCH(1, "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
             g_current_root.id, g_current_root.hop_count, g_current_root.seq_num,
-            format_duration(buf_duration, g_current_root.updated, gstate.time_now));
+            str_duration(g_current_root.updated, gstate.time_now));
     } else if (MATCH(1, "n")) {
         int counter = 0;
         Node *cur;
@@ -543,7 +541,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
                 cur->id,
                 cur->hop_count,
                 str_addr(&cur->next_hop_addr),
-                format_duration(buf_duration, cur->updated, gstate.time_now)
+                str_duration(cur->updated, gstate.time_now)
             );
             counter += 1;
         }

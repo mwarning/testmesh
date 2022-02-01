@@ -186,7 +186,6 @@ static int console_handler(FILE* fp, int argc, char *argv[])
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
         Entry *cur;
         Entry *tmp;
-        char buf[64];
         int count = 0;
 
         fprintf(fp, "id seq_num last_updated\n");
@@ -194,7 +193,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
             fprintf(fp, "0x%08x %u %s\n",
                 cur->id,
                 cur->seq_num,
-                format_duration(buf, gstate.time_started, cur->last_updated)
+                str_duration(gstate.time_started, cur->last_updated)
             );
             count += 1;
         }

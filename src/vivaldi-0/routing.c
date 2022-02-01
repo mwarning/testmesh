@@ -356,7 +356,6 @@ static char *format_pos(char *buf, const float *pos)
 
 static int console_handler(FILE *fp, int argc, char *argv[])
 {
-    char buf_duration[64];
     char buf_pos[8 * DIM];
 
     #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
@@ -375,7 +374,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
             fprintf(fp, "  0x%08x %s %s %s\n",
                 cur->sender_id,
                 str_addr(&cur->addr),
-                format_duration(buf_duration, cur->last_updated, gstate.time_now),
+                str_duration(cur->last_updated, gstate.time_now),
                 format_pos(buf_pos, cur->pos)
             );
             counter += 1;

@@ -302,8 +302,6 @@ static char *format_bloom(const uint8_t *bloom)
 
 static int console_handler(FILE *fp, int argc, char *argv[])
 {
-    char buf_duration[64];
-
     if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "n: print routing table\n");
     } else if (argc == 1 && !strcmp(argv[0], "i")) {
@@ -323,7 +321,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
             fprintf(fp, "0x%08x %s %s %s %u\n",
                 cur->sender_id,
                 str_addr(&cur->addr),
-                format_duration(buf_duration, cur->last_updated, gstate.time_now),
+                str_duration(cur->last_updated, gstate.time_now),
                 format_bloom(&cur->bloom[0]),
                 (unsigned) cur->hop_cnt
             );
