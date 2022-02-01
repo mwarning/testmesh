@@ -55,6 +55,7 @@ int bytes_random(void *buffer, size_t size)
 
 void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
 {
+    memset(dst, 0, sizeof(Address));
     dst->mac.family = AF_MAC;
     memcpy(&dst->mac.addr, mac_addr, 6);
     dst->mac.ifindex = ifindex;
