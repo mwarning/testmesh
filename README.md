@@ -12,7 +12,7 @@ Implemented Protocols:
 - [flood-0](src/flood-0/)
   - reactive
   - sequence number
-  - broadcasta only
+  - broadcast only
   - no metric
 - [aodv-0](src/aodv-0/)
   - reactive
