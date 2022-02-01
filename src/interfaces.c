@@ -18,6 +18,7 @@
 #include "net.h"
 #include "log.h"
 #include "utils.h"
+#include "traffic.h"
 #include "interfaces.h"
 
 
@@ -26,8 +27,6 @@ struct interface {
     struct mac ifmac;
     int ifsock_l2;
     char *ifname;       // persistent
-    uint64_t bytes_in;  // presistent
-    uint64_t bytes_out; // persistent
     struct interface *next;
 };
 
@@ -288,6 +287,8 @@ static void read_internal_l2(int events, int fd)
     // some offset to prepend a header before forwarding
     #define OFFSET 100
 
+    Address src_addr = {0};
+    socklen_t addr_len;
     struct interface *ifa;
     ssize_t readlen;
     uint8_t buffer[OFFSET + ETH_FRAME_LEN];
@@ -297,7 +298,7 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
-    readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, NULL, NULL);
+    readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, (struct sockaddr *) &src_addr, &addr_len);
     ifa = get_interface_by_fd(fd);
 
     if (readlen < 0) {
@@ -310,18 +311,18 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
-    ifa->bytes_in += readlen;
+    traffic_add_bytes_in(&src_addr, readlen);
 
     gstate.protocol->ext_handler_l2(ifa->ifindex, buf, readlen);
 }
 
-static int send_internal_l2(struct interface *ifa, const uint8_t *dst_addr, const void* sendbuf, size_t sendlen)
+static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_ALEN], const void* sendbuf, size_t sendlen)
 {
     if (!is_valid_ifa(ifa)) {
         return 1;
     }
 
-    if (NULL == gstate.protocol->ext_handler_l2) {
+    if (!gstate.protocol->ext_handler_l2) {
         log_error("No ext_handler_l2 handler registered => abort");
         exit(1);
     }
@@ -343,7 +344,11 @@ static int send_internal_l2(struct interface *ifa, const uint8_t *dst_addr, cons
         return 1;
     }
 
-    ifa->bytes_out += sendlen;
+    {
+        Address addr = {0};
+        init_macaddr(&addr, dst_addr, ifa->ifindex);
+        traffic_add_bytes_out(&addr, sendlen);
+    }
 
     return 0;
 }
@@ -421,7 +426,7 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 
 static void read_internal_l3(int events, int fd)
 {
-    Address peer_addr;
+    Address src_addr = {0};
     ssize_t readlen;
     uint8_t buffer[ETH_FRAME_LEN];
     socklen_t addr_len;
@@ -431,22 +436,19 @@ static void read_internal_l3(int events, int fd)
     }
 
     addr_len = sizeof(Address);
-    readlen = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &peer_addr, &addr_len);
+    readlen = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &src_addr, &addr_len);
     //static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
 
     if (readlen <= 0) {
+        log_error("recvfrom() for %s returned %lld: %s", str_addr(&src_addr), readlen, strerror(errno));
         return;
     }
 
-    // what interface to assign this to?
-    //ifa->bytes_in += readlen;
+    assert(src_addr.family == AF_INET6 || src_addr.family == AF_INET);
 
-    if (!(peer_addr.family == AF_INET6 || peer_addr.family == AF_INET)) {
-        log_warning("read_l3_internal: received no IPv4 or IPv6 packet");
-        return;
-    }
+    traffic_add_bytes_in(&src_addr, readlen);
 
-    gstate.protocol->ext_handler_l3(&peer_addr, &buffer[0], readlen);
+    gstate.protocol->ext_handler_l3(&src_addr, &buffer[0], readlen);
 }
 
 void send_ucast_l3(const Address *addr, const void *data, size_t data_len)
@@ -668,18 +670,14 @@ int interfaces_debug(FILE *fd)
 {
     int count = 0;
     char mac_buf[18];
-    char size_buf1[32];
-    char size_buf2[32];
     struct interface *ifa;
 
-    fprintf(fd, "name\tstatus\tin\tout\tmac\t\t\tifsocket\tifindex\n");
+    fprintf(fd, "name\tstatus\tmac\t\t\tifsocket\tifindex\n");
     ifa = g_interfaces;
     while (ifa) {
-        fprintf(fd, "%s\t%s\t%s\t%s\t%s\t%d\t\t%d\n",
+        fprintf(fd, "%s\t%s\t%s\t%d\t\t%d\n",
             ifa->ifname,
             is_valid_ifa(ifa) ? "up" : "down",
-            format_size(size_buf1, ifa->bytes_in),
-            format_size(size_buf2, ifa->bytes_out),
             format_mac(mac_buf, &ifa->ifmac),
             ifa->ifsock_l2,
             ifa->ifindex
