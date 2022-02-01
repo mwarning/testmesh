@@ -1,140 +1,68 @@
 #include <string.h>
 
+#include "ext/uthash.h"
 #include "utils.h"
 #include "log.h"
 #include "traffic.h"
 
 
 typedef struct {
-    // id 0 means not set
-    // id 1 is self
-    uint16_t from; // 0 means any
-    uint16_t to; // 
-    uint32_t bytes;
-    // TODO: use traffic in the last minute..
+    Address addr;
+    uint64_t bytes_out;
+    uint64_t bytes_in;
+    time_t updated;
+    UT_hash_handle hh;
 } Traffic;
 
-static Traffic g_traffic[200] = {0};
+static Traffic *g_traffic = NULL;
 
-int is_active_entry(const Traffic *tr)
+static void traffic_add_bytes(const Address *addr, uint64_t bytes_in, uint64_t bytes_out)
 {
-    return tr->from != 0 && tr->to != 0;
-}
+    Traffic *cur;
 
-/*
-void send_introductions()
-{
-    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
-        if (count_neighbors() > 10) {
-            break;
-        }
-
-        // threshold
-        if (g_traffic[i].bytes < 100) {
-            continue;
-        }
-
-        if (!is_active_entry(&g_traffic[i])) {
-            continue;
-        }
-
-        send_introduction(g_traffic[i].from, g_traffic[i].to);
-    }
-}*/
-
-int traffic_add_entry(uint16_t from, uint16_t to, uint32_t bytes)
-{
-    if (from == 0 || to == 0) {
-        log_error("invalid from/to");
-        exit(1);
-    }
-
-    int first_free_entry = -1; //first
-    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
-        Traffic *traffic = &g_traffic[i];
-        if (traffic->from == 0 && first_free_entry == -1) {
-            first_free_entry = i;
-        } else if (traffic->from == from && traffic->to == to) {
-            traffic->bytes += bytes;
-            // updated
-            return traffic->bytes;
-        }
-    }
-
-    if (first_free_entry != -1) {
-        Traffic *traffic = &g_traffic[first_free_entry];
-        traffic->from = from;
-        traffic->to = to;
-        traffic->bytes = bytes;
-        // added
-        return bytes;
+    HASH_FIND(hh, g_traffic, addr, sizeof(Address), cur);
+    if (cur) {
+        cur->bytes_in += bytes_in;
+        cur->bytes_out += bytes_out;
     } else {
-        // no space to keep information...
-        return 0;
+        cur = (Traffic*) malloc(sizeof(Traffic));
+        memcpy(&cur->addr, addr, sizeof(Address));
+        cur->bytes_in = bytes_in;
+        cur->bytes_out = bytes_out;
+        cur->updated = gstate.time_now;
+
+        HASH_ADD_INT(g_traffic, addr, cur);
     }
 }
 
-uint32_t traffic_get_entry(uint16_t from, uint16_t to)
+void traffic_add_bytes_out(const Address *addr, uint64_t bytes)
 {
-    uint32_t sum = 0;
-    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
-        Traffic *traffic = &g_traffic[i];
-        if (from == 0) {
-            if (to == 0 || traffic->to == to)  {
-                sum += traffic->bytes;
-            }
-        } else {
-            if (from == 0) {
-                sum += traffic->bytes;
-            }
-            if (traffic->from == from) {
-                return traffic->bytes;
-            }
-        }
-    }
-
-    return sum;
+    traffic_add_bytes(addr, 0, bytes);
 }
 
-void traffic_halving()
+void traffic_add_bytes_in(const Address *addr, uint64_t bytes)
 {
-    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
-        Traffic *traffic = &g_traffic[i];
-        traffic->bytes /= 2;
-
-        // effectively delete entry if bytes reaches 0
-        if (traffic->bytes == 0) {
-            traffic->from = 0;
-            traffic->to = 0;
-        }
-    }
-}
-
-void traffic_del_entry(uint16_t id)
-{
-    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
-        Traffic *traffic = &g_traffic[i];
-        if (traffic->from == id || traffic->to == id) {
-            memset(traffic, 0, sizeof(Traffic));
-        }
-    }
+    traffic_add_bytes(addr, bytes, 0);
 }
 
 void traffic_debug(FILE* out)
 {
-    char buf[64];
     int count = 0;
-    fprintf(out, "  from => to (bytes)\n");
-    for (int i = 0; i < ARRAY_NELEMS(g_traffic); i += 1) {
-        Traffic *traffic = &g_traffic[i];
-        if (traffic->from != 0) {
-            fprintf(out, "  %u => %u (%s)\n",
-                traffic->from,
-                traffic->to,
-                format_size(buf, traffic->bytes)
-            );
-            count += 1;
-        }
+    uint64_t bytes_in = 0;
+    uint64_t bytes_out = 0;
+
+    Traffic *cur;
+    Traffic *tmp;
+    HASH_ITER(hh, g_traffic, cur, tmp) {
+        fprintf(out, "%s: %s %s %s ago\n",
+            str_addr(&cur->addr),
+            str_size(cur->bytes_in),
+            str_size(cur->bytes_out),
+            str_duration(cur->updated, gstate.time_now));
+        bytes_in += cur->bytes_in;
+        bytes_out += cur->bytes_out;
+        count += 1;
     }
-    fprintf(out, "%d entries\n", count);
+
+    fprintf(out, "%d addresses, %s %s \n", count, str_size(bytes_in), str_size(bytes_out));
 }

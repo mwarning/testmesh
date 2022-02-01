@@ -5,14 +5,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void traffic_halving();
+/*
+ * Keep track of the traffic flowing. Useful for
+ * debugging or even improving routing decissions.
+ */
 
-void send_introductions();
-
-int traffic_add_entry(uint16_t from, uint16_t to, uint32_t bytes);
-uint32_t traffic_get_entry(uint16_t from, uint16_t to);
-void traffic_del_entry(uint16_t id);
-
+void traffic_add_bytes_out(const Address *addr, uint64_t bytes);
+void traffic_add_bytes_in(const Address *addr, uint64_t bytes);
 void traffic_debug(FILE* out);
 
 #endif /* _TRAFFIC_H_ */
