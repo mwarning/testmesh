@@ -76,8 +76,8 @@ static int console_exec(FILE *fp, int argc, char *argv[])
 
     int ret = 0;
 
-    if (MATCH(1, "t")) {
-        traffic_debug(fp);
+    if (argc && !strcmp(argv[0], "t")) {
+        traffic_debug(fp, argc, argv);
     } else if (MATCH(2, "peer-add")) {
         if (gstate.protocol->add_peer) {
             gstate.protocol->add_peer(fp, argv[1]);
@@ -115,6 +115,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
     } else if (MATCH(1, "h")) {
         fprintf(fp,
             "i                       General information.\n"
+            "t [<show-num>]          Show traffic statistics\n"
             "interfaces              List all used interfaces.\n"
             "interface-add <ifname>  Add interface.\n"
             "interface-del <ifname>  Remove interface.\n"
