@@ -1,9 +1,13 @@
 #include <string.h>
+#include <stdio.h>
+#include <inttypes.h>
 
 #include "ext/uthash.h"
 #include "utils.h"
+#include "interfaces.h"
 #include "log.h"
 #include "traffic.h"
+
 
 typedef struct {
     Address addr;
@@ -20,46 +24,29 @@ static int g_traffic_count_max = 100; // configuration
 static uint64_t g_bytes_total_in = 0;
 static uint64_t g_bytes_total_out = 0;
 
+// forward declaration
+static uint32_t traffic_fetch_subset(Traffic *ts[], uint32_t max_length, uint8_t ascending);
 
 static void traffic_maintain_max_entries()
 {
-    Address addrs[10];
-    uint64_t bytes[10];
-    time_t updates[10];
-    int count;
-    Traffic *cur;
-    Traffic *tmp;
-
-    // remove entries in up to 10 elements at a time
-    while (g_traffic_count > g_traffic_count_max) {
-        count = 0;
-        HASH_ITER(hh, g_traffic, cur, tmp) {
-            uint64_t sum = cur->bytes_out + cur->bytes_in;
-            if (count < 10) {
-                addrs[count] = cur->addr;
-                bytes[count] = sum;
-                updates[count] = cur->updated;
-                count += 1;
-            } else {
-                for (int i = 0; i < 10; i++) {
-                    if (sum > bytes[i] || (sum == bytes[i] && updates[i] < cur->updated)) {
-                        addrs[i] = cur->addr;
-                        bytes[i] = sum;
-                        updates[i] = cur->updated;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // remove entries
-        for (int i = 0; i < count; i++) {
-            HASH_FIND(hh, g_traffic, &addrs[i], sizeof(Address), cur);
-            HASH_DEL(g_traffic, cur);
-            free(cur);
-            g_traffic_count -= 1;
-        }
+    if (g_traffic_count <= g_traffic_count_max) {
+        return;
     }
+
+    uint32_t remove_count = g_traffic_count - g_traffic_count_max;
+    Traffic **ts = malloc(remove_count * sizeof(Traffic*));
+    uint32_t found_count = traffic_fetch_subset(ts, remove_count, 1);
+
+    // remove entries
+    for (int i = 0; i < found_count; i++) {
+        Traffic *cur;
+        HASH_FIND(hh, g_traffic, &ts[i]->addr, sizeof(Address), cur);
+        HASH_DEL(g_traffic, cur);
+        free(cur);
+        g_traffic_count -= 1;
+    }
+
+    free(ts);
 }
 
 static void traffic_add_bytes(const Address *addr, uint64_t bytes_in, uint64_t bytes_out)
@@ -107,10 +94,10 @@ static int is_smaller(Traffic *a, Traffic *b)
 }
 
 // get sorted list of traffic entries
-static void traffic_fetch_subset(Traffic *ts[], int max_length)
+static uint32_t traffic_fetch_subset(Traffic *ts[], uint32_t max_length, uint8_t ascending)
 {
-    int current_length = 0;
-    int low, high;
+    uint32_t current_length = 0;
+    uint32_t low, high;
     Traffic *cur;
     Traffic *tmp;
 
@@ -119,15 +106,15 @@ static void traffic_fetch_subset(Traffic *ts[], int max_length)
         high = current_length;
 
         while (low < high) {
-            int mid = (low + high) / 2;
-            if (!is_smaller(ts[mid], cur)) {
+            uint32_t mid = (low + high) / 2;
+            if (is_smaller(ts[mid], cur) ? ascending : !ascending) {
               low = mid + 1;
             } else {
               high = mid;
             }
         }
 
-        int i = low;
+        uint32_t i = low;
         if (i >= max_length) {
             continue;
         } else if (i < current_length) {
@@ -144,16 +131,40 @@ static void traffic_fetch_subset(Traffic *ts[], int max_length)
           current_length += 1;
         }
     }
+
+    return current_length;
+}
+
+static const char *str_addr_ifname(const Address *addr)
+{
+    static char buf[16];
+    uint32_t ifindex = 0;
+
+    switch (addr->family) {
+    case AF_INET:
+        break;
+    case AF_INET6:
+        if (addr_is_link_local((struct sockaddr_storage*) addr)) {
+            ifindex = addr->ip6.sin6_scope_id;
+        }
+        break;
+    case AF_MAC:
+        ifindex = addr->mac.ifindex;
+    }
+
+    snprintf(buf, sizeof(buf), "<%"PRIu32">", ifindex);
+
+    if (ifindex == 0) {
+        return buf;
+    } else {
+        const char *ifname = str_ifindex(ifindex);
+        return ifname ? ifname : buf;
+    }
 }
 
 void traffic_debug(FILE* out, int argc, char *argv[])
 {
     uint32_t max_print;
-
-    if (!gstate.traffic_stats_enabled) {
-        fprintf(out, "traffic statistics are disabled\n");
-        return;
-    }
 
     if (argc == 1) {
         max_print = g_traffic_count; // default
@@ -164,15 +175,16 @@ void traffic_debug(FILE* out, int argc, char *argv[])
         return;
     }
 
-    uint32_t entries_count = MAX(g_traffic_count, max_print);
+    uint32_t entries_count = MIN(g_traffic_count, max_print);
     Traffic **entries = malloc(entries_count * sizeof(Traffic*));
 
-    traffic_fetch_subset(entries, entries_count);
+    uint32_t found_count = traffic_fetch_subset(entries, entries_count, 0);
 
-    for (int i = 0; i < entries_count; i++) {
+    for (int i = 0; i < found_count; i++) {
         Traffic *cur = entries[i];
-        fprintf(out, "%s: in: %s, out: %s, %s ago\n",
+        fprintf(out, "%s/%s: in: %s, out: %s, %s ago\n",
             str_addr(&cur->addr),
+            str_addr_ifname(&cur->addr),
             str_bytes(cur->bytes_in),
             str_bytes(cur->bytes_out),
             str_duration(cur->updated, gstate.time_now));
