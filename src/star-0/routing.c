@@ -227,7 +227,7 @@ static uint8_t *get_data_payload(const DATA *p)
     return ((uint8_t*) p) + sizeof(DATA);
 }
 
-static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
@@ -288,7 +288,7 @@ static void send_cached_packet(uint32_t dst_id, uint16_t dst_hop_count, const Ad
     send_ucast_l2(addr, data, get_data_size(data));
 }
 
-static void handle_RREP(int ifindex, const Address *addr, RREP *p, unsigned recv_len)
+static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
 {
     if (recv_len != sizeof(RREP)) {
         log_debug("RREP: invalid packet size => drop");
@@ -316,7 +316,7 @@ static void handle_RREP(int ifindex, const Address *addr, RREP *p, unsigned recv
     }
 }
 
-static void handle_RREQ(int ifindex, const Address *addr, RREQ *p, unsigned recv_len)
+static void handle_RREQ(const Address *addr, RREQ *p, unsigned recv_len)
 {
     Node *node;
 
@@ -380,7 +380,7 @@ static int is_newer_seqnum(uint16_t cur, uint16_t new)
     }
 }
 
-static void handle_ROOT(int ifindex, const Address *addr, ROOT *p, unsigned recv_len)
+static void handle_ROOT(const Address *addr, ROOT *p, unsigned recv_len)
 {
     if (recv_len != sizeof(ROOT)) {
         log_debug("ROOT: invalid packet size => drop");
@@ -479,42 +479,30 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
         log_debug("tun_handler: send RREQ to 0x%08x (%s)",
             dst_id, str_addr(&node->next_hop_addr));
+
         send_ucast_l2(&node->next_hop_addr, &rreq, sizeof(RREQ));
     } else {
         log_debug("tun_handler: cannot find destination for 0x%08x", dst_id);
     }
 }
 
-static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
 {
-    if (packet_length <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &packet[sizeof(struct ethhdr)];
-    size_t payload_len = packet_length - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &packet[0];
-
-    Address from_addr;
-    Address to_addr;
-    init_macaddr(&from_addr, &eh->h_source, ifindex);
-    init_macaddr(&to_addr, &eh->h_dest, ifindex);
-
-    switch (payload[0]) {
+    switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(ifindex, &from_addr, (DATA*) payload, payload_len);
+        handle_DATA(src_addr, (DATA*) packet, packet_length);
         break;
     case TYPE_ROOT:
-        handle_ROOT(ifindex, &from_addr, (ROOT*) payload, payload_len);
+        handle_ROOT(src_addr, (ROOT*) packet, packet_length);
         break;
     case TYPE_RREQ:
-        handle_RREQ(ifindex, &from_addr, (RREQ*) payload, payload_len);
+        handle_RREQ(src_addr, (RREQ*) packet, packet_length);
         break;
     case TYPE_RREP:
-        handle_RREP(ifindex, &from_addr, (RREP*) payload, payload_len);
+        handle_RREP(src_addr, (RREP*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
     }
 }
 

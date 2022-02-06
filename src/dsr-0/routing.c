@@ -293,7 +293,7 @@ static void send_cached_packet(uint32_t dst_id, const Addr *path, uint32_t path_
 }
 
 // Route Reply
-static void handle_RREP(int ifindex, const Address *addr, RREP *p, unsigned recv_len)
+static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
 {
     if (recv_len < offsetof(RREP, path)
             || recv_len != get_rrep_size(p)
@@ -350,7 +350,7 @@ static void handle_RREP(int ifindex, const Address *addr, RREP *p, unsigned recv
 }
 
 // Route Request
-static void handle_RREQ(int ifindex, const Address *addr, RREQ *p, unsigned recv_len)
+static void handle_RREQ(const Address *addr, RREQ *p, unsigned recv_len)
 {
     if (recv_len < offsetof(RREQ, path)
             || recv_len != get_rreq_size(p)
@@ -412,7 +412,7 @@ static void handle_RREQ(int ifindex, const Address *addr, RREQ *p, unsigned recv
     }
 }
 
-static void handle_DATA(int ifindex, const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
 {
     if (recv_len < sizeof(DATA)
             || recv_len != get_data_size(p)
@@ -496,33 +496,20 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     }
 }
 
-static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
 {
-    if (packet_length <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &packet[sizeof(struct ethhdr)];
-    size_t payload_len = packet_length - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &packet[0];
-
-    Address from_addr;
-    Address to_addr;
-    init_macaddr(&from_addr, &eh->h_source, ifindex);
-    init_macaddr(&to_addr, &eh->h_dest, ifindex);
-
-    switch (payload[0]) {
+    switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(ifindex, &from_addr, (DATA*) payload, payload_len);
+        handle_DATA(src_addr, (DATA*) packet, packet_length);
         break;
     case TYPE_RREQ:
-        handle_RREQ(ifindex, &from_addr, (RREQ*) payload, payload_len);
+        handle_RREQ(src_addr, (RREQ*) packet, packet_length);
         break;
     case TYPE_RREP:
-        handle_RREP(ifindex, &from_addr, (RREP*) payload, payload_len);
+        handle_RREP(src_addr, (RREP*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", payload[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
     }
 }
 

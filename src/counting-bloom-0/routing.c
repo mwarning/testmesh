@@ -248,30 +248,17 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     forward_DATA(data, get_data_size(data));
 }
 
-static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
 {
-    if (packet_length <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &packet[sizeof(struct ethhdr)];
-    size_t payload_len = packet_length - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &packet[0];
-
-    Address from_addr;
-    Address to_addr;
-    init_macaddr(&from_addr, &eh->h_source[0], ifindex);
-    init_macaddr(&to_addr, &eh->h_dest[0], ifindex);
-
-    switch (payload[0]) {
+    switch (packet[0]) {
     case TYPE_COMM:
-        handle_COMM(&from_addr, (COMM*) payload, payload_len);
+        handle_COMM(src_addr, (COMM*) packet, packet_length);
         break;
     case TYPE_DATA:
-        handle_DATA(&from_addr, (DATA*) payload, payload_len);
+        handle_DATA(src_addr, (DATA*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", payload[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
     }
 }
 

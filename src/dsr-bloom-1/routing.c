@@ -195,7 +195,7 @@ static void forward_DATA(DATA *p, unsigned recv_len)
     }
 }
 
-static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *p, size_t recv_len)
+static void handle_DATA(const Address *src_addr, DATA *p, size_t recv_len)
 {
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("DATA: invalid size => drop");
@@ -209,8 +209,8 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
 
     uint8_t *payload = get_data_payload(p);
 
-    log_debug("DATA: got packet from neighbor 0x%08x => 0x%08x (seq_num: %d, hop_cnt: %d, %s)",
-        p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt, address_type_str(to_addr));
+    log_debug("DATA: got packet from neighbor 0x%08x => 0x%08x (seq_num: %d, hop_cnt: %d)",
+        p->sender_id, p->dst_id, (int) p->seq_num, (int) p->hop_cnt);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("DATA: write %u bytes to %s => accept", (unsigned) p->payload_length, gstate.tun_name);
@@ -233,10 +233,10 @@ static void handle_DATA(const Address *from_addr, const Address *to_addr, DATA *
 
     Entry *entry = entry_find(p->sender_id);
     if (entry) {
-        memcpy(&entry->addr, from_addr, sizeof(entry->addr));
+        memcpy(&entry->addr, src_addr, sizeof(entry->addr));
         bloom_merge(&entry->bloom[0], &p->bloom[0]);
     } else {
-        entry_add(p->sender_id, p->hop_cnt, &p->bloom[0], from_addr);
+        entry_add(p->sender_id, p->hop_cnt, &p->bloom[0], src_addr);
     }
 
     // add own id
@@ -265,27 +265,14 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     forward_DATA(data, get_data_size(data));
 }
 
-static void ext_handler_l2(int ifindex, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
 {
-    if (packet_length <= sizeof(struct ethhdr)) {
-        return;
-    }
-
-    uint8_t *payload = &packet[sizeof(struct ethhdr)];
-    size_t payload_len = packet_length - sizeof(struct ethhdr);
-    struct ethhdr *eh = (struct ethhdr *) &packet[0];
-
-    Address from_addr;
-    Address to_addr;
-    init_macaddr(&from_addr, &eh->h_source, ifindex);
-    init_macaddr(&to_addr, &eh->h_dest, ifindex);
-
-    switch (payload[0]) {
+    switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(&from_addr, &to_addr, (DATA*) payload, payload_len);
+        handle_DATA(src_addr, (DATA*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", payload[0], str_addr(&from_addr), str_ifindex(ifindex));
+        log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(src_addr));
     }
 }
 

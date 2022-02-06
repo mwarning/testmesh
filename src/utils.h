@@ -48,8 +48,6 @@ int address_is_unicast(const Address *addr);
 int address_is_multicast(const Address *addr);
 int address_is_broadcast(const Address *addr);
 
-void init_macaddr(Address *dst, const void *mac_addr, int ifindex);
-
 const char *str_mac(const struct mac *addr);
 const char *str_bytes(uint64_t bytes);
 const char *str_duration(time_t from, time_t to);

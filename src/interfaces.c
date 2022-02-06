@@ -282,13 +282,19 @@ int interface_del(const char *ifname)
     return 1;
 }
 
+static void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
+{
+    memset(dst, 0, sizeof(Address));
+    dst->mac.family = AF_MAC;
+    memcpy(&dst->mac.addr, mac_addr, ETH_ALEN);
+    dst->mac.ifindex = ifindex;
+}
+
 static void read_internal_l2(int events, int fd)
 {
     // some offset to prepend a header before forwarding
     #define OFFSET 100
 
-    Address src_addr = {0};
-    socklen_t addr_len;
     struct interface *ifa;
     ssize_t readlen;
     uint8_t buffer[OFFSET + ETH_FRAME_LEN];
@@ -298,12 +304,14 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
-    addr_len = sizeof(Address);
-    readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, (struct sockaddr *) &src_addr, &addr_len);
+    readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, NULL, NULL);
     ifa = get_interface_by_fd(fd);
 
-    if (readlen < 0) {
-        log_error("recvfrom() for %s returned %lld: %s", (ifa ? ifa->ifname : "???"), readlen, strerror(errno));
+    if (readlen < sizeof(struct ethhdr)) {
+        log_error("recvfrom() for %s returned %lld: %s",
+            (ifa ? ifa->ifname : "???"),
+            readlen,
+            (readlen < 0) ? strerror(errno) : "packet too small");
         return;
     }
 
@@ -312,9 +320,21 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
+    struct ethhdr *eh = (struct ethhdr *) &buf[0];
+
+    Address src_addr = {0};
+    //Address dst_addr;
+
+    init_macaddr(&src_addr, &eh->h_source, ifa->ifindex);
+    //init_macaddr(&dst_addr, &eh->h_dest, ifa->ifindex);
+
     traffic_add_bytes_in(&src_addr, readlen);
 
-    gstate.protocol->ext_handler_l2(ifa->ifindex, buf, readlen);
+    uint8_t *payload = &buf[sizeof(struct ethhdr)];
+    size_t payload_len = readlen - sizeof(struct ethhdr);
+
+    assert(src_addr.family == AF_MAC);
+    gstate.protocol->ext_handler_l2(&src_addr, payload, payload_len);
 }
 
 static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_ALEN], const void* sendbuf, size_t sendlen)
@@ -346,8 +366,9 @@ static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_AL
     }
 
     {
-        Address addr = {0};
+        Address addr;
         init_macaddr(&addr, dst_addr, ifa->ifindex);
+
         traffic_add_bytes_out(&addr, sendlen);
     }
 
@@ -445,10 +466,10 @@ static void read_internal_l3(int events, int fd)
         return;
     }
 
-    assert(src_addr.family == AF_INET6 || src_addr.family == AF_INET);
 
     traffic_add_bytes_in(&src_addr, readlen);
 
+    assert(src_addr.family == AF_INET6 || src_addr.family == AF_INET);
     gstate.protocol->ext_handler_l3(&src_addr, &buffer[0], readlen);
 }
 
