@@ -298,6 +298,7 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
+    addr_len = sizeof(Address);
     readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, (struct sockaddr *) &src_addr, &addr_len);
     ifa = get_interface_by_fd(fd);
 
