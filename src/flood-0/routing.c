@@ -78,8 +78,8 @@ static void entry_timeout()
 
 static Entry *entry_find(uint32_t id)
 {
-    Entry *cur = NULL;
-    HASH_FIND_INT(g_entries, &id, cur);
+    Entry *cur;
+    HASH_FIND(hh, g_entries, &id, sizeof(uint32_t), cur);
     return cur;
 }
 

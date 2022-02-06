@@ -148,8 +148,8 @@ static void entry_timeout()
 
 static Entry *entry_find(uint32_t sender_id)
 {
-    Entry *cur = NULL;
-    HASH_FIND_INT(g_neighbors, &sender_id, cur);
+    Entry *cur;
+    HASH_FIND(hh, g_neighbors, &sender_id, sizeof(uint32_t), cur);
     return cur;
 }
 

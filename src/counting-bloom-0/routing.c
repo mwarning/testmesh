@@ -132,8 +132,8 @@ static void neighbor_timeout()
 
 static Neighbor *neighbor_find(uint32_t sender_id)
 {
-    Neighbor *cur = NULL;
-    HASH_FIND_INT(g_entries, &sender_id, cur);
+    Neighbor *cur;
+    HASH_FIND(hh, g_entries, &sender_id, sizeof(uint32_t), cur);
     return cur;
 }
 

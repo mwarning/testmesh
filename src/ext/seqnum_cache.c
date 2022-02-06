@@ -45,9 +45,9 @@ static int is_newer_seqnum(uint16_t cur, uint16_t new)
 
 int seqnum_cache_update(uint32_t src_id, uint16_t seq_num)
 {
-    SeqNumCacheEntry *cur = NULL;
+    SeqNumCacheEntry *cur;
 
-    HASH_FIND_INT(g_seqnum_cache, &src_id, cur);
+    HASH_FIND(hh, g_seqnum_cache, &src_id, sizeof(uint32_t), cur);
 
     if (cur) {
         if (is_newer_seqnum(cur->seq_num, seq_num)) {

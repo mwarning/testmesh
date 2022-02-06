@@ -91,8 +91,8 @@ static void routing_entry_timeout()
 
 static RoutingEntry *routing_entry_find(uint32_t dst_id)
 {
-    RoutingEntry *cur = NULL;
-    HASH_FIND_INT(g_routing_entries, &dst_id, cur);
+    RoutingEntry *cur;
+    HASH_FIND(hh, g_routing_entries, &dst_id, sizeof(uint32_t), cur);
     return cur;
 }
 
