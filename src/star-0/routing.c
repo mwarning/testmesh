@@ -512,8 +512,8 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 
     if (MATCH(1, "h")) {
         fprintf(fp,
-            "r: print root\n"
-            "n: print routing table\n"
+            "r                       print root\n"
+            "n                       print routing table\n"
         );
     } else if (MATCH(1, "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
@@ -523,9 +523,9 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         int counter = 0;
         Node *cur;
 
-        fprintf(fp, "id         hop-count   next-hop-addr          updated\n");
+        fprintf(fp, "id          hop-count  next-hop-addr          updated\n");
         LL_FOREACH(g_dht_nodes, cur) {
-            fprintf(fp, "0x%08x %u       %s      %s\n",
+            fprintf(fp, "0x%08x  %u          %s      %s\n",
                 cur->id,
                 cur->hop_count,
                 str_addr(&cur->next_hop_addr),
