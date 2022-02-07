@@ -60,6 +60,7 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_in, uint64_t b
     if (cur) {
         cur->bytes_in += bytes_in;
         cur->bytes_out += bytes_out;
+        cur->updated = gstate.time_now;
     } else {
         traffic_maintain_max_entries();
 
@@ -69,7 +70,7 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_in, uint64_t b
         cur->bytes_out = bytes_out;
         cur->updated = gstate.time_now;
 
-        HASH_ADD_INT(g_traffic, addr, cur);
+        HASH_ADD(hh, g_traffic, addr, sizeof(Address), cur);
 
         g_traffic_count += 1;
         g_traffic_count_all += 1;
