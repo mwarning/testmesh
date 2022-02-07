@@ -65,6 +65,7 @@ int address_is_multicast(const Address *addr)
     case AF_INET:
         return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr));
     default:
+        log_error("address_is_multicast: invalid address");
         exit(1);
     }
 }
@@ -82,6 +83,7 @@ int address_is_broadcast(const Address *addr)
     case AF_INET:
         return (ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr) & 0xff) == 0xff;
     default:
+        log_error("address_is_broadcast: invalid address");
         exit(1);
     }
 }
@@ -237,9 +239,9 @@ const char *str_bytes(uint64_t bytes)
 
 const char *str_mac(const struct mac *addr)
 {
-    static char macbuf[2][18];
-    static unsigned macbuf_i = 0;
-    char *buf = macbuf[++macbuf_i % 2];
+    static char strmacbuf[2][18];
+    static unsigned strmacbuf_i = 0;
+    char *buf = strmacbuf[++strmacbuf_i % 2];
 
     sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
             addr->data[0], addr->data[1], addr->data[2],
@@ -249,9 +251,9 @@ const char *str_mac(const struct mac *addr)
 
 const char *str_addr(const Address *addr)
 {
-    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
-    static unsigned addrbuf_i = 0;
-    char *buf = addrbuf[++addrbuf_i % 2];
+    static char straddrbuf[2][INET6_ADDRSTRLEN + 8];
+    static unsigned straddrbuf_i = 0;
+    char *buf = straddrbuf[++straddrbuf_i % 2];
 
     switch (addr->family) {
     case AF_INET6:
@@ -269,30 +271,28 @@ const char *str_addr(const Address *addr)
     }
 }
 
-const char *str_addr_storage(const struct sockaddr_storage *addr)
-{
-    static char addrbuf[2][INET6_ADDRSTRLEN + 8];
-    static unsigned addrbuf_i = 0;
-    return str_addr_storage_buf(addrbuf[++addrbuf_i % 2], addr);
-}
-
 const char *str_addr6(const struct sockaddr_in6 *addr)
 {
-    return str_addr_storage((struct sockaddr_storage*) addr);
+    static char straddr6buf[2][INET6_ADDRSTRLEN + 8];
+    static unsigned straddr6buf_i = 0;
+    char *buf = straddr6buf[++straddr6buf_i % 2];
+    return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
 }
 
 const char *str_in4(const struct in_addr *addr)
 {
-    static char addrbuf[2][INET6_ADDRSTRLEN];
-    static unsigned addrbuf_i = 0;
-    return inet_ntop(AF_INET, addr, addrbuf[++addrbuf_i % 2], INET6_ADDRSTRLEN);
+    static char strin4buf[2][INET6_ADDRSTRLEN];
+    static unsigned strin4buf_i = 0;
+    char *buf = strin4buf[++strin4buf_i % 2];
+    return inet_ntop(AF_INET, addr, buf, INET6_ADDRSTRLEN);
 }
 
 const char *str_in6(const struct in6_addr *addr)
 {
-    static char addrbuf[2][INET6_ADDRSTRLEN];
-    static unsigned addrbuf_i = 0;
-    return inet_ntop(AF_INET6, addr, addrbuf[++addrbuf_i % 2], INET6_ADDRSTRLEN);
+    static char strin6buf[2][INET6_ADDRSTRLEN];
+    static unsigned strin6buf_i = 0;
+    char *buf = strin6buf[++strin6buf_i % 2];
+    return inet_ntop(AF_INET6, addr, buf, INET6_ADDRSTRLEN);
 }
 
 static int common_bits(const void *p1, const void* p2, int bits_n)
@@ -375,7 +375,7 @@ int addr_is_link_local(const struct sockaddr_storage *addr)
         return (a->s6_addr[0] == 0xfe) && ((a->s6_addr[1] & 0xC0) == 0x80);
     }
     default:
-        log_error("add_is_link_local not implemented for protocol");
+        log_error("addr_is_link_local not implemented for protocol");
         return 0;
     }
 }
