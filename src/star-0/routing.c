@@ -513,7 +513,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     if (MATCH(1, "h")) {
         fprintf(fp,
             "r: print root\n"
-            "n: print routing table"
+            "n: print routing table\n"
         );
     } else if (MATCH(1, "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
@@ -566,8 +566,8 @@ static void send_root()
         ROOT root = {
             .type = TYPE_ROOT,
             .id = g_current_root.id,
-            .seq_num = g_sequence_number++, // g_current_root.seq_num,
-            .hop_count = 0, //g_current_root.hop_count,
+            .seq_num = g_sequence_number++,
+            .hop_count = 0,
             .sender_id = g_current_root.id,
         };
 
