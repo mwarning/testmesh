@@ -168,7 +168,7 @@ static Entry *entry_add(uint32_t sender_id, uint8_t hop_cnt, uint8_t *bloom, con
     return e;
 }
 
-static void forward_DATA(DATA *p, unsigned recv_len)
+static void forward_DATA(DATA *p, size_t recv_len)
 {
     // find best neighbor
     Entry *next = NULL;

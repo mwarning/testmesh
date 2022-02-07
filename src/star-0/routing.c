@@ -227,7 +227,7 @@ static uint8_t *get_data_payload(const DATA *p)
     return ((uint8_t*) p) + sizeof(DATA);
 }
 
-static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
@@ -288,7 +288,7 @@ static void send_cached_packet(uint32_t dst_id, uint16_t dst_hop_count, const Ad
     send_ucast_l2(addr, data, get_data_size(data));
 }
 
-static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
+static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
 {
     if (recv_len != sizeof(RREP)) {
         log_debug("RREP: invalid packet size => drop");
@@ -316,7 +316,7 @@ static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
     }
 }
 
-static void handle_RREQ(const Address *addr, RREQ *p, unsigned recv_len)
+static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
 {
     Node *node;
 
@@ -380,7 +380,7 @@ static int is_newer_seqnum(uint16_t cur, uint16_t new)
     }
 }
 
-static void handle_ROOT(const Address *addr, ROOT *p, unsigned recv_len)
+static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
 {
     if (recv_len != sizeof(ROOT)) {
         log_debug("ROOT: invalid packet size => drop");

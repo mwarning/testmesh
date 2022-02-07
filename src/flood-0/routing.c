@@ -96,7 +96,7 @@ static Entry *entry_add(uint32_t id, uint16_t seq_num)
     return e;
 }
 
-static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");

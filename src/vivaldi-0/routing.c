@@ -191,7 +191,7 @@ static void vivaldi_update_simple(float *local_pos, const float *remote_pos, flo
     }
 }
 
-static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
+static void handle_COMM(const Address *from_addr, COMM *p, size_t recv_len)
 {
     if (recv_len != sizeof(COMM)) {
         log_debug("COMM: invalid packet size => drop");
@@ -225,7 +225,7 @@ static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
     vivaldi_update_simple(&g_own_pos[0], &neighbor->pos[0], 1.5f);
 }
 
-static void forward_DATA(const DATA *p, unsigned recv_len)
+static void forward_DATA(const DATA *p, size_t recv_len)
 {
     unsigned send_counter = 0;
 
@@ -251,7 +251,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
     log_debug("forward data packet to %u neighbors", send_counter);
 }
 
-static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
     if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
         log_debug("DATA: invalid packet size => drop");

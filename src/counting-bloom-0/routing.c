@@ -151,7 +151,7 @@ static Neighbor *neighbor_add(uint32_t sender_id, uint8_t *bloom, const Address 
     return e;
 }
 
-static void handle_COMM(const Address *from_addr, COMM *p, unsigned recv_len)
+static void handle_COMM(const Address *from_addr, COMM *p, size_t recv_len)
 {
     if (recv_len != sizeof(COMM)) {
         log_debug("invalid COMM packet size => drop");
@@ -185,7 +185,7 @@ only add full bloom filter if it adds zero or one more fields to be >0?
     }
 }
 
-static void forward_DATA(const DATA *p, unsigned recv_len)
+static void forward_DATA(const DATA *p, size_t recv_len)
 {
     uint8_t dst_bloom[BLOOM_M];
     bloom_init(dst_bloom, p->dst_id);
@@ -211,7 +211,7 @@ static void forward_DATA(const DATA *p, unsigned recv_len)
     log_debug("forward data packet to %u neighbors", send_counter);
 }
 
-static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("invalid DATA packet size => drop");

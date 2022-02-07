@@ -89,7 +89,7 @@ static void bloom_add(uint8_t *bloom, uint32_t id)
     bloom_merge(bloom, &bloom_id[0]);
 }
 
-static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");

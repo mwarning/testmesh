@@ -293,7 +293,7 @@ static void send_cached_packet(uint32_t dst_id, const Addr *path, uint32_t path_
 }
 
 // Route Reply
-static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
+static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
 {
     if (recv_len < offsetof(RREP, path)
             || recv_len != get_rrep_size(p)
@@ -350,7 +350,7 @@ static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
 }
 
 // Route Request
-static void handle_RREQ(const Address *addr, RREQ *p, unsigned recv_len)
+static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
 {
     if (recv_len < offsetof(RREQ, path)
             || recv_len != get_rreq_size(p)
@@ -412,7 +412,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, unsigned recv_len)
     }
 }
 
-static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
     if (recv_len < sizeof(DATA)
             || recv_len != get_data_size(p)

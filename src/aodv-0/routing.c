@@ -152,7 +152,7 @@ static void send_cached_packet(uint32_t dst_id, const Address *next_hop)
     send_ucast_l2(next_hop, data, get_data_size(data));
 }
 
-static void handle_RREQ(const Address *addr, RREQ *p, unsigned recv_len)
+static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
 {
     if (recv_len != sizeof(RREQ)) {
         log_debug("RREQ: invalid packet size => drop");
@@ -189,7 +189,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, unsigned recv_len)
     }
 }
 
-static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
+static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
 {
     if (recv_len != sizeof(RREP)) {
         log_debug("RREP: invalid packet size => drop");
@@ -219,7 +219,7 @@ static void handle_RREP(const Address *addr, RREP *p, unsigned recv_len)
         }
     }
 }
-static void handle_DATA(const Address *addr, DATA *p, unsigned recv_len)
+static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
     if (recv_len < sizeof(DATA)
             || recv_len != get_data_size(p)) {
