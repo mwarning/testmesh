@@ -67,7 +67,7 @@ Use the `tun0` interface to exchange packets with other instances.
 $ ./build/geomesh -h
 Usage: geomesh -i eth0 -i wlan0
 
-  --protocol,-p               Select routing protocol
+  --protocol,-p <protocol>    Select routing protocol
   --daemon,-d                 Run as daemon
   --interface,-i <interface>  Limit to given interfaces
   --own-id <id>               Identifier of this node (default: <random>)
