@@ -250,7 +250,9 @@ int main(int argc, char *argv[])
         log_info("Gateway ID:     none");
     }
 
-    log_info("Tunnel Device:  %s", gstate.tun_name);
+    if (gstate.tun_name) {
+        log_info("Tunnel Device:  %s", gstate.tun_name);
+    }
     log_info("Log Level:      %u", gstate.log_level);
     log_info("IPv4/IPv6:      %s/%s", is_enabled(gstate.enable_ipv4), is_enabled(gstate.enable_ipv6));
 
@@ -272,8 +274,10 @@ int main(int argc, char *argv[])
 
     unix_signals();
 
-    if (tun_init(gstate.own_id, gstate.tun_name) != EXIT_SUCCESS) {
-        return EXIT_FAILURE;
+    if (gstate.tun_name) {
+        if (tun_init(gstate.own_id, gstate.tun_name) != EXIT_SUCCESS) {
+            return EXIT_FAILURE;
+        }
     }
 
     if (gstate.protocol->init) {

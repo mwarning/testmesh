@@ -171,7 +171,11 @@ static int conf_set(const char *opt, const char *val)
         }
         break;
     case oTunName:
-        gstate.tun_name = strdup(val);
+        if (0 == strcmp(val, "none")) {
+            gstate.tun_name = NULL;
+        } else {
+            gstate.tun_name = strdup(val);
+        }
         break;
     case oTunSetup:
         gstate.tun_setup = 1;

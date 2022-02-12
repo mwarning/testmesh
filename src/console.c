@@ -106,9 +106,11 @@ static int console_exec(FILE *fp, int argc, char *argv[])
         }
         fprintf(fp, "process id: %u\n", (unsigned) getpid());
         fprintf(fp, "log level:  %u\n", gstate.log_level);
-        fprintf(fp, "tun device: %s\n", gstate.tun_name);
-        fprintf(fp, "tun read:   %s\n", str_bytes(gstate.tun_read_bytes));
-        fprintf(fp, "tun write:  %s\n", str_bytes(gstate.tun_write_bytes));
+        if (gstate.tun_name) {
+            fprintf(fp, "tun device: %s\n", gstate.tun_name);
+            fprintf(fp, "tun read:   %s\n", str_bytes(gstate.tun_read_bytes));
+            fprintf(fp, "tun write:  %s\n", str_bytes(gstate.tun_write_bytes));
+        }
         if (gstate.protocol->console) {
             gstate.protocol->console(fp, argc, argv);
         }
