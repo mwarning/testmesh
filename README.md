@@ -46,7 +46,7 @@ Implemented Protocols:
   - incomplete!
 
 Notes:
- - node identifiers are mapped to the tunnels IP address
+ - 32Bit node identifiers are mapped to and from IP addresses
  - the hop count metric is used in all examples
  - DSR stands for Dynamic Source Routing
  - AODV stands for Ad-hoc Distance Vector
@@ -74,8 +74,8 @@ Usage: geomesh -i eth0 -i wlan0
   --gateway-id <id>           Identifier of the gateway node (default: <none>)
   --peer <address>            Add a peer manually by address
   --control,-c <path>         Control socket to connect to a daemon
-  --tun-name <ifname>         Set route device (Default: tun0)
-  --tun-setup <1/0>           Configure tun device (Default: 1)
+  --tun-name <ifname>         Network entry interface, use none to disable (Default: tun0)
+  --tun-setup <1/0>           Auto configure entrey interface with IP address (Default: 1)
   --ether-type <hex>          Ethernet type (Default: 88B5)
   --log-file,-lf <path>       Write log output to file
   --log-level,-ll <level>     Log level. From 0 to 6 (Default: 3).
