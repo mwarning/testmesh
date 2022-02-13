@@ -10,19 +10,32 @@
 
 
 typedef struct {
+    // hash map key
     Address addr;
+
     uint64_t bytes_out;
     uint64_t bytes_in;
     time_t updated;
+
+    // for speed measurement
+    uint64_t bytes_out_prev;
+    uint64_t bytes_in_prev;
+    time_t updated_prev;
+
     UT_hash_handle hh;
 } Traffic;
 
+// map of Address to Traffic
 static Traffic *g_traffic = NULL;
-static int g_traffic_count = 0;
-static int g_traffic_count_all = 0; // will never be decreased
-static int g_traffic_count_max = 100; // configuration
-static uint64_t g_bytes_total_in = 0;
-static uint64_t g_bytes_total_out = 0;
+
+// items in g_traffic
+static uint32_t g_traffic_count = 0; // current
+static uint32_t g_traffic_count_all = 0; // will never be decreased
+static uint32_t g_traffic_count_max = 100;
+
+// total traffic from outside (ignore key and hh)
+static Traffic g_traffic_total = {0};
+
 
 // forward declaration
 static uint32_t traffic_fetch_subset(Traffic *ts[], uint32_t max_length, uint8_t ascending);
@@ -53,11 +66,24 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_in, uint64_t b
 {
     Traffic *cur;
 
-    g_bytes_total_in += bytes_in;
-    g_bytes_total_out += bytes_out;
+    g_traffic_total.bytes_in += bytes_in;
+    g_traffic_total.bytes_out += bytes_out;
+    g_traffic_total.updated = gstate.time_now;
+
+    if (g_traffic_total.updated != g_traffic_total.updated_prev) {
+        g_traffic_total.bytes_in_prev = g_traffic_total.bytes_in;
+        g_traffic_total.bytes_out_prev = g_traffic_total.bytes_out;
+        g_traffic_total.updated_prev = g_traffic_total.updated;
+    }
 
     HASH_FIND(hh, g_traffic, addr, sizeof(Address), cur);
     if (cur) {
+        if (cur->updated != cur->updated_prev) {
+            cur->bytes_in_prev = cur->bytes_in;
+            cur->bytes_out_prev = cur->bytes_out;
+            cur->updated_prev = cur->updated;
+        }
+
         cur->bytes_in += bytes_in;
         cur->bytes_out += bytes_out;
         cur->updated = gstate.time_now;
@@ -69,6 +95,9 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_in, uint64_t b
         cur->bytes_in = bytes_in;
         cur->bytes_out = bytes_out;
         cur->updated = gstate.time_now;
+        cur->bytes_in_prev = 0;
+        cur->bytes_out_prev = 0;
+        cur->updated_prev = gstate.time_now;
 
         HASH_ADD(hh, g_traffic, addr, sizeof(Address), cur);
 
@@ -163,6 +192,24 @@ static const char *str_addr_ifname(const Address *addr)
     }
 }
 
+static uint64_t speed_in(const Traffic *cur)
+{
+    if (cur->updated_prev >= cur->updated) {
+        return 0; // invalid times
+    } else {
+        return (cur->bytes_in + cur->bytes_in_prev) / (cur->updated - cur->updated_prev);
+    }
+}
+
+static uint64_t speed_out(const Traffic *cur)
+{
+    if (cur->updated_prev >= cur->updated) {
+        return 0; // invalid times
+    } else {
+        return (cur->bytes_out + cur->bytes_out_prev) / (cur->updated - cur->updated_prev);
+    }
+}
+
 void traffic_debug(FILE* out, int argc, char *argv[])
 {
     uint32_t max_print;
@@ -183,20 +230,26 @@ void traffic_debug(FILE* out, int argc, char *argv[])
 
     for (int i = 0; i < found_count; i++) {
         Traffic *cur = entries[i];
-        fprintf(out, "%s/%s: in: %s, out: %s, %s ago\n",
+        fprintf(out, "%s/%s: in: %s (%s/s), out: %s (%s/s), %s ago\n",
             str_addr(&cur->addr),
             str_addr_ifname(&cur->addr),
             str_bytes(cur->bytes_in),
+            str_bytes(speed_in(cur)),
             str_bytes(cur->bytes_out),
+            str_bytes(speed_out(cur)),
             str_duration(cur->updated, gstate.time_now));
     }
 
     free(entries);
 
-    fprintf(out, "%d addresses shown (%d overall, %d ever, %d max)\n",
+    fprintf(out, "%d addresses shown, %d overall, %d ever, %d max\n",
         entries_count, g_traffic_count, g_traffic_count_all, g_traffic_count_max);
-    fprintf(out, "traffic: %s in, %s out\n",
-        str_bytes(g_bytes_total_in), str_bytes(g_bytes_total_out));
+    fprintf(out, "total: %s (%s/s) in, %s (%s/s) out\n",
+        str_bytes(g_traffic_total.bytes_in),
+        str_bytes(speed_in(&g_traffic_total)),
+        str_bytes(g_traffic_total.bytes_out),
+        str_bytes(speed_out(&g_traffic_total))
+    );
 }
 
 void traffic_cleanup()

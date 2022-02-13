@@ -225,13 +225,13 @@ const char *str_bytes(uint64_t bytes)
     if (bytes < 1000) {
         sprintf(buf, "%uB", (unsigned) bytes);
     } else if (bytes < 1000000) {
-        sprintf(buf, "%.0fK", bytes / 1000.0);
+        sprintf(buf, "%.1fK", bytes / 1000.0);
     } else if (bytes < 1000000000) {
         sprintf(buf, "%.1fM", bytes / 1000000.0);
     } else if (bytes < 1000000000000) {
-        sprintf(buf, "%.2fG", bytes / 1000000000.0);
+        sprintf(buf, "%.1fG", bytes / 1000000000.0);
     } else {
-        sprintf(buf, "%.2fT", bytes / 1000000000000.0);
+        sprintf(buf, "%.1fT", bytes / 1000000000000.0);
     }
 
     return buf;
