@@ -179,9 +179,9 @@ static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_sto
 
 const char *str_duration(time_t from, time_t to)
 {
-    static char sizeduration[2][32];
-    static unsigned durationbuf_i = 0;
-    char *buf = sizeduration[++durationbuf_i % 2];
+    static char strdurationbuf[4][32];
+    static unsigned strdurationbuf_i = 0;
+    char *buf = strdurationbuf[++strdurationbuf_i % 2];
 
     int days, hours, minutes, seconds;
     long long int secs;
@@ -218,9 +218,9 @@ const char *str_duration(time_t from, time_t to)
 
 const char *str_bytes(uint64_t bytes)
 {
-    static char sizebuf[2][32];
-    static unsigned sizebuf_i = 0;
-    char *buf = sizebuf[++sizebuf_i % 2];
+    static char strbytesbuf[4][32];
+    static unsigned strbytesbuf_i = 0;
+    char *buf = strbytesbuf[++strbytesbuf_i % 2];
 
     if (bytes < 1000) {
         sprintf(buf, "%uB", (unsigned) bytes);
@@ -239,7 +239,7 @@ const char *str_bytes(uint64_t bytes)
 
 const char *str_mac(const struct mac *addr)
 {
-    static char strmacbuf[2][18];
+    static char strmacbuf[4][18];
     static unsigned strmacbuf_i = 0;
     char *buf = strmacbuf[++strmacbuf_i % 2];
 
@@ -251,7 +251,7 @@ const char *str_mac(const struct mac *addr)
 
 const char *str_addr(const Address *addr)
 {
-    static char straddrbuf[2][INET6_ADDRSTRLEN + 8];
+    static char straddrbuf[4][INET6_ADDRSTRLEN + 8];
     static unsigned straddrbuf_i = 0;
     char *buf = straddrbuf[++straddrbuf_i % 2];
 
@@ -273,7 +273,7 @@ const char *str_addr(const Address *addr)
 
 const char *str_addr6(const struct sockaddr_in6 *addr)
 {
-    static char straddr6buf[2][INET6_ADDRSTRLEN + 8];
+    static char straddr6buf[4][INET6_ADDRSTRLEN + 8];
     static unsigned straddr6buf_i = 0;
     char *buf = straddr6buf[++straddr6buf_i % 2];
     return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
@@ -281,7 +281,7 @@ const char *str_addr6(const struct sockaddr_in6 *addr)
 
 const char *str_in4(const struct in_addr *addr)
 {
-    static char strin4buf[2][INET6_ADDRSTRLEN];
+    static char strin4buf[4][INET6_ADDRSTRLEN];
     static unsigned strin4buf_i = 0;
     char *buf = strin4buf[++strin4buf_i % 2];
     return inet_ntop(AF_INET, addr, buf, INET6_ADDRSTRLEN);
@@ -289,7 +289,7 @@ const char *str_in4(const struct in_addr *addr)
 
 const char *str_in6(const struct in6_addr *addr)
 {
-    static char strin6buf[2][INET6_ADDRSTRLEN];
+    static char strin6buf[4][INET6_ADDRSTRLEN];
     static unsigned strin6buf_i = 0;
     char *buf = strin6buf[++strin6buf_i % 2];
     return inet_ntop(AF_INET6, addr, buf, INET6_ADDRSTRLEN);
