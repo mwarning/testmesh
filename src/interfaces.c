@@ -229,7 +229,7 @@ static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
 
 int interface_add(const char *ifname)
 {
-    if (0 == strcmp(ifname, gstate.tun_name)) {
+    if (gstate.tun_name && 0 == strcmp(ifname, gstate.tun_name)) {
         log_error("Cannot add own tun interface: %s", ifname);
         return 1;
     }
