@@ -693,7 +693,7 @@ int interfaces_debug(FILE *fd)
     int count = 0;
     struct interface *ifa;
 
-    fprintf(fd, "name\tstatus\tmac\t\t\tifsocket\tifindex\n");
+    fprintf(fd, "name\tstatus\tmac-address\t\tifsocket\tifindex\n");
     ifa = g_interfaces;
     while (ifa) {
         fprintf(fd, "%s\t%s\t%s\t%d\t\t%d\n",
