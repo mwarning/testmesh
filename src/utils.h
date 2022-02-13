@@ -29,7 +29,7 @@ struct mac {
 struct macaddr {
     sa_family_t family;
     struct mac addr;
-    int ifindex; // needed? - we can also use the sender mac.
+    uint32_t ifindex;
 };
 
 typedef union {
@@ -39,9 +39,8 @@ typedef union {
     struct sockaddr_in6 ip6;
 } Address;
 
-uint32_t adler32(const void *buf, size_t buflength);
+uint32_t adler32(const void *buf, size_t buflen);
 void hex_dump(const char *desc, const void *addr, const int len);
-
 int bytes_random(void *buffer, size_t size);
 
 int address_is_unicast(const Address *addr);
