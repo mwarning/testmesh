@@ -311,7 +311,7 @@ static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t pack
         handle_RREP(src_addr, (RREP*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type %d from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02 from %s", packet[0], str_addr(src_addr));
     }
 }
 
