@@ -65,8 +65,7 @@ struct state {
     // tun0 - entry to the mesh
     const char *tun_name;
     int tun_fd;
-    uint64_t tun_read_bytes;
-    uint64_t tun_write_bytes;
+
     int tun_setup;
     uint16_t tun_setup_ipv4_mtu;
 

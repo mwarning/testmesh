@@ -10,8 +10,8 @@
  * debugging or even improving routing decissions.
  */
 
-void traffic_add_bytes_out(const Address *addr, uint64_t bytes);
-void traffic_add_bytes_in(const Address *addr, uint64_t bytes);
+void traffic_add_bytes_write(const Address *addr, uint64_t bytes);
+void traffic_add_bytes_read(const Address *addr, uint64_t bytes);
 void traffic_debug(FILE* out, int argc, char *argv[]);
 void traffic_cleanup();
 

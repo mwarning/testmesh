@@ -17,6 +17,46 @@
 #include "utils.h"
 
 
+static uint64_t g_tun_bytes_read = 0;
+static uint64_t g_tun_bytes_write = 0;
+static time_t g_tun_bytes_updated = 0;
+
+// for speed measurement
+static uint64_t g_tun_bytes_read_prev = 0;
+static uint64_t g_tun_bytes_write_prev = 0;
+static time_t g_tun_bytes_updated_prev = 0;
+
+
+uint64_t tun_read_total()
+{
+    return g_tun_bytes_read;
+}
+
+uint64_t tun_write_total()
+{
+    return g_tun_bytes_write;
+}
+
+uint64_t tun_write_speed()
+{
+    if (g_tun_bytes_updated_prev >= gstate.time_now) {
+        return 0;
+    } else {
+        return (g_tun_bytes_write - g_tun_bytes_write_prev)
+            / (g_tun_bytes_updated - g_tun_bytes_updated_prev);
+    }
+}
+
+uint64_t tun_read_speed()
+{
+    if (g_tun_bytes_updated_prev >= gstate.time_now) {
+        return 0;
+    } else {
+        return (g_tun_bytes_read - g_tun_bytes_read_prev)
+            / (g_tun_bytes_updated - g_tun_bytes_updated_prev);
+    }
+}
+
 static const char *protocol_str(int protocol)
 {
     static char buf[6];
@@ -252,7 +292,13 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
     ssize_t write_len = write(gstate.tun_fd, buf, buflen);
 
     if (write_len > 0) {
-        gstate.tun_write_bytes += write_len;
+        if (g_tun_bytes_updated_prev != g_tun_bytes_updated) {
+            g_tun_bytes_write_prev = g_tun_bytes_write;
+            g_tun_bytes_updated_prev = g_tun_bytes_updated;
+        }
+
+        g_tun_bytes_write += write_len;
+        g_tun_bytes_updated = gstate.time_now;
     }
 
     log_debug2("tun_write: %zu bytes, %s", write_len, debug_payload(buf, buflen));
@@ -289,7 +335,14 @@ static void tun_read_internal(int events, int fd)
         }
 
         log_debug2("tun_read_internal: %zu bytes, %s", read_len, debug_payload(buf, read_len));
-        gstate.tun_read_bytes += read_len;
+
+        if (g_tun_bytes_updated_prev != g_tun_bytes_updated) {
+            g_tun_bytes_read_prev = g_tun_bytes_read;
+            g_tun_bytes_updated_prev = g_tun_bytes_updated;
+        }
+
+        g_tun_bytes_read += read_len;
+        g_tun_bytes_updated = gstate.time_now;
 
         if (parse_ip_packet(&dst_id, buf, read_len)) {
             continue;
@@ -308,7 +361,7 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
     }
 
     if (read_len > 0) {
-        gstate.tun_read_bytes += read_len;
+        g_tun_bytes_read += read_len;
     }
 
     log_debug2("tun_read: %zu bytes, %s", read_len, debug_payload(buf, read_len));
@@ -428,6 +481,9 @@ int tun_init(uint32_t id, const char *ifname)
         log_error("tun_handler not set for protocol %s", gstate.protocol->name);
         return EXIT_FAILURE;
     }
+
+    g_tun_bytes_updated = gstate.time_now;
+    g_tun_bytes_updated_prev = gstate.time_now;
 
     net_add_handler(gstate.tun_fd, &tun_read_internal);
 

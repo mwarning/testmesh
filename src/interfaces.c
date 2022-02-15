@@ -328,7 +328,7 @@ static void read_internal_l2(int events, int fd)
     init_macaddr(&src_addr, &eh->h_source, ifa->ifindex);
     //init_macaddr(&dst_addr, &eh->h_dest, ifa->ifindex);
 
-    traffic_add_bytes_in(&src_addr, readlen);
+    traffic_add_bytes_read(&src_addr, readlen);
 
     uint8_t *payload = &buf[sizeof(struct ethhdr)];
     size_t payload_len = readlen - sizeof(struct ethhdr);
@@ -369,7 +369,7 @@ static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_AL
         Address addr;
         init_macaddr(&addr, dst_addr, ifa->ifindex);
 
-        traffic_add_bytes_out(&addr, sendlen);
+        traffic_add_bytes_write(&addr, sendlen);
     }
 
     return 0;
@@ -467,7 +467,7 @@ static void read_internal_l3(int events, int fd)
     }
 
 
-    traffic_add_bytes_in(&src_addr, readlen);
+    traffic_add_bytes_read(&src_addr, readlen);
 
     assert(src_addr.family == AF_INET6 || src_addr.family == AF_INET);
     gstate.protocol->ext_handler_l3(&src_addr, &buffer[0], readlen);

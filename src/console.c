@@ -23,6 +23,7 @@
 #include "console.h"
 #include "interfaces.h"
 #include "main.h"
+#include "tun.h"
 #include "traffic.h"
 
 
@@ -108,8 +109,10 @@ static int console_exec(FILE *fp, int argc, char *argv[])
         fprintf(fp, "log level:  %u\n", gstate.log_level);
         if (gstate.tun_name) {
             fprintf(fp, "tun device: %s\n", gstate.tun_name);
-            fprintf(fp, "tun read:   %s\n", str_bytes(gstate.tun_read_bytes));
-            fprintf(fp, "tun write:  %s\n", str_bytes(gstate.tun_write_bytes));
+            fprintf(fp, "tun read:   %s (%s/s)\n",
+                str_bytes(tun_read_total()), str_bytes(tun_read_speed()));
+            fprintf(fp, "tun write:  %s (%s/s)\n",
+                str_bytes(tun_write_total()), str_bytes(tun_write_speed()));
         }
         if (gstate.protocol->console) {
             gstate.protocol->console(fp, argc, argv);

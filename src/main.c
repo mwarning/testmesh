@@ -50,8 +50,7 @@ struct state gstate = {
 
     .tun_name = "tun0",
     .tun_fd = -1,
-    .tun_read_bytes = 0, // bytes read from tun
-    .tun_write_bytes = 0, // bytes written to tun
+
     .tun_setup = 1, // auto configure IP address/route
     .tun_setup_ipv4_mtu = 1400, // only used if tun IPv4 setup is enabled
 
