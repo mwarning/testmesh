@@ -335,7 +335,7 @@ static int tun_alloc(const char *ifname)
     strcpy(ifr.ifr_name, ifname);
 
     if (ioctl(fd, TUNSETIFF, &ifr) < 0) {
-        log_error("ioctl(TUNSETIFF) %s", strerror(errno));
+        log_error("Failed to create %s device: %s", ifname, strerror(errno));
         close(fd);
         return -1;
     }
