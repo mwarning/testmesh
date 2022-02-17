@@ -194,21 +194,23 @@ static const char *str_addr_ifname(const Address *addr)
 
 static uint64_t speed_read(const Traffic *cur)
 {
-    if (cur->bytes_updated_prev >= cur->bytes_updated) {
-        return 0; // invalid times
-    } else {
+    if (cur->bytes_read > cur->bytes_read_prev
+            && cur->bytes_updated > cur->bytes_updated_prev) {
         return (cur->bytes_read - cur->bytes_read_prev)
             / (cur->bytes_updated - cur->bytes_updated_prev);
+    } else {
+        return 0; // invalid times
     }
 }
 
 static uint64_t speed_write(const Traffic *cur)
 {
-    if (cur->bytes_updated_prev >= cur->bytes_updated) {
-        return 0; // invalid times
-    } else {
+    if (cur->bytes_write > cur->bytes_write_prev
+            && cur->bytes_updated > cur->bytes_updated_prev) {
         return (cur->bytes_write - cur->bytes_write_prev)
             / (cur->bytes_updated - cur->bytes_updated_prev);
+    } else {
+        return 0; // invalid times
     }
 }
 
