@@ -1,7 +1,7 @@
 #!/bin/sh
 
 is_gateway=n
-protocol=flood-1
+protocol=flood-0
 
 exec >/root/setup.log 2>&1
 
@@ -84,7 +84,7 @@ uci set $n.enabled=1
 uci set $n.protocol="${protocol}"
 uci set $n.tun_name="tun0"
 uci set $n.own_id="0x${id}"
-uci set $n.verbosity="2"
+uci set $n.log_level="2"
 uci set $n.enable_ipv4="1"
 uci set $n.enable_ipv6="1"
 uci set $n.setup_tun="0"

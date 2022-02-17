@@ -14,9 +14,8 @@ include $(INCLUDE_DIR)/package.mk
 
 define Package/geomesh
 	TITLE:=Geomesh
-	SECTION:=net
-	CATEGORY:=Network
-	SUBMENU:=Routing and Redirection
+	SECTION:=base
+	CATEGORY:=Geomesh
 	MENU:=1
 	DEPENDS:=+kmod-tun
 endef

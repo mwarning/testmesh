@@ -9,10 +9,11 @@ PKG_BUILD_DIR:=$(BUILD_DIR)/geomesh-firmware
 include $(INCLUDE_DIR)/package.mk
 
 define Package/geomesh-firmware
+	TITLE:= Geomesh Example Firmware
 	SECTION:=base
 	CATEGORY:=Geomesh
+	MENU:=1
 	DEFAULT:=y
-	TITLE:= Geomesh Example Firwmare
 	DEPENDS:=+geomesh +tcpdump-mini
 endef
 

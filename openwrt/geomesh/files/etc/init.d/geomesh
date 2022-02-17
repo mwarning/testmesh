@@ -32,19 +32,19 @@ start_instance() {
 	OPTS=""
 
 	## --<option>
-	for option in "enable_ipv4" "enable_ipv6" "tun_setup" "disable_stdin"; do
+	for option in "disable_stdin"; do
 		config_get_bool value "$cfg" "$option" 0
 		[ $value -gt 0 ] && xappend '' $option
 	done
 
 	# --<option> <value>
-	for option in "protocol" "control" "own_id" "verbosity" "gateway_id"; do
+	for option in option in "protocol" "tun_setup" "tun_name" "ether_type" "enable_ipv4" "enable_ipv6" "control" "own_id" "gateway_id" "log_level" "log_file"; do
 		config_get value "$cfg" "$option"
 		[ -n "$value" ] && xappend "$value" "$option"
 	done
 
 	config_list_foreach "$cfg" "peer" xappend "peer"
-	config_list_foreach "$cfg" "ifname" xappend "ifname"
+	config_list_foreach "$cfg" "interface" xappend "interface"
 
 	procd_open_instance
 	procd_set_param command $PROG $OPTS
