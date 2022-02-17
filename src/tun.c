@@ -39,21 +39,23 @@ uint64_t tun_write_total()
 
 uint64_t tun_write_speed()
 {
-    if (g_tun_bytes_updated_prev >= gstate.time_now) {
-        return 0;
-    } else {
+    if (g_tun_bytes_write > g_tun_bytes_write_prev
+            && g_tun_bytes_updated > g_tun_bytes_updated_prev) {
         return (g_tun_bytes_write - g_tun_bytes_write_prev)
             / (g_tun_bytes_updated - g_tun_bytes_updated_prev);
+    } else {
+        return 0;
     }
 }
 
 uint64_t tun_read_speed()
 {
-    if (g_tun_bytes_updated_prev >= gstate.time_now) {
-        return 0;
-    } else {
+    if (g_tun_bytes_read > g_tun_bytes_read_prev
+            && g_tun_bytes_updated > g_tun_bytes_updated_prev) {
         return (g_tun_bytes_read - g_tun_bytes_read_prev)
             / (g_tun_bytes_updated - g_tun_bytes_updated_prev);
+    } else {
+        return 0;
     }
 }
 
