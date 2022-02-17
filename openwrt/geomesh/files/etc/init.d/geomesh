@@ -29,10 +29,10 @@ start_instance() {
 
 	section_enabled "$cfg" || return
 
-	OPTS=""
+	OPTS="--disable-stdin"
 
 	## --<option>
-	for option in "disable_stdin"; do
+	for option in "find_interfaces"; do
 		config_get_bool value "$cfg" "$option" 0
 		[ $value -gt 0 ] && xappend '' $option
 	done

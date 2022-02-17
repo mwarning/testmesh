@@ -12,6 +12,7 @@
 enum OPCODE {
     oProtocol,
     oInterface,
+    oFindInterfaces,
     oGatewayIdentifier,
     oOwnIdentifier,
     oDaemon,
@@ -41,6 +42,7 @@ static struct option_t g_options[] = {
     {"--gateway-id", 1, oGatewayIdentifier},
     {"--own-id", 1, oOwnIdentifier},
     {"--ifname", 1, oInterface},
+    {"--find-interfaces", 0, oFindInterfaces},
     {"--interface", 1, oInterface},
     {"-i", 1, oInterface},
     {"--log-file", 1, oLogFile},
@@ -73,6 +75,7 @@ static const char *usage_str =
     "  --protocol,-p <protocol>    Select routing protocol\n"
     "  --daemon,-d                 Run as daemon\n"
     "  --interface,-i <interface>  Limit to given interfaces\n"
+    "  --find-interfaces           Find and add interfaces automatically\n"
     "  --own-id <id>               Identifier of this node (default: <random>)\n"
     "  --gateway-id <id>           Identifier of the gateway node (default: <none>)\n"
     "  --peer <address>            Add a peer manually by address\n"
@@ -155,6 +158,9 @@ static int conf_set(const char *opt, const char *val)
         break;
     case oDaemon:
         gstate.do_fork = 1;
+        break;
+    case oFindInterfaces:
+        gstate.find_interfaces = 1;
         break;
     case oInterface:
         if (gstate.protocol == NULL) {

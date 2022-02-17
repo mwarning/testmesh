@@ -40,6 +40,7 @@ struct state {
     int sock_udp; // also used to send mcast
     int sock_mcast_receive;
     uint16_t ether_type;
+    uint8_t find_interfaces;
 
     uint32_t gateway_id;
     uint8_t gateway_id_set;

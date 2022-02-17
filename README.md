@@ -70,6 +70,7 @@ Usage: geomesh -i eth0 -i wlan0
   --protocol,-p <protocol>    Select routing protocol
   --daemon,-d                 Run as daemon
   --interface,-i <interface>  Limit to given interfaces
+  --find-interfaces           Find and add interfaces automatically
   --own-id <id>               Identifier of this node (default: <random>)
   --gateway-id <id>           Identifier of the gateway node (default: <none>)
   --peer <address>            Add a peer manually by address

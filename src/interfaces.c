@@ -26,12 +26,12 @@ struct interface {
     unsigned ifindex;
     struct mac ifmac;
     int ifsock_l2;
+    int is_dynamic;     // added dynamically
     char *ifname;       // persistent
     struct interface *next;
 };
 
 static struct interface *g_interfaces = NULL;
-static int g_dynamic_interfaces = 0;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
 // forward declaration
@@ -160,9 +160,10 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
     return 0;
 }
 
-static int interface_setup(struct interface *ifa, int quiet)
+static int interface_setup(struct interface *ifa)
 {
     const char *ifname = ifa->ifname;
+    int quiet = ifa->is_dynamic;
 
     ifa->ifindex = if_nametoindex(ifname);
     if (ifa->ifindex == 0) {
@@ -227,7 +228,7 @@ static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
     free(ifa);
 }
 
-int interface_add(const char *ifname)
+static int interface_add_internal(const char *ifname, int is_dynamic)
 {
     if (gstate.tun_name && 0 == strcmp(ifname, gstate.tun_name)) {
         log_error("Cannot add own tun interface: %s", ifname);
@@ -244,9 +245,10 @@ int interface_add(const char *ifname)
         .ifname = strdup(ifname),
         .ifmac = g_nullmac,
         .ifsock_l2 = -1,
+        .is_dynamic = is_dynamic,
     };
 
-    interface_setup(ifa, 1);
+    interface_setup(ifa);
 
     // prepend
     if (g_interfaces == NULL) {
@@ -257,6 +259,11 @@ int interface_add(const char *ifname)
     g_interfaces = ifa;
 
     return 0;
+}
+
+int interface_add(const char *ifname)
+{
+    return interface_add_internal(ifname, 0);
 }
 
 int interface_del(const char *ifname)
@@ -605,7 +612,8 @@ static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *
     }
 }*/
 
-static void get_all_interfaces(int (*interface_add_cb)(const char *ifname))
+// add interfaces automatically
+static void find_and_add_interfaces()
 {
     struct ifaddrs *ifaddr;
     struct ifaddrs *ifa;
@@ -638,7 +646,7 @@ static void get_all_interfaces(int (*interface_add_cb)(const char *ifname))
             continue;
         }
 
-        interface_add_cb(ifa->ifa_name);
+        interface_add_internal(ifa->ifa_name, 1);
     }
 
     freeifaddrs(ifaddr);
@@ -657,8 +665,8 @@ static void periodic_interfaces_handler(int _events, int _fd)
         check_time = gstate.time_now + 5;
     }
 
-    if (g_dynamic_interfaces) {
-        get_all_interfaces(&interface_add);
+    if (gstate.find_interfaces) {
+        find_and_add_interfaces();
     }
 
     // detect vanished interfaces
@@ -674,9 +682,8 @@ static void periodic_interfaces_handler(int _events, int _fd)
         }
 
         if (!is_valid_ifa(ifa)) {
-            int quiet = g_dynamic_interfaces;
-            int rc = interface_setup(ifa, quiet);
-            if (rc && g_dynamic_interfaces) {
+            int rc = interface_setup(ifa);
+            if (rc && ifa->is_dynamic) {
                 struct interface *next = ifa->next;
                 interface_remove(ifa_prev, ifa);
                 ifa = next;
@@ -693,13 +700,15 @@ int interfaces_debug(FILE *fd)
     int count = 0;
     struct interface *ifa;
 
-    fprintf(fd, "name\tstatus\tmac-address\t\tifsocket\tifindex\n");
+    fprintf(fd, "name\tstatus\tmac-address\t\tdynamic\tifsocket\tifindex\n");
+
     ifa = g_interfaces;
     while (ifa) {
-        fprintf(fd, "%s\t%s\t%s\t%d\t\t%d\n",
+        fprintf(fd, "%s\t%s\t%s\t%s\t%d\t%d\n",
             ifa->ifname,
             is_valid_ifa(ifa) ? "up" : "down",
             str_mac(&ifa->ifmac),
+            ifa->is_dynamic ? "yes" : "no",
             ifa->ifsock_l2,
             ifa->ifindex
         );
@@ -713,9 +722,8 @@ int interfaces_debug(FILE *fd)
 
 void interfaces_init()
 {
-    if (g_interfaces == NULL) {
-        log_info("No interface given => add all");
-        g_dynamic_interfaces = 1;
+    if (g_interfaces == NULL && gstate.find_interfaces == 0) {
+        log_warning("No mesh interfaces given.");
     }
 
     if (gstate.sock_udp > 0) {
