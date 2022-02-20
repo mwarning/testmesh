@@ -1,6 +1,6 @@
-# Building and Packaging Geomesh on OpenWrt
+# Building and Packaging Testmesh on OpenWrt
 
-These are instructions to create an [OpenWrt](https://openwrt.org) image with a complete Geomesh setup.
+These are instructions to create an [OpenWrt](https://openwrt.org) image with a complete Testmesh setup.
 
 For building OpenWrt on Debian Linux, you need to install these packages:
 ```
@@ -15,16 +15,16 @@ cd openwrt
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-# copy GeoMesh package and source
-cp -r ~/geomesh/openwrt/geomesh* package/
-mkdir package/geomesh/src
-cp -r ~/geomesh/Makefile ~/geomesh/src package/geomesh/src
+# copy Testmesh packages and source
+cp -r ~/testmesh/openwrt/testmesh* package/
+mkdir package/testmesh/src
+cp -r ~/testmesh/Makefile ~/testmesh/src package/testmesh/src
 
 make menuconfig
 ```
 
 At this point select the appropiate "Target System" and "Target Profile" depending on what target chipset/router you want to build for.
-Packages `geomesh` (the routing protocol) and `geomesh-firmware` (for wifi/lan configuration) are selected by default.
+Packages `testmesh` (the routing protocol) and `testmesh-firmware` (for wifi/lan configuration) are selected by default.
 
 Now compile/build everything:
 

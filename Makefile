@@ -19,8 +19,8 @@ OBJS=$(FILES:.c=.o)
 
 all: src/protocols.h $(OBJS)
 	mkdir -p build
-	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -lm -o build/geomesh
-	ln -s geomesh build/geomesh-ctl 2> /dev/null || true
+	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -lm -o build/testmesh
+	ln -s testmesh build/testmesh-ctl 2> /dev/null || true
 
 # generate this file
 src/protocols.h:
@@ -37,5 +37,5 @@ clean:
 	rm -f build/* $(OBJS) src/protocols.h
 
 install:
-	cp build/geomesh $(DESTDIR)/usr/bin/ 2> /dev/null || true
-	cp build/geomesh-ctl $(DESTDIR)/usr/bin/ 2> /dev/null || true
+	cp build/testmesh $(DESTDIR)/usr/bin/ 2> /dev/null || true
+	cp build/testmesh-ctl $(DESTDIR)/usr/bin/ 2> /dev/null || true

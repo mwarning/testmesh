@@ -1,0 +1,14 @@
+menu "Configuration"
+	depends on PACKAGE_testmesh-firmware
+
+config TESTMESH_FIRMWARE_GATEWAY
+	bool "Configure as gateway."
+	depends on PACKAGE_testmesh-firmware
+	default n
+
+config TESTMESH_FIRMWARE_ALGORITHM
+	string "Default routing algorithm."
+	depends on PACKAGE_testmesh-firmware
+	default "flood-0"
+
+endmenu

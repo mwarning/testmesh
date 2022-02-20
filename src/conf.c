@@ -70,7 +70,7 @@ static struct option_t g_options[] = {
 };
 
 static const char *usage_str = 
-    "Usage: geomesh -i eth0 -i wlan0\n"
+    "Usage: testmesh -i eth0 -i wlan0\n"
     "\n"
     "  --protocol,-p <protocol>    Select routing protocol\n"
     "  --daemon,-d                 Run as daemon\n"

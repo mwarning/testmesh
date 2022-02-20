@@ -1,4 +1,4 @@
-# Geomesh - Basic Mesh Routing Protocols
+# Testmesh - Basic Mesh Routing Protocols
 
 A code base to quickly implement mesh routing protocols. A collection of basic protocols have been implemented already.
 Included is also a OpenWrt package that is ready to be used in real networks, albeit not being production ready.
@@ -55,7 +55,7 @@ Notes:
 ## Usage
 
 ```
-./geomesh -p flood-0 -i wlan0
+./testmesh -p flood-0 -i wlan0
 ```
 
 Since multiple protocols are available, a protocol must be specified at startup.
@@ -64,8 +64,8 @@ Otherwise a list of available protocols is printed.
 Use the `tun0` interface to exchange packets with other instances.
 
 ```
-$ ./build/geomesh -h
-Usage: geomesh -i eth0 -i wlan0
+$ ./build/testmesh -h
+Usage: testmesh -i eth0 -i wlan0
 
   --protocol,-p <protocol>    Select routing protocol
   --daemon,-d                 Run as daemon
@@ -91,16 +91,16 @@ Valid protocols: dsr-0, flood-0, ...
 
 ## Daemon Control
 
-If geomesh is started with the control socket option (`./geomesh -c /tmp/geomesh.sock`), the instance can be controlled remotely:
+If testmesh is started with the control socket option (`./testmesh -c /tmp/testmesh.sock`), the instance can be controlled remotely:
 
 ```
-geomesh-ctl -c /tmp/geomesh.sock
+testmesh-ctl -c /tmp/testmesh.sock
 ```
 
 or use `socat`:
 
 ```
-socat - UNIX-CONNECT:/tmp/geomesh.sock
+socat - UNIX-CONNECT:/tmp/testmesh.sock
 ```
 
 ## Further Reading

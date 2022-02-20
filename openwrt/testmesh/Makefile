@@ -1,6 +1,6 @@
 include $(TOPDIR)/rules.mk
 
-PKG_NAME:=geomesh
+PKG_NAME:=testmesh
 PKG_VERSION:=1.0.0
 PKG_RELEASE:=1
 
@@ -12,15 +12,15 @@ PKG_BUILD_PARALLEL:=1
 
 include $(INCLUDE_DIR)/package.mk
 
-define Package/geomesh
-	TITLE:=Geomesh
+define Package/testmesh
+	TITLE:=Testmesh
 	SECTION:=base
-	CATEGORY:=Geomesh
+	CATEGORY:=Testmesh
 	MENU:=1
 	DEPENDS:=+kmod-tun
 endef
 
-define Package/geomesh/description
+define Package/testmesh/description
 	A mesh network protocol daemon
 endef
 
@@ -28,11 +28,11 @@ endef
 TARGET_CFLAGS += -ffunction-sections -fdata-sections
 TARGET_LDFLAGS += -Wl,--gc-sections
 
-define Package/geomesh/config
+define Package/testmesh/config
 	source "$(SOURCE)/Config.in"
 endef
 
-ifeq ($(CONFIG_GEOMESH_ENABLE_DEBUG),y)
+ifeq ($(CONFIG_TESTMESH_ENABLE_DEBUG),y)
 	MAKE_FLAGS += DEBUG=1
 endif
 
@@ -42,12 +42,12 @@ define Build/Compile
 	$(call Build/Compile/Default,clean all)
 endef
 
-define Package/geomesh/install
+define Package/testmesh/install
 	$(CP) ./files/* $(1)/
 
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/geomesh $(1)/usr/bin/
-	$(LN) /usr/bin/geomesh $(1)/usr/bin/geomesh-ctl
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/testmesh $(1)/usr/bin/
+	$(LN) /usr/bin/testmesh $(1)/usr/bin/testmesh-ctl
 endef
 
-$(eval $(call BuildPackage,geomesh))
+$(eval $(call BuildPackage,testmesh))

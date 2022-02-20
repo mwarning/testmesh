@@ -2,7 +2,7 @@
 
 START=95
 USE_PROCD=1
-PROG=/usr/bin/geomesh
+PROG=/usr/bin/testmesh
 OPTS=""
 
 xappend() {
@@ -56,6 +56,6 @@ start_instance() {
 }
 
 start_service() {
-	config_load 'geomesh'
-	config_foreach start_instance 'geomesh'
+	config_load 'testmesh'
+	config_foreach start_instance 'testmesh'
 }

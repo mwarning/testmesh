@@ -1,8 +1,8 @@
 
-config geomesh
+config testmesh
 	option enabled 1
 	option protocol 'flood-1'
-	option control '/var/geomesh.ctl'
+	option control '/var/testmesh.ctl'
 	#option own_id '0x02'
 	list interface 'wlan0'
 	#option tun_setup 1

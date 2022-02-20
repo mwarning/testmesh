@@ -1,0 +1,9 @@
+menu "Configuration"
+	depends on PACKAGE_testmesh
+
+config TESTMESH_ENABLE_DEBUG
+	bool "Build in debug mode"
+	depends on PACKAGE_testmesh
+	default n
+
+endmenu
