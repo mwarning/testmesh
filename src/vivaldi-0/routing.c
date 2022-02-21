@@ -162,7 +162,7 @@ static Neighbor *neighbor_add(uint32_t sender_id, float *pos, const Address *add
     memcpy(&e->addr, addr, sizeof(Address));
     e->last_updated = gstate.time_now;
 
-    HASH_ADD_INT(g_neighbors, sender_id, e);
+    HASH_ADD(hh, g_neighbors, sender_id, sizeof(uint32_t), e);
 
     return e;
 }

@@ -65,7 +65,7 @@ int seqnum_cache_update(uint32_t src_id, uint16_t seq_num)
     cur->seq_num = seq_num;
     cur->updated = gstate.time_now;
 
-    HASH_ADD_INT(g_seqnum_cache, src_id, cur);
+    HASH_ADD(hh, g_seqnum_cache, src_id, sizeof(uint32_t), cur);
 
     return 1;
 }

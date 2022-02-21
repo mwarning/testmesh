@@ -146,7 +146,7 @@ static Neighbor *neighbor_add(uint32_t sender_id, uint8_t *bloom, const Address 
     memcpy(&e->addr, addr, sizeof(Address));
     e->last_updated = gstate.time_now;
 
-    HASH_ADD_INT(g_entries, sender_id, e);
+    HASH_ADD(hh, g_entries, sender_id, sizeof(uint32_t), e);
 
     return e;
 }

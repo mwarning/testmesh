@@ -91,7 +91,7 @@ static Entry *entry_add(uint32_t id, uint16_t seq_num)
     e->seq_num = seq_num;
     e->last_updated = gstate.time_now;
 
-    HASH_ADD_INT(g_entries, id, e);
+    HASH_ADD(hh, g_entries, id, sizeof(uint32_t), e);
 
     return e;
 }

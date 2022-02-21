@@ -118,7 +118,7 @@ static void routing_entry_update(uint32_t dst_id, const Address *next_hop, uint8
         e->hop_count = hop_count;
         e->last_updated = gstate.time_now;
 
-        HASH_ADD_INT(g_routing_entries, dst_id, e);
+        HASH_ADD(hh, g_routing_entries, dst_id, sizeof(uint32_t), e);
     }
 }
 

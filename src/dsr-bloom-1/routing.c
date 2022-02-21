@@ -163,7 +163,7 @@ static Entry *entry_add(uint32_t sender_id, uint8_t hop_cnt, uint8_t *bloom, con
     e->hop_cnt = hop_cnt;
     e->last_updated = gstate.time_now;
 
-    HASH_ADD_INT(g_neighbors, sender_id, e);
+    HASH_ADD(hh, g_neighbors, sender_id, sizeof(uint32_t), e);
 
     return e;
 }
