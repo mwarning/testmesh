@@ -94,8 +94,13 @@ static int console_exec(FILE *fp, int argc, char *argv[])
         interface_del(argv[1]);
     } else if (MATCH(1, "interfaces")) {
         interfaces_debug(fp);
-    } else if (MATCH(1, "v")) {
-        gstate.log_level = (gstate.log_level + 1) % (MAX_LOG_LEVEL + 1);
+    } else if (MATCH(1, "v") || MATCH(2, "v")) {
+        if (argc == 2) {
+            gstate.log_level = atoi(argv[1]);
+        } else {
+            gstate.log_level += 1;
+        }
+        gstate.log_level %= (MAX_LOG_LEVEL + 1);
         fprintf(fp, "log level is now %u\n", gstate.log_level);
     } else if (MATCH(1, "i")) {
         fprintf(fp, "protocol:   %s\n", gstate.protocol->name);
@@ -126,7 +131,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
             "interface-add <ifname>  Add interface.\n"
             "interface-del <ifname>  Remove interface.\n"
             "peer-add <address>      Add peer via IP address.\n"
-            "v                       Increase verbosity.\n"
+            "v [log-level]           Increase verbosity.\n"
             "q                       Close this console.\n"
             "h                       Show this help.\n"
         );
