@@ -15,12 +15,11 @@ typedef struct {
 
     uint64_t bytes_write;
     uint64_t bytes_read;
-    time_t bytes_updated;
+    time_t time_prev;
 
     // for speed measurement
     uint64_t bytes_write_prev;
     uint64_t bytes_read_prev;
-    time_t bytes_updated_prev;
 
     UT_hash_handle hh;
 } Traffic;
@@ -29,9 +28,9 @@ typedef struct {
 static Traffic *g_traffic = NULL;
 
 // items in g_traffic
-static uint32_t g_traffic_count = 0; // current
+static uint32_t g_traffic_count = 0; // current entry count
 static uint32_t g_traffic_count_all = 0; // will never be decreased
-static uint32_t g_traffic_count_max = 100;
+static uint32_t g_traffic_count_max = 100; // maximum entries in g_traffic
 
 // total traffic from outside (ignore key and hh)
 static Traffic g_traffic_total = {0};
@@ -66,44 +65,36 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_read, uint64_t
 {
     Traffic *cur;
 
-    if (g_traffic_total.bytes_updated != g_traffic_total.bytes_updated_prev) {
+    if (g_traffic_total.time_prev != gstate.time_now) {
         g_traffic_total.bytes_read_prev = g_traffic_total.bytes_read;
         g_traffic_total.bytes_write_prev = g_traffic_total.bytes_write;
-        g_traffic_total.bytes_updated_prev = g_traffic_total.bytes_updated;
     }
 
     g_traffic_total.bytes_read += bytes_read;
     g_traffic_total.bytes_write += bytes_write;
-    g_traffic_total.bytes_updated = gstate.time_now;
+    g_traffic_total.time_prev = gstate.time_now;
 
     HASH_FIND(hh, g_traffic, addr, sizeof(Address), cur);
-    if (cur) {
-        if (cur->bytes_updated != cur->bytes_updated_prev) {
-            cur->bytes_read_prev = cur->bytes_read;
-            cur->bytes_write_prev = cur->bytes_write;
-            cur->bytes_updated_prev = cur->bytes_updated;
-        }
-
-        cur->bytes_read += bytes_read;
-        cur->bytes_write += bytes_write;
-        cur->bytes_updated = gstate.time_now;
-    } else {
+    if (cur == NULL) {
         traffic_maintain_max_entries();
 
-        cur = (Traffic*) malloc(sizeof(Traffic));
-        memcpy(&cur->addr, addr, sizeof(Address));
-        cur->bytes_read = bytes_read;
-        cur->bytes_write = bytes_write;
-        cur->bytes_updated = gstate.time_now;
-        cur->bytes_read_prev = 0;
-        cur->bytes_write_prev = 0;
-        cur->bytes_updated_prev = gstate.time_now;
+        cur = (Traffic*) calloc(1, sizeof(Traffic));
+        cur->addr = *addr;
 
         HASH_ADD(hh, g_traffic, addr, sizeof(Address), cur);
 
         g_traffic_count += 1;
         g_traffic_count_all += 1;
     }
+
+    if (cur->time_prev != gstate.time_now) {
+        cur->bytes_read_prev = cur->bytes_read;
+        cur->bytes_write_prev = cur->bytes_write;
+        cur->time_prev = gstate.time_now;
+    }
+
+    cur->bytes_read += bytes_read;
+    cur->bytes_write += bytes_write;
 }
 
 void traffic_add_bytes_write(const Address *addr, uint64_t bytes)
@@ -120,7 +111,7 @@ static int is_smaller(Traffic *a, Traffic *b)
 {
     uint64_t a_sum = a->bytes_write + a->bytes_read;
     uint64_t b_sum = b->bytes_write + b->bytes_read;
-    return (a_sum < b_sum) || (a_sum == b_sum && a->bytes_updated < b->bytes_updated);
+    return (a_sum < b_sum) || (a_sum == b_sum && a->time_prev < b->time_prev);
 }
 
 // get sorted list of traffic entries
@@ -149,10 +140,10 @@ static uint32_t traffic_fetch_subset(Traffic *ts[], uint32_t max_length, uint8_t
             continue;
         } else if (i < current_length) {
             if (current_length == max_length) {
-              memcpy(&ts[i+1], &ts[i], (current_length - i - 1) * sizeof(Traffic*));
+              memcpy(&ts[i + 1], &ts[i], (current_length - i - 1) * sizeof(Traffic*));
               ts[i] = cur;
             } else {
-              memcpy(&ts[i+1], &ts[i], (current_length - i) * sizeof(Traffic*));
+              memcpy(&ts[i + 1], &ts[i], (current_length - i) * sizeof(Traffic*));
               ts[i] = cur;
               current_length += 1;
             }
@@ -194,10 +185,10 @@ static const char *str_addr_ifname(const Address *addr)
 
 static uint64_t speed_read(const Traffic *cur)
 {
-    if (cur->bytes_read > cur->bytes_read_prev
-            && cur->bytes_updated > cur->bytes_updated_prev) {
+    if (cur->bytes_read >= cur->bytes_read_prev
+            && gstate.time_now > cur->time_prev) {
         return (cur->bytes_read - cur->bytes_read_prev)
-            / (cur->bytes_updated - cur->bytes_updated_prev);
+            / (gstate.time_now - cur->time_prev);
     } else {
         return 0; // invalid times
     }
@@ -205,10 +196,10 @@ static uint64_t speed_read(const Traffic *cur)
 
 static uint64_t speed_write(const Traffic *cur)
 {
-    if (cur->bytes_write > cur->bytes_write_prev
-            && cur->bytes_updated > cur->bytes_updated_prev) {
+    if (cur->bytes_write >= cur->bytes_write_prev
+            && gstate.time_now > cur->time_prev) {
         return (cur->bytes_write - cur->bytes_write_prev)
-            / (cur->bytes_updated - cur->bytes_updated_prev);
+            / (gstate.time_now - cur->time_prev);
     } else {
         return 0; // invalid times
     }
@@ -234,14 +225,14 @@ void traffic_debug(FILE* out, int argc, char *argv[])
 
     for (int i = 0; i < found_count; i++) {
         Traffic *cur = entries[i];
-        fprintf(out, "%s/%s: in: %s (%s/s), out: %s (%s/s), %s ago\n",
+        fprintf(out, "%s/%s: in: %6s (%6s/s), out: %6s (%6s/s), %s ago\n",
             str_addr(&cur->addr),
             str_addr_ifname(&cur->addr),
             str_bytes(cur->bytes_read),
             str_bytes(speed_read(cur)),
             str_bytes(cur->bytes_write),
             str_bytes(speed_write(cur)),
-            str_duration(cur->bytes_updated, gstate.time_now));
+            str_duration(cur->time_prev, gstate.time_now));
     }
 
     free(entries);
