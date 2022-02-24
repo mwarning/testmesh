@@ -700,11 +700,11 @@ int interfaces_debug(FILE *fd)
     int count = 0;
     struct interface *ifa;
 
-    fprintf(fd, "name\tstatus\tmac-address\t\tdynamic\tifsocket\tifindex\n");
+    fprintf(fd, "name         status mac-address        dynamic ifsocket ifindex\n");
 
     ifa = g_interfaces;
     while (ifa) {
-        fprintf(fd, "%s\t%s\t%s\t%s\t%d\t%d\n",
+        fprintf(fd, "%-12s %-6s %-18s %-7s %-8u %-8u\n",
             ifa->ifname,
             is_valid_ifa(ifa) ? "up" : "down",
             str_mac(&ifa->ifmac),
