@@ -192,7 +192,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
         if (IN_MULTICAST(&daddr->s_addr)) {
             // no support for multicast traffic
-            log_debug2("parse_ip_packet: IPv4 multicast => drop");
+            log_trace("parse_ip_packet: IPv4 multicast => drop");
             return 1;
         }
 
@@ -203,7 +203,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             dst_id = gstate.gateway_id;
         } else {
             // invalid id
-            log_debug2("parse_ip_packet: no mesh destination for IPv4 packet => drop");
+            log_trace("parse_ip_packet: no mesh destination for IPv4 packet => drop");
             return 1;
         }
 
@@ -233,7 +233,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         struct in6_addr *daddr = (struct in6_addr *) &buf[24];
 
         if (IN6_IS_ADDR_MULTICAST(daddr)) {
-            log_debug2("parse_ip_packet: IPv6 multicast => drop");
+            log_trace("parse_ip_packet: IPv6 multicast => drop");
             // no support for multicast traffic
             return 1;
         }
@@ -245,7 +245,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
             dst_id = gstate.gateway_id;
         } else {
             // invalid id
-            log_debug2("parse_ip_packet: no mesh destination for IPv6 packet => drop");
+            log_trace("parse_ip_packet: no mesh destination for IPv6 packet => drop");
             return 1;
         }
 
@@ -266,7 +266,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         return 0;
     }
 
-    log_debug2("parse_ip_packet: invalid ip packet => drop");
+    log_trace("parse_ip_packet: invalid ip packet => drop");
 
     // invalid IP packet
     return 1;
@@ -303,7 +303,7 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
         g_tun_bytes_updated = gstate.time_now;
     }
 
-    log_debug2("tun_write: %zu bytes, %s", write_len, debug_payload(buf, buflen));
+    log_trace("tun_write: %zu bytes, %s", write_len, debug_payload(buf, buflen));
 
     if (write_len != buflen) {
         log_error("write() %s", strerror(errno));
@@ -336,7 +336,7 @@ static void tun_read_internal(int events, int fd)
             continue;
         }
 
-        log_debug2("tun_read_internal: %zu bytes, %s", read_len, debug_payload(buf, read_len));
+        log_trace("tun_read_internal: %zu bytes, %s", read_len, debug_payload(buf, read_len));
 
         if (g_tun_bytes_updated_prev != g_tun_bytes_updated) {
             g_tun_bytes_read_prev = g_tun_bytes_read;
@@ -366,7 +366,7 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
         g_tun_bytes_read += read_len;
     }
 
-    log_debug2("tun_read: %zu bytes, %s", read_len, debug_payload(buf, read_len));
+    log_trace("tun_read: %zu bytes, %s", read_len, debug_payload(buf, read_len));
 
     if (parse_ip_packet(dst_id, buf, read_len)) {
         return -1;

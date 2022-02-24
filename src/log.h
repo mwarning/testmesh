@@ -42,13 +42,13 @@
 #endif
 
 #ifdef DEBUG
-#define log_debug2(...)                            \
+#define log_trace(...)                            \
   do {                                             \
     if (gstate.log_level > 5)                      \
       log_print(LOG_DEBUG, __VA_ARGS__);           \
   } while (0)
 #else
-#define log_debug2(...)
+#define log_trace(...)
 #endif
 
 // Print a log message

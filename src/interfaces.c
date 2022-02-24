@@ -405,7 +405,7 @@ void send_bcasts_l2(const void* data, size_t data_len)
         ifa = ifa->next;
     }
 
-    log_debug2("send_raws: %d bytes on %d interfaces", (int) data_len, count);
+    log_trace("send_raws: %d bytes on %d interfaces", (int) data_len, count);
 }
 
 int send_ucast_l2(const Address *addr, const void* data, size_t data_len)

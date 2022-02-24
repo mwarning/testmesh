@@ -235,7 +235,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     }
 
     if (p->src_id == gstate.own_id) {
-        log_debug2("DATA: own source id => drop");
+        log_trace("DATA: own source id => drop");
         return;
     }
 
@@ -296,7 +296,7 @@ static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
     }
 
     if (p->ask_id == gstate.own_id) {
-        log_debug2("RREP: got own packet => drop");
+        log_trace("RREP: got own packet => drop");
         return;
     }
 
@@ -326,7 +326,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
     }
 
     if (p->src_id == gstate.own_id) {
-        log_debug2("RREQ: got own packet => drop");
+        log_trace("RREQ: got own packet => drop");
         return;
     }
 
@@ -388,12 +388,12 @@ static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
     }
 
     if (p->id == gstate.own_id) {
-        log_debug2("ROOT: got own id => drop");
+        log_trace("ROOT: got own id => drop");
         return;
     }
 
     if (p->sender_id == gstate.own_id) {
-        log_debug2("ROOT: packet already seen => drop");
+        log_trace("ROOT: packet already seen => drop");
         return;
     }
 
@@ -419,16 +419,16 @@ static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
         // p->id == g_current_root.id
         if (is_newer_seqnum(g_current_root.seq_num, p->seq_num)) {
             if (p->hop_count <= g_current_root.hop_count) {
-                log_debug2("ROOT: update root => accept", p->id);
+                log_trace("ROOT: update root => accept", p->id);
                 memcpy(&g_current_root.next_hop_addr, addr, sizeof(Address));
             } else {
                 // longer route, but it might still be good as a fallback
-                log_debug2("ROOT: got longer root (%u < %u) => ignore",
+                log_trace("ROOT: got longer root (%u < %u) => ignore",
                     p->id, p->hop_count, g_current_root.hop_count);
                 return;
             }
         } else {
-            log_debug2("ROOT: old root update for 0x%08x => ignore", p->id);
+            log_trace("ROOT: old root update for 0x%08x => ignore", p->id);
             return;
         }
     }
