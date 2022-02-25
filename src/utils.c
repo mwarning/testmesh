@@ -232,8 +232,10 @@ const char *str_bytes(uint64_t bytes)
         sprintf(buf, "%.1fG", bytes / 1000000000.0);
     } else if (bytes < 1000000000000000) {
         sprintf(buf, "%.1fT", bytes / 1000000000000.0);
-    } else {
+    } else if (bytes < 1000000000000000000) {
         sprintf(buf, "%.1fP", bytes / 1000000000000000.0);
+    } else {
+        sprintf(buf, "%.1fE", bytes / 1000000000000000000.0);
     }
 
     return buf;
