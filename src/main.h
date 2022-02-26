@@ -10,17 +10,18 @@
 
 #include "utils.h"
 
-#define MAIN_SRVNAME "mesh"
+#define MAIN_SRVNAME "testmesh"
+#define GEOMESH_VERSION "1.0.0"
+
 #define MULTICAST_ADDR "ff12::114"
 #define MULTICAST_PORT 4321
 #define UNICAST_PORT 654
-#define GEOMESH_VERSION "1.0.0"
 
 typedef struct {
     const char *name;
     void (*init)();
     void (*exit)();
-    void (*tun_handler)(uint32_t dst_id, uint8_t *packet, size_t length);
+    void (*tun_handler)(uint32_t dst_id, uint8_t *packet, size_t length); // receive IP frames from tun0
     void (*ext_handler_l2)(const Address *src_addr, uint8_t *packet, size_t length); // receive Ethernet frames
     void (*ext_handler_l3)(const Address *src_addr, uint8_t *packet, size_t length); // receive IP frames
     int (*add_peer)(FILE* fp, const char *str);
