@@ -40,7 +40,7 @@ typedef union {
 } Address;
 
 uint32_t adler32(const void *buf, size_t buflen);
-void hex_dump(const char *desc, const void *addr, const int len);
+void hex_dump(const char *desc, const void *buf, uint32_t buflen);
 int bytes_random(void *buffer, size_t size);
 
 int address_is_unicast(const Address *addr);

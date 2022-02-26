@@ -93,9 +93,9 @@ int address_is_unicast(const Address *addr)
     return !address_is_broadcast(addr) && !address_is_multicast(addr);
 }
 
-void hex_dump(const char *desc, const void *addr, const int len)
+void hex_dump(const char *desc, const void *buf, uint32_t buflen)
 {
-    const unsigned char *pc = (const unsigned char *)addr;
+    const unsigned char *pc = (const unsigned char *)buf;
     unsigned char buff[17];
     int i;
 
@@ -105,16 +105,16 @@ void hex_dump(const char *desc, const void *addr, const int len)
     }
 
     // Length checks.
-    if (len == 0) {
+    if (buflen == 0) {
         printf("  ZERO LENGTH\n");
         return;
-    } else if (len < 0) {
-        printf("  NEGATIVE LENGTH: %d\n", len);
+    } else if (buflen < 0) {
+        printf("  NEGATIVE LENGTH: %d\n", buflen);
         return;
     }
 
     // Process every byte in the data.
-    for (i = 0; i < len; i++) {
+    for (i = 0; i < buflen; i++) {
         // Multiple of 16 means new line (with line offset).
 
         if ((i % 16) == 0) {
