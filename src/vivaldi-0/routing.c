@@ -328,7 +328,7 @@ static void periodic_handler(int _events, int _fd)
     send_COMMs();
 }
 
-static char *format_pos(char *buf, const float *pos)
+static char *str_pos(char *buf, const float *pos)
 {
     char *cur = buf;
     for (int i = 0; i < DIM; i++) {
@@ -350,7 +350,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     if (MATCH(1, "h")) {
         fprintf(fp, "n: print neighbor table\n");
     } else if (MATCH(1, "i")) {
-        fprintf(fp, "  own pos: %s\n", format_pos(buf_pos, g_own_pos));
+        fprintf(fp, "  own pos: %s\n", str_pos(buf_pos, g_own_pos));
     } else if (MATCH(1, "n")) {
         unsigned counter = 0;
         Neighbor *cur;
@@ -362,7 +362,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
                 cur->sender_id,
                 str_addr(&cur->addr),
                 str_ago(cur->last_updated),
-                format_pos(buf_pos, cur->pos)
+                str_pos(buf_pos, cur->pos)
             );
             counter += 1;
         }
