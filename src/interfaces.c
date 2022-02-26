@@ -139,7 +139,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
     interfaceAddr.sll_ifindex = ifindex;
     interfaceAddr.sll_family = AF_PACKET;
 
-    if (bind(sock, (struct sockaddr *)&interfaceAddr, sizeof(interfaceAddr)) < 0) {
+    if (bind(sock, (struct sockaddr *)&interfaceAddr, sizeof(interfaceAddr)) == -1) {
         log_error("setup_raw_socket: bind(): %s", strerror(errno));
         return 1;
     }
@@ -148,7 +148,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
     mreq.mr_type = PACKET_MR_PROMISC;
     mreq.mr_alen = 6;
 
-    if (setsockopt(sock, SOL_PACKET, PACKET_ADD_MEMBERSHIP, (void*)&mreq, (socklen_t) sizeof(mreq)) < 0) {
+    if (setsockopt(sock, SOL_PACKET, PACKET_ADD_MEMBERSHIP, (void*)&mreq, (socklen_t) sizeof(mreq)) == -1) {
         log_error("setup_raw_socket: setsockopt(PACKET_ADD_MEMBERSHIP): %s", strerror(errno));
         return 1;
     }
