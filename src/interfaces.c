@@ -192,7 +192,7 @@ static int interface_setup(struct interface *ifa)
         }
     }
 
-    log_info("interface added: %s", ifa->ifname);
+    log_info("interface added: %s (%s)", ifa->ifname, ifa->is_dynamic ? "dynamic" : "static");
 
     return 0;
 }
