@@ -329,7 +329,7 @@ static void read_internal_l2(int events, int fd)
 
     struct ethhdr *eh = (struct ethhdr *) &buf[0];
 
-    Address src_addr = {0};
+    Address src_addr;
     //Address dst_addr;
 
     init_macaddr(&src_addr, &eh->h_source, ifa->ifindex);
@@ -372,12 +372,9 @@ static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_AL
         return 1;
     }
 
-    {
-        Address addr;
-        init_macaddr(&addr, dst_addr, ifa->ifindex);
-
-        traffic_add_bytes_write(&addr, sendlen);
-    }
+    Address addr;
+    init_macaddr(&addr, dst_addr, ifa->ifindex);
+    traffic_add_bytes_write(&addr, sendlen);
 
     return 0;
 }
@@ -385,8 +382,6 @@ static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_AL
 void send_bcasts_l2(const void* data, size_t data_len)
 {
     static uint8_t dst_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-    struct interface *ifa;
-    int count;
     char sendbuf[ETH_FRAME_LEN] = {0};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
@@ -397,8 +392,8 @@ void send_bcasts_l2(const void* data, size_t data_len)
 
     memcpy(&sendbuf[sizeof(struct ethhdr)], data, data_len);
 
-    count = 0;
-    ifa = g_interfaces;
+    int count = 0;
+    struct interface *ifa = g_interfaces;
     while (ifa) {
         send_internal_l2(ifa, &dst_addr[0], &sendbuf[0], sendlen);
         count += 1;
