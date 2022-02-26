@@ -47,6 +47,7 @@ int address_is_unicast(const Address *addr);
 int address_is_multicast(const Address *addr);
 int address_is_broadcast(const Address *addr);
 
+const char *str_enabled(uint8_t enabled);
 const char *str_mac(const struct mac *addr);
 const char *str_bytes(uint64_t bytes);
 const char *str_duration(time_t from, time_t to);

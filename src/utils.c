@@ -177,6 +177,11 @@ static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_sto
     return addrbuf;
 }
 
+const char *str_enabled(uint8_t enabled)
+{
+    return enabled ? "yes" : "no";
+}
+
 const char *str_duration(time_t from, time_t to)
 {
     static char strdurationbuf[4][32];

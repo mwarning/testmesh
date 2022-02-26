@@ -190,11 +190,6 @@ static int is_client(const char *cmd)
     return sep && (strcmp(sep + 1, "ctl") == 0);
 }
 
-static const char *is_enabled(int enabled)
-{
-    return enabled ? "yes" : "no";
-}
-
 int main(int argc, char *argv[])
 {
     gstate.time_started = time(0);
@@ -253,7 +248,7 @@ int main(int argc, char *argv[])
         log_info("Tunnel Device:  %s", gstate.tun_name);
     }
     log_info("Log Level:      %u", gstate.log_level);
-    log_info("IPv4/IPv6:      %s/%s", is_enabled(gstate.enable_ipv4), is_enabled(gstate.enable_ipv6));
+    log_info("IPv4/IPv6:      %s/%s", str_enabled(gstate.enable_ipv4), str_enabled(gstate.enable_ipv6));
 
     gstate.sock_help = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (gstate.sock_help < 0) {
