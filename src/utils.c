@@ -163,12 +163,12 @@ static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_sto
     case AF_INET6:
         port = ((struct sockaddr_in6 *)addr)->sin6_port;
         inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, buf, sizeof(buf));
-        sprintf(addrbuf, "[%s]:%d", buf, ntohs(port));
+        sprintf(addrbuf, "[%s]:%hu", buf, ntohs(port));
         break;
     case AF_INET:
         port = ((struct sockaddr_in *)addr)->sin_port;
         inet_ntop(AF_INET, &((struct sockaddr_in *)addr)->sin_addr, buf, sizeof(buf));
-        sprintf(addrbuf, "%s:%d", buf, ntohs(port));
+        sprintf(addrbuf, "%s:%hu", buf, ntohs(port));
         break;
     default:
         return "<invalid address>";
@@ -184,7 +184,7 @@ const char *str_enabled(uint8_t enabled)
 
 const char *str_duration(time_t from, time_t to)
 {
-    static char strdurationbuf[4][32];
+    static char strdurationbuf[4][16];
     static unsigned strdurationbuf_i = 0;
     char *buf = strdurationbuf[++strdurationbuf_i % 4];
 
@@ -209,13 +209,13 @@ const char *str_duration(time_t from, time_t to)
     seconds = secs;
 
     if (days > 0) {
-        snprintf(buf, 64, "%s%dd%dh", neg, days, hours);
+        snprintf(buf, 16, "%s%dd%dh", neg, days, hours);
     } else if (hours > 0) {
-        snprintf(buf, 64, "%s%dh%dm", neg, hours, minutes);
+        snprintf(buf, 16, "%s%dh%dm", neg, hours, minutes);
     } else if (minutes > 0) {
-        snprintf(buf, 64, "%s%dm%ds", neg, minutes, seconds);
+        snprintf(buf, 16, "%s%dm%ds", neg, minutes, seconds);
     } else {
-        snprintf(buf, 64, "%s%ds", neg, seconds);
+        snprintf(buf, 16, "%s%ds", neg, seconds);
     }
 
     return buf;
@@ -223,24 +223,24 @@ const char *str_duration(time_t from, time_t to)
 
 const char *str_bytes(uint64_t bytes)
 {
-    static char strbytesbuf[4][32];
+    static char strbytesbuf[4][8];
     static unsigned strbytesbuf_i = 0;
     char *buf = strbytesbuf[++strbytesbuf_i % 4];
 
     if (bytes < 1000) {
-        sprintf(buf, "%uB", (unsigned) bytes);
+        snprintf(buf, 8, "%uB", (unsigned) bytes);
     } else if (bytes < 1000000) {
-        sprintf(buf, "%.1fK", bytes / 1000.0);
+        snprintf(buf, 8, "%.1fK", bytes / 1000.0);
     } else if (bytes < 1000000000) {
-        sprintf(buf, "%.1fM", bytes / 1000000.0);
+        snprintf(buf, 8, "%.1fM", bytes / 1000000.0);
     } else if (bytes < 1000000000000) {
-        sprintf(buf, "%.1fG", bytes / 1000000000.0);
+        snprintf(buf, 8, "%.1fG", bytes / 1000000000.0);
     } else if (bytes < 1000000000000000) {
-        sprintf(buf, "%.1fT", bytes / 1000000000000.0);
+        snprintf(buf, 8, "%.1fT", bytes / 1000000000000.0);
     } else if (bytes < 1000000000000000000) {
-        sprintf(buf, "%.1fP", bytes / 1000000000000000.0);
+        snprintf(buf, 8, "%.1fP", bytes / 1000000000000000.0);
     } else {
-        sprintf(buf, "%.1fE", bytes / 1000000000000000000.0);
+        snprintf(buf, 8, "%.1fE", bytes / 1000000000000000000.0);
     }
 
     return buf;
@@ -260,7 +260,7 @@ const char *str_mac(const struct mac *addr)
 
 const char *str_addr(const Address *addr)
 {
-    static char straddrbuf[4][INET6_ADDRSTRLEN + 8];
+    static char straddrbuf[4][INET6_ADDRSTRLEN + 8]; // +8 for "[]:<port>"
     static unsigned straddrbuf_i = 0;
     char *buf = straddrbuf[++straddrbuf_i % 4];
 
@@ -270,7 +270,8 @@ const char *str_addr(const Address *addr)
         return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
     case AF_MAC: {
         const struct mac *a = &addr->mac.addr;
-        sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
+        snprintf(buf, INET6_ADDRSTRLEN + 8,
+            "%02x:%02x:%02x:%02x:%02x:%02x",
             a->data[0], a->data[1], a->data[2],
             a->data[3], a->data[4], a->data[5]);
         return buf;
