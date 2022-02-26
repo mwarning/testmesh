@@ -24,7 +24,6 @@ static time_t g_tun_bytes_updated = 0;
 // for speed measurement
 static uint64_t g_tun_bytes_read_prev = 0;
 static uint64_t g_tun_bytes_write_prev = 0;
-static time_t g_tun_bytes_updated_prev = 0;
 
 
 uint64_t tun_read_total()
@@ -39,10 +38,10 @@ uint64_t tun_write_total()
 
 uint64_t tun_write_speed()
 {
-    if (g_tun_bytes_write > g_tun_bytes_write_prev
-            && g_tun_bytes_updated > g_tun_bytes_updated_prev) {
+    if (g_tun_bytes_write >= g_tun_bytes_write_prev
+            && gstate.time_now > g_tun_bytes_updated) {
         return (g_tun_bytes_write - g_tun_bytes_write_prev)
-            / (g_tun_bytes_updated - g_tun_bytes_updated_prev);
+            / (gstate.time_now - g_tun_bytes_updated);
     } else {
         return 0;
     }
@@ -50,10 +49,10 @@ uint64_t tun_write_speed()
 
 uint64_t tun_read_speed()
 {
-    if (g_tun_bytes_read > g_tun_bytes_read_prev
-            && g_tun_bytes_updated > g_tun_bytes_updated_prev) {
+    if (g_tun_bytes_read >= g_tun_bytes_read_prev
+            && gstate.time_now > g_tun_bytes_updated) {
         return (g_tun_bytes_read - g_tun_bytes_read_prev)
-            / (g_tun_bytes_updated - g_tun_bytes_updated_prev);
+            / (gstate.time_now - g_tun_bytes_updated);
     } else {
         return 0;
     }
@@ -294,9 +293,8 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
     ssize_t write_len = write(gstate.tun_fd, buf, buflen);
 
     if (write_len > 0) {
-        if (g_tun_bytes_updated_prev != g_tun_bytes_updated) {
+        if ((g_tun_bytes_updated + 1) < gstate.time_now) {
             g_tun_bytes_write_prev = g_tun_bytes_write;
-            g_tun_bytes_updated_prev = g_tun_bytes_updated;
         }
 
         g_tun_bytes_write += write_len;
@@ -338,9 +336,8 @@ static void tun_read_internal(int events, int fd)
 
         log_trace("tun_read_internal: %zu bytes, %s", read_len, debug_payload(buf, read_len));
 
-        if (g_tun_bytes_updated_prev != g_tun_bytes_updated) {
+        if ((g_tun_bytes_updated + 1) < gstate.time_now) {
             g_tun_bytes_read_prev = g_tun_bytes_read;
-            g_tun_bytes_updated_prev = g_tun_bytes_updated;
         }
 
         g_tun_bytes_read += read_len;
@@ -485,7 +482,6 @@ int tun_init(uint32_t id, const char *ifname)
     }
 
     g_tun_bytes_updated = gstate.time_now;
-    g_tun_bytes_updated_prev = gstate.time_now;
 
     net_add_handler(gstate.tun_fd, &tun_read_internal);
 
