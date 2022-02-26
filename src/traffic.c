@@ -232,7 +232,7 @@ void traffic_debug(FILE* out, int argc, char *argv[])
             str_bytes(speed_read(cur)),
             str_bytes(cur->bytes_write),
             str_bytes(speed_write(cur)),
-            str_duration(cur->time_prev, gstate.time_now));
+            str_ago(cur->time_prev));
     }
 
     free(entries);

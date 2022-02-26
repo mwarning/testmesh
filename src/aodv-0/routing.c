@@ -334,7 +334,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
                 cur->dst_id,
                 cur->seq_num,
                 str_addr(&cur->next_hop),
-                str_duration(cur->last_updated, gstate.time_now)
+                str_ago(cur->last_updated)
             );
             count += 1;
         }

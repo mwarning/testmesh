@@ -329,7 +329,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
             fprintf(fp, "  0x%08x %s %s %s\n",
                 cur->sender_id,
                 str_addr(&cur->addr),
-                str_duration(cur->last_updated, gstate.time_now),
+                str_ago(cur->last_updated),
                 format_bloom(buf_bloom, &cur->bloom[0])
             );
             counter += 1;

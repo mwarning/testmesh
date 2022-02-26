@@ -525,7 +525,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
         LL_FOREACH(g_path_cache, cur) {
             fprintf(fp, "0x%08x\t%s\t%u\t[%s]\n",
                 cur->dst_id,
-                str_duration(cur->last_updated, gstate.time_now),
+                str_ago(cur->last_updated),
                 (unsigned) cur->path_count,
                 format_path(&cur->path[0], cur->path_count)
             );

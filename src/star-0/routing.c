@@ -518,7 +518,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     } else if (MATCH(1, "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
             g_current_root.id, g_current_root.hop_count, g_current_root.seq_num,
-            str_duration(g_current_root.updated, gstate.time_now));
+            str_ago(g_current_root.updated));
     } else if (MATCH(1, "n")) {
         int counter = 0;
         Node *cur;
@@ -529,7 +529,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
                 cur->id,
                 cur->hop_count,
                 str_addr(&cur->next_hop_addr),
-                str_duration(cur->updated, gstate.time_now)
+                str_ago(cur->updated)
             );
             counter += 1;
         }

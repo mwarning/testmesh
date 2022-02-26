@@ -221,6 +221,16 @@ const char *str_duration(time_t from, time_t to)
     return buf;
 }
 
+const char *str_since(time_t time)
+{
+    return str_duration(gstate.time_started, time);
+}
+
+const char *str_ago(time_t time)
+{
+    return str_duration(time, gstate.time_now);
+}
+
 const char *str_bytes(uint64_t bytes)
 {
     static char strbytesbuf[4][8];

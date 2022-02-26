@@ -51,6 +51,8 @@ const char *str_enabled(uint8_t enabled);
 const char *str_mac(const struct mac *addr);
 const char *str_bytes(uint64_t bytes);
 const char *str_duration(time_t from, time_t to);
+const char *str_since(time_t time);
+const char *str_ago(time_t time);
 const char *str_addr(const Address *addr);
 const char *str_addr6(const struct sockaddr_in6 *addr);
 

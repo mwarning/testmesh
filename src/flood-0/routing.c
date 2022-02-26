@@ -180,7 +180,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
             fprintf(fp, "0x%08x %u %s\n",
                 cur->id,
                 cur->seq_num,
-                str_duration(gstate.time_started, cur->last_updated)
+                str_since(cur->last_updated)
             );
             count += 1;
         }
