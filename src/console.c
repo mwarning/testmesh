@@ -101,7 +101,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
             gstate.log_level += 1;
         }
         gstate.log_level %= (MAX_LOG_LEVEL + 1);
-        fprintf(fp, "log level is now %u\n", gstate.log_level);
+        fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
     } else if (MATCH(1, "i")) {
         fprintf(fp, "protocol:   %s\n", gstate.protocol->name);
         fprintf(fp, "own id:     0x%08x\n", gstate.own_id);
@@ -111,7 +111,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
             fprintf(fp, "gateway id: none\n");
         }
         fprintf(fp, "process id: %u\n", (unsigned) getpid());
-        fprintf(fp, "log level:  %u\n", gstate.log_level);
+        fprintf(fp, "log level:  %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
         fprintf(fp, "uptime:     %s\n", str_ago(gstate.time_started));
         if (gstate.tun_name) {
             fprintf(fp, "tun device: %s\n", gstate.tun_name);
