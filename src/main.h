@@ -45,11 +45,11 @@ struct state {
     uint32_t gateway_id;
     uint8_t gateway_id_set;
     uint32_t own_id;
-    uint32_t own_id_set;
+    uint8_t own_id_set;
 
     uint8_t do_fork;
     // state
-    int is_running;
+    uint8_t is_running;
     uint8_t disable_stdin;
     time_t time_now;
     time_t time_started;
@@ -67,18 +67,18 @@ struct state {
     const char *tun_name;
     int tun_fd;
 
-    int tun_setup;
+    uint8_t tun_setup;
     uint16_t tun_setup_ipv4_mtu;
 
     const char *control_socket_path;
 
     // settings
-    int log_to_syslog;
-    int log_to_terminal;
+    uint8_t log_to_syslog;
+    uint8_t log_to_terminal;
     FILE* log_to_file;
-    int log_to_socket;
-    int log_timestamp;
-    int log_level;
+    uint8_t log_to_socket;
+    uint8_t log_timestamp;
+    uint8_t log_level;
 };
 
 extern struct state gstate;
