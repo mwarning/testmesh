@@ -296,7 +296,7 @@ static void periodic_handler(int _events, int _fd)
     send_COMMs();
 }
 
-static char *format_bloom(char *buf, const uint8_t *bloom)
+static char *str_bloom(char *buf, const uint8_t *bloom)
 {
     char *cur = buf;
     for (int i = 0; i < BLOOM_M; i++) {
@@ -316,9 +316,9 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "  n: print neighbor table\n");
     } else if (argc == 1 && !strcmp(argv[0], "i")) {
-        fprintf(fp, "  id: 0x%08x / %s\n", gstate.own_id, format_bloom(buf_bloom, &g_own_id_bloom[0]));
+        fprintf(fp, "  id: 0x%08x / %s\n", gstate.own_id, str_bloom(buf_bloom, &g_own_id_bloom[0]));
         fprintf(fp, "  bloom-size: %u, bloom-capacity: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_C, BLOOM_K);
-        fprintf(fp, "  bloom: %s\n", format_bloom(buf_bloom, &g_own_bloom[0]));
+        fprintf(fp, "  bloom: %s\n", str_bloom(buf_bloom, &g_own_bloom[0]));
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
         unsigned counter = 0;
         Neighbor *cur;
@@ -330,7 +330,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
                 cur->sender_id,
                 str_addr(&cur->addr),
                 str_ago(cur->last_updated),
-                format_bloom(buf_bloom, &cur->bloom[0])
+                str_bloom(buf_bloom, &cur->bloom[0])
             );
             counter += 1;
         }
