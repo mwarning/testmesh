@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
 
     if (gstate.do_fork) {
         if (chdir("/") != 0) {
-            log_error("Changing working directory to '/' failed: %s", strerror(errno));
+            log_error("chdir(\"/\"): %s", strerror(errno));
             exit(1);
         }
 
