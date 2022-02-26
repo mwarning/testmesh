@@ -65,7 +65,7 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_read, uint64_t
 {
     Traffic *cur;
 
-    if (g_traffic_total.time_prev != gstate.time_now) {
+    if ((g_traffic_total.time_prev + 1) < gstate.time_now) {
         g_traffic_total.bytes_read_prev = g_traffic_total.bytes_read;
         g_traffic_total.bytes_write_prev = g_traffic_total.bytes_write;
     }
@@ -87,7 +87,7 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_read, uint64_t
         g_traffic_count_all += 1;
     }
 
-    if (cur->time_prev != gstate.time_now) {
+    if ((cur->time_prev + 1) < gstate.time_now) {
         cur->bytes_read_prev = cur->bytes_read;
         cur->bytes_write_prev = cur->bytes_write;
         cur->time_prev = gstate.time_now;
@@ -190,7 +190,7 @@ static uint64_t speed_read(const Traffic *cur)
         return (cur->bytes_read - cur->bytes_read_prev)
             / (gstate.time_now - cur->time_prev);
     } else {
-        return 0; // invalid times
+        return 0; // unknown
     }
 }
 
@@ -201,7 +201,7 @@ static uint64_t speed_write(const Traffic *cur)
         return (cur->bytes_write - cur->bytes_write_prev)
             / (gstate.time_now - cur->time_prev);
     } else {
-        return 0; // invalid times
+        return 0; // unknown
     }
 }
 
