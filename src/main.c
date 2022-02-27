@@ -94,6 +94,11 @@ void protocols_register(const Protocol *p)
         exit(1);
     }
 
+    if (p->name == NULL) {
+        log_error("Protocol with missing name.");
+        exit(1);
+    }
+
     if (protocols_find(p->name)) {
         log_error("Duplicate protocol: %s", p->name);
         exit(1);
