@@ -27,7 +27,7 @@
 #include "traffic.h"
 
 
-// forward console output over console socket / unix domain socket
+// forward log output over (a single) remote connection
 static int g_console_socket = -1;
 
 // output log messages to console as well
@@ -71,13 +71,13 @@ static int tokenizer(char *argv[], int argc_max, char *input)
     return argc;
 }
 
-static int console_exec(FILE *fp, int argc, char *argv[])
+static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
 {
     #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
 
     int ret = 0;
 
-    if (argc && !strcmp(argv[0], "t")) {
+    if (argc > 0 && !strcmp(argv[0], "t")) {
         traffic_debug(fp, argc, argv);
     } else if (MATCH(2, "peer-add")) {
         if (gstate.protocol->add_peer) {
@@ -96,12 +96,20 @@ static int console_exec(FILE *fp, int argc, char *argv[])
         interfaces_debug(fp);
     } else if (MATCH(1, "v") || MATCH(2, "v")) {
         if (argc == 2) {
-            gstate.log_level = atoi(argv[1]);
+            uint32_t log_level = atoi(argv[1]);
+            gstate.log_level = log_level % (MAX_LOG_LEVEL + 1);
+            fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
         } else {
-            gstate.log_level += 1;
+            if (g_console_socket == -1) {
+                g_console_socket = clientsock;
+                fprintf(fp, "log to console enabled\n");
+            } else if (g_console_socket == clientsock) {
+                g_console_socket = -1;
+                fprintf(fp, "log to console disabled\n");
+            } else {
+                fprintf(fp, "log goes to different remote console already\n");
+            }
         }
-        gstate.log_level %= (MAX_LOG_LEVEL + 1);
-        fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
     } else if (MATCH(1, "i")) {
         fprintf(fp, "protocol:   %s\n", gstate.protocol->name);
         fprintf(fp, "own id:     0x%08x\n", gstate.own_id);
@@ -131,7 +139,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
             "interface-add <ifname>  Add interface.\n"
             "interface-del <ifname>  Remove interface.\n"
             "peer-add <address>      Add peer via IP address.\n"
-            "v [log-level]           Increase verbosity.\n"
+            "v [log-level]           Toggle log to console and change verbosity.\n"
             "q                       Close this console.\n"
             "h                       Show this help.\n"
         );
@@ -155,7 +163,7 @@ static int console_exec(FILE *fp, int argc, char *argv[])
     return ret;
 }
 
-void console_client_handler(int rc, int fd)
+void console_client_handler(int rc, int clientsock)
 {
     char request[256];
     char *argv[8];
@@ -168,10 +176,10 @@ void console_client_handler(int rc, int fd)
         return;
     }
 
-    fp = fdopen(dup(fd), "w");
+    fp = fdopen(dup(clientsock), "w");
 
     while (1) {
-        int read_len = read(fd, request, sizeof(request));
+        int read_len = read(clientsock, request, sizeof(request));
         if (read_len == 0) {
             // connection was closed by the remote
             ret = 1;
@@ -185,7 +193,7 @@ void console_client_handler(int rc, int fd)
 
         request[read_len] = '\0';
         argc = tokenizer(argv, ARRAY_NELEMS(argv), request);
-        ret = console_exec(fp, argc, argv);
+        ret = console_exec(clientsock, fp, argc, argv);
     }
 
     if (fp) {
@@ -194,11 +202,11 @@ void console_client_handler(int rc, int fd)
 
     // close connection
     if (ret == 1) {
-        if (g_console_socket == fd) {
+        if (g_console_socket == clientsock) {
             g_console_socket = -1;
         }
-        net_remove_handler(fd, &console_client_handler);
-        close(fd);
+        net_remove_handler(clientsock, &console_client_handler);
+        close(clientsock);
     }
 }
 
@@ -219,7 +227,5 @@ void console_server_handler(int rc, int serversock)
         return;
     }
 
-    // how how to be able to log to clientsock??
-    g_console_socket = clientsock;
     net_add_handler(clientsock, &console_client_handler);
 }
