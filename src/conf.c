@@ -232,8 +232,8 @@ static int conf_set(const char *opt, const char *val)
     case oLogLevel: {
         char *ptr = NULL;
         const char *end = val + strlen(val);
-        long log_level = strtol(val, &ptr, 10);
-        if (ptr != end || log_level < 0 || log_level > MAX_LOG_LEVEL) {
+        uint32_t log_level = strtoul(val, &ptr, 10);
+        if (ptr != end || log_level > MAX_LOG_LEVEL) {
             log_error("Invalid log level: %s", val);
             return EXIT_FAILURE;
         }
