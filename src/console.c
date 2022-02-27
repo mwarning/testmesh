@@ -96,9 +96,15 @@ static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
         interfaces_debug(fp);
     } else if (MATCH(1, "v") || MATCH(2, "v")) {
         if (argc == 2) {
-            uint32_t log_level = atoi(argv[1]);
-            gstate.log_level = log_level % (MAX_LOG_LEVEL + 1);
-            fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
+            char *ptr = NULL;
+            const char *end = argv[1] + strlen(argv[1]);
+            uint32_t log_level = strtoul(argv[1], &ptr, 10);
+            if (ptr != end || log_level > MAX_LOG_LEVEL) {
+                fprintf(fp, "invalid log level");
+            } else {
+                gstate.log_level = log_level;
+                fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
+            }
         } else {
             if (g_console_socket == -1) {
                 g_console_socket = clientsock;
@@ -139,7 +145,7 @@ static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
             "interface-add <ifname>  Add interface.\n"
             "interface-del <ifname>  Remove interface.\n"
             "peer-add <address>      Add peer via IP address.\n"
-            "v [log-level]           Toggle log to console and change verbosity.\n"
+            "v [log-level]           Toggle log to this console / change verbosity.\n"
             "q                       Close this console.\n"
             "h                       Show this help.\n"
         );
