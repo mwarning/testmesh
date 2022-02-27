@@ -188,7 +188,7 @@ const char *str_duration(time_t from, time_t to)
     static unsigned strdurationbuf_i = 0;
     char *buf = strdurationbuf[++strdurationbuf_i % 4];
 
-    int days, hours, minutes, seconds;
+    int years, days, hours, minutes, seconds;
     long long int secs;
     const char *neg = "";
 
@@ -200,6 +200,8 @@ const char *str_duration(time_t from, time_t to)
         neg = "-";
     }
 
+    years = secs / (365 * 24 * 60 * 60);
+    secs -= years * (365 * 24 * 60 * 60);
     days = secs / (24 * 60 * 60);
     secs -= days * (24 * 60 * 60);
     hours = secs / (60 * 60);
@@ -208,7 +210,9 @@ const char *str_duration(time_t from, time_t to)
     secs -= minutes * 60;
     seconds = secs;
 
-    if (days > 0) {
+    if (years > 0) {
+        snprintf(buf, 16, "%s%dy%dd", neg, years, days);
+    } else if (days > 0) {
         snprintf(buf, 16, "%s%dd%dh", neg, days, hours);
     } else if (hours > 0) {
         snprintf(buf, 16, "%s%dh%dm", neg, hours, minutes);
