@@ -192,7 +192,9 @@ static int is_client(const char *cmd)
 
 int main(int argc, char *argv[])
 {
-    gstate.time_started = time(0);
+    time_t now = time(0);
+    gstate.time_started = now;
+    gstate.time_now = now;
 
     if (argc > 0 && is_client(argv[0])) {
         // called as control client
