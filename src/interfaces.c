@@ -311,7 +311,7 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
-    readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, NULL, NULL);
+    readlen = read(fd, buf, ETH_FRAME_LEN);
 
     if (readlen < 0 || readlen > ETH_FRAME_LEN) {
         log_warning("recv(): %zd %s", readlen, strerror(errno));
