@@ -312,6 +312,12 @@ static void read_internal_l2(int events, int fd)
     }
 
     readlen = recvfrom(fd, buf, ETH_FRAME_LEN, 0, NULL, NULL);
+
+    if (readlen < 0 || readlen > ETH_FRAME_LEN) {
+        log_warning("recv(): %zd %s", readlen, strerror(errno));
+        return;
+    }
+
     ifa = get_interface_by_fd(fd);
 
     if (readlen < sizeof(struct ethhdr)) {
