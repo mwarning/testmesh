@@ -38,13 +38,15 @@ Implemented Protocols:
   - send routing information as one hop bradcast to neighbors
   - send payload as unicast along gradient
 - [star-0](src/star-0/)
+  - incomplete!
   - reactive
   - route via distance to a single root
   - uses a naive DHT
 - [vivaldi-0](src/vivaldi-0/)
-  - proactive
   - incomplete!
+  - proactive
 - [trees-0](src/streets-0/)
+  - incomplete!
   - spanning tree
   - proactive
 
@@ -62,7 +64,7 @@ Notes:
 ```
 
 Since multiple protocols are available, a protocol must be specified at startup.
-Otherwise a list of available protocols is printed.
+Otherwise the list of available protocols is printed.
 
 Use the `tun0` interface to exchange packets with other instances.
 
@@ -94,7 +96,7 @@ Valid protocols: dsr-0, flood-0, ...
 
 ## Daemon Control
 
-If testmesh is started with the control socket option (`./testmesh -c /tmp/testmesh.sock`), the instance can be controlled remotely:
+If testmesh is started with the control socket option (`testmesh -c /tmp/testmesh.sock`), the instance can be controlled remotely:
 
 ```
 testmesh-ctl -c /tmp/testmesh.sock
