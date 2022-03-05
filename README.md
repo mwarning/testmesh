@@ -44,6 +44,9 @@ Implemented Protocols:
 - [vivaldi-0](src/vivaldi-0/)
   - proactive
   - incomplete!
+- [trees-0](src/streets-0/)
+  - spanning tree
+  - proactive
 
 Notes:
  - 32Bit node identifiers are mapped to and from IP addresses
