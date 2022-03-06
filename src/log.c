@@ -27,7 +27,7 @@ const char *log_time()
 		clock_gettime(CLOCK_MONOTONIC, &log_start);
 	}
 
-	sprintf(buf, "[%8.2f] ",
+	sprintf(buf, "[%8.3f] ",
 		((double) now.tv_sec + 1.0e-9 * now.tv_nsec) -
 		((double) log_start.tv_sec + 1.0e-9 * log_start.tv_nsec)
 	);
