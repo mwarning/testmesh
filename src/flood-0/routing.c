@@ -167,7 +167,7 @@ static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t pack
 static int console_handler(FILE* fp, int argc, char *argv[])
 {
     if (argc == 1 && !strcmp(argv[0], "h")) {
-        fprintf(fp, "n: print routing table\n");
+        fprintf(fp, "n:                      print routing table\n");
     } else if (argc == 1 && !strcmp(argv[0], "i")) {
         fprintf(fp, "entry timeout: %ds\n", TIMEOUT_ENTRY);
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
