@@ -10,12 +10,10 @@
 #include "log.h"
 
 
-#ifdef DEBUG
-
 // program start time
 static struct timespec log_start = { 0, 0 };
 
-const char *log_time()
+const char *log_get_time()
 {
 	static char buf[16];
 	struct timespec now = { 0, 0 };
@@ -27,15 +25,12 @@ const char *log_time()
 		clock_gettime(CLOCK_MONOTONIC, &log_start);
 	}
 
-	sprintf(buf, "[%8.3f] ",
-		((double) now.tv_sec + 1.0e-9 * now.tv_nsec) -
-		((double) log_start.tv_sec + 1.0e-9 * log_start.tv_nsec)
-	);
+	uint64_t ms = (1000UL * now.tv_sec + now.tv_nsec / 1000000UL)
+		- (1000UL * log_start.tv_sec + log_start.tv_nsec / 1000000UL);
+	sprintf(buf, "[%4u.%03u]\n", (unsigned) (ms / 1000UL), (unsigned) (ms % 1000UL));
 
 	return buf;
 }
-
-#endif
 
 void log_print(int priority, const char format[], ...)
 {
@@ -48,8 +43,8 @@ void log_print(int priority, const char format[], ...)
 	vsnprintf(buf, sizeof(buf), format, vlist);
 	va_end(vlist);
 
-	if (gstate.log_timestamp) {
-		time = log_time();
+	if (gstate.log_time) {
+		time = log_get_time();
 	} else {
 		time = "";
 	}
