@@ -111,15 +111,15 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     log_debug("DATA: got packet from %s / 0x%08x => 0x%08x",
         str_addr(addr), p->src_id, p->dst_id);
 
+    // check sequence number to prevent loops
     Entry *entry = entry_find(p->src_id);
-
     if (entry) {
         entry->last_updated = gstate.time_now;
         if (is_newer_seq_num(entry->seq_num, p->seq_num)) {
             entry->seq_num = p->seq_num;
         } else {
             // old packet => drop
-             log_debug("DATA: drop packet with old sequence number %u (current is %u)",
+             log_debug("DATA: old sequence number %u (current is %u) => drop",
                 p->seq_num, entry->seq_num);
             return;
         }
@@ -128,12 +128,12 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     }
 
     if (p->dst_id == gstate.own_id) {
-        log_debug("DATA: write %u bytes to %s", p->payload_length, gstate.tun_name);
+        log_debug("DATA: destination reached => accept");
 
         // destination is the local tun0 interface => write packet to tun0
         tun_write(get_data_payload(p), p->payload_length);
     } else {
-        log_debug("DATA: send all");
+        log_debug("DATA: destination not reached => rebroadcast");
         send_bcasts_l2(p, recv_len);
     }
 }
@@ -166,11 +166,13 @@ static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t pack
 
 static int console_handler(FILE* fp, int argc, char *argv[])
 {
-    if (argc == 1 && !strcmp(argv[0], "h")) {
+    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
+
+    if (MATCH(1, "h")) {
         fprintf(fp, "n:                      print routing table\n");
     } else if (argc == 1 && !strcmp(argv[0], "i")) {
         fprintf(fp, "entry timeout: %ds\n", TIMEOUT_ENTRY);
-    } else if (argc == 1 && !strcmp(argv[0], "n")) {
+    } else if (MATCH(1, "n")) {
         Entry *cur;
         Entry *tmp;
         int count = 0;
