@@ -34,8 +34,8 @@ const char *log_get_time()
 
 void log_print(int priority, const char format[], ...)
 {
-	char buf[1000];
-	char buf2[1024];
+	char buf[500];
+	char buf2[524];
 	const char *time;
 	va_list vlist;
 
