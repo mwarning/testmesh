@@ -23,7 +23,7 @@ enum OPCODE {
     oTunSetup,
     oDisableStdin,
     oLogFile,
-    oLogTimeStamp,
+    oLogTime,
     oEnableIPv4,
     oEnableIPv6,
     oPeer,
@@ -57,8 +57,8 @@ static struct option_t g_options[] = {
     {"-c", 1, oControlSocket},
     {"--log-level", 1, oLogLevel},
     {"-ll", 1, oLogLevel},
-    {"--log-timestamp", 0, oLogTimeStamp},
-    {"-lt", 0, oLogTimeStamp},
+    {"--log-time", 0, oLogTime},
+    {"-lt", 0, oLogTime},
     {"--enable-ipv4", 1, oEnableIPv4},
     {"-4", 1, oEnableIPv4},
     {"--enable-ipv6", 1, oEnableIPv6},
@@ -87,8 +87,8 @@ static const char *usage_str =
     "  --tun-setup <1/0>           Auto configure entrey interface with IP address (Default: 1)\n"
     "  --ether-type <hex>          Ethernet type (Default: 88B5)\n"
     "  --log-file,-lf <path>       Write log output to file\n"
-    "  --log-level,-ll <level>     Log level. From 0 to " STR(MAX_LOG_LEVEL) " (Default: 3).\n"
-    "  --log-timestamp,-lt         Add timestamps to log output.\n"
+    "  --log-level,-ll <level>     Log level. From 0 to " STR(MAX_LOG_LEVEL) " (Default: 3)\n"
+    "  --log-timestamp,-lt         Add timestamps to log output\n"
     "  --disable-stdin             Disable interactive console on startup\n"
     "  --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)\n"
     "  --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)\n"
@@ -180,8 +180,8 @@ static int conf_set(const char *opt, const char *val)
             return EXIT_FAILURE;
         }
         break;
-    case oLogTimeStamp:
-        gstate.log_timestamp = 1;
+    case oLogTime:
+        gstate.log_time = 1;
         break;
     case oTunName:
         if (0 == strcmp(val, "none")) {

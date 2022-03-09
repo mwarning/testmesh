@@ -58,7 +58,7 @@ struct state gstate = {
     .log_to_file = NULL,
     .log_to_terminal = 1, // disabled when running as daemon
     .log_to_socket = 1, // output log via domain socket
-    .log_timestamp = 0, // log with timestamp
+    .log_time = 0, // log with timestamp
     .log_level = 3,
 };
 

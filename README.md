@@ -85,7 +85,7 @@ Usage: testmesh -i eth0 -i wlan0
   --ether-type <hex>          Ethernet type (Default: 88B5)
   --log-file,-lf <path>       Write log output to file
   --log-level,-ll <level>     Log level. From 0 to 6 (Default: 3).
-  --log-timestamp,-lt         Add timestamps to log output.
+  --log-time,-lt              Add time stamps to log output.
   --disable-stdin             Disable interactive console on startup
   --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)
   --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)

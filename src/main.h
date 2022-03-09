@@ -78,7 +78,7 @@ struct state {
     uint8_t log_to_terminal;
     FILE* log_to_file;
     uint8_t log_to_socket;
-    uint8_t log_timestamp;
+    uint8_t log_time;
     uint8_t log_level;
 };
 
