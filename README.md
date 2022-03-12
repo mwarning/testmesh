@@ -14,6 +14,12 @@ Implemented Protocols:
   - sequence number
   - broadcast only
   - no metric
+- [flood-1](src/flood-1/)
+  - reactive
+  - sequence number
+  - broadcast only
+  - uses critical nodes
+  - no metric
 - [aodv-0](src/aodv-0/)
   - reactive
   - sequence number
