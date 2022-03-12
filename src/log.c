@@ -27,7 +27,7 @@ const char *log_get_time()
 
 	uint64_t ms = (1000UL * now.tv_sec + now.tv_nsec / 1000000UL)
 		- (1000UL * log_start.tv_sec + log_start.tv_nsec / 1000000UL);
-	sprintf(buf, "[%4u.%03u]\n", (unsigned) (ms / 1000UL), (unsigned) (ms % 1000UL));
+	sprintf(buf, "[%4u.%03u] ", (unsigned) (ms / 1000UL), (unsigned) (ms % 1000UL));
 
 	return buf;
 }
