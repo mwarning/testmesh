@@ -64,9 +64,5 @@ int addr_is_localhost(const struct sockaddr_storage *addr);
 int addr_is_multicast(const struct sockaddr_storage *addr);
 int addr_is_link_local(const struct sockaddr_storage *addr);
 int addr_parse(struct sockaddr_storage *addr, const char full_addr_str[], const char default_port[], int af);
-int addr_port(const struct sockaddr_in6 *addr);
-int addr_len(const struct sockaddr_storage *addr);
-int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2);
-int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2);
 
 #endif // _UTILS_H_

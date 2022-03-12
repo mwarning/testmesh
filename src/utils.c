@@ -404,32 +404,6 @@ int addr_is_link_local(const struct sockaddr_storage *addr)
     }
 }
 
-int addr_port(const struct sockaddr_in6 *addr)
-{
-    return ntohs(addr->sin6_port);
-    /*
-    switch (addr->ss_family) {
-    case AF_INET:
-        return ntohs(((struct sockaddr_in *)addr)->sin_port);
-    case AF_INET6:
-        return ntohs(((struct sockaddr_in6 *)addr)->sin6_port);
-    default:
-        return 0;
-    }*/
-}
-
-int addr_len(const struct sockaddr_storage *addr)
-{
-    switch (addr->ss_family) {
-    case AF_INET:
-        return sizeof(struct sockaddr_in);
-    case AF_INET6:
-        return sizeof(struct sockaddr_in6);
-    default:
-        return 0;
-    }
-}
-
 static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str[], const char port_str[], int af)
 {
     struct addrinfo hints;
@@ -539,35 +513,4 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
     }
 
     return addr_parse_internal(addr_ret, addr_str, port_str, af);
-}
-
-// Compare two ip addresses and port
-int addr_equal(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2)
-{
-    if (addr1->ss_family != addr2->ss_family) {
-        return 0;
-    } else if (addr1->ss_family == AF_INET) {
-        const struct sockaddr_in *a1 = (const struct sockaddr_in *) addr1;
-        const struct sockaddr_in *a2 = (const struct sockaddr_in *) addr2;
-        return (a1->sin_port == a2->sin_port) && (0 == memcmp(&a1->sin_addr, &a2->sin_addr, 4));
-    } else if (addr1->ss_family == AF_INET6) {
-        const struct sockaddr_in6 *a1 = (const struct sockaddr_in6 *) addr1;
-        const struct sockaddr_in6 *a2 = (const struct sockaddr_in6 *) addr2;
-        return (a1->sin6_port == a2->sin6_port) && (0 == memcmp(&a1->sin6_addr, &a2->sin6_addr, 16));
-    } else {
-        return 0;
-    }
-}
-
-int addr_equal6(const struct in6_addr *addr1, const struct in6_addr *addr2)
-{
-    return memcmp(addr1, addr2, sizeof(struct in6_addr));
-}
-
-const char *format_mac(char buf[18], const struct mac *addr)
-{
-    sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
-        addr->data[0], addr->data[1], addr->data[2],
-        addr->data[3], addr->data[4], addr->data[5]);
-    return buf;
 }
