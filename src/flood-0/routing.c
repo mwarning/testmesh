@@ -25,12 +25,6 @@ enum {
 
 #define SEQNUM_TIMEOUT 30
 
-typedef struct {
-    uint32_t id;
-    uint16_t seq_num;
-    time_t last_updated;
-    UT_hash_handle hh;
-} Entry;
 
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
@@ -61,7 +55,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     }
 
     if (p->src_id == gstate.own_id) {
-        log_debug("DATA: own source id => drop");
+        log_trace("DATA: own source id => drop");
         return;
     }
 
@@ -114,19 +108,6 @@ static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t pack
     }
 }
 
-static int console_handler(FILE* fp, int argc, char *argv[])
-{
-    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
-
-    if (MATCH(1, "i")) {
-        //fprintf(fp, "seqnum timeout: %us\n", SEQNUM_TIMEOUT);
-    } else {
-        return 1;
-    }
-
-    return 0;
-}
-
 static void init()
 {
     seqnum_cache_init(SEQNUM_TIMEOUT);
@@ -139,7 +120,6 @@ void flood_0_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
     };
 
     protocols_register(&p);
