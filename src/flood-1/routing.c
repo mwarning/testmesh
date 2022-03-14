@@ -41,7 +41,6 @@ typedef struct __attribute__((__packed__)) {
 static uint8_t g_is_critical = 1;
 static time_t g_is_critical_time = 0;
 static uint16_t g_sequence_number = 0;
-static uint32_t g_sender = 0;
 
 static uint8_t *get_data_payload(const DATA *data)
 {
@@ -86,7 +85,6 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
             if (p->prev_sender == gstate.own_id) {
                 // echo received
                 g_is_critical = 1;
-                g_sender = p->sender;
                 log_debug("DATA: duplicate packet (echo) => critical");
             } else {
                 log_debug("DATA: duplicate packet (no echo) => drop");
@@ -154,7 +152,6 @@ static int console_handler(FILE* fp, int argc, char *argv[])
     if (MATCH(1, "i")) {
         fprintf(fp, "critical:   %s (%s ago)\n",
             str_enabled(g_is_critical), str_ago(g_is_critical_time));
-        fprintf(fp, "sender:     %u\n", g_sender);
     } else {
         return 1;
     }
@@ -168,7 +165,6 @@ static void periodic_handler()
     if (g_is_critical && ((g_is_critical_time + FULL_FLOOD_SEND_INTERVAL) < gstate.time_now)) {
         log_debug("timeout for critical");
         g_is_critical = 0;
-        g_sender = 0;
     }
 }
 
