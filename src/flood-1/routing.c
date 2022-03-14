@@ -24,7 +24,7 @@ enum {
     TYPE_DATA_PF
 };
 
-#define FLOOD_SEND_INTERVAL 30
+#define FULL_FLOOD_SEND_INTERVAL 30
 
 // full flood data packet
 typedef struct __attribute__((__packed__)) {
@@ -41,6 +41,7 @@ typedef struct __attribute__((__packed__)) {
 static uint8_t g_is_critical = 1;
 static time_t g_is_critical_time = 0;
 static uint16_t g_sequence_number = 0;
+static uint32_t g_sender = 0;
 
 static uint8_t *get_data_payload(const DATA *data)
 {
@@ -61,13 +62,19 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
 
     uint8_t is_new = seqnum_cache_update(p->src_id, p->seq_num);
 
+    log_debug("DATA: got packet from %s / 0x%08x => 0x%08x (seq_num: %u, sender: 0x%08x, prev_sender: 0x%08x)",
+        str_addr(addr), p->src_id, p->dst_id, p->seq_num, p->sender, p->prev_sender);
+
     if (is_full_flood) {
+        // prevent us from starting a full flood
+        g_is_critical_time = gstate.time_now;
+
         if (is_new) {
             // packet seen the first time
             if (p->dst_id == gstate.own_id) {
                 log_debug("DATA: packet arrived => accept");
                 tun_write(get_data_payload(p), p->payload_length);
-                // TODO: do we need to forward as well?
+                // TODO: do we need to forward here as well?
             } else {
                 log_debug("DATA: new packet => forward");
                 p->prev_sender = p->sender;
@@ -79,7 +86,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
             if (p->prev_sender == gstate.own_id) {
                 // echo received
                 g_is_critical = 1;
-                g_is_critical_time = gstate.time_now;
+                g_sender = p->sender;
                 log_debug("DATA: duplicate packet (echo) => critical");
             } else {
                 log_debug("DATA: duplicate packet (no echo) => drop");
@@ -107,7 +114,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
 // receive traffic from tun0 and send to peers
 static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint8_t is_full_flood = ((g_is_critical_time + FLOOD_SEND_INTERVAL) < gstate.time_now);
+    uint8_t is_full_flood = ((g_is_critical_time + FULL_FLOOD_SEND_INTERVAL) < gstate.time_now);
 
     DATA *p = (DATA*) (packet - sizeof(DATA));
 
@@ -122,6 +129,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     seqnum_cache_update(p->src_id, p->seq_num);
 
     log_debug("send DATA packet as broadcast (is_full_flood: %s)", str_enabled(is_full_flood));
+
     send_bcasts_l2(p, get_data_size(p));
 }
 
@@ -144,7 +152,9 @@ static int console_handler(FILE* fp, int argc, char *argv[])
     #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
 
     if (MATCH(1, "i")) {
-        fprintf(fp, "critical:   %s (%s ago)\n", str_enabled(g_is_critical), str_ago(g_is_critical_time));
+        fprintf(fp, "critical:   %s (%s ago)\n",
+            str_enabled(g_is_critical), str_ago(g_is_critical_time));
+        fprintf(fp, "sender:     %u\n", g_sender);
     } else {
         return 1;
     }
@@ -155,15 +165,21 @@ static int console_handler(FILE* fp, int argc, char *argv[])
 static void periodic_handler()
 {
     // timeout critical
-    if (g_is_critical && ((g_is_critical_time + FLOOD_SEND_INTERVAL) < gstate.time_now)) {
+    if (g_is_critical && ((g_is_critical_time + FULL_FLOOD_SEND_INTERVAL) < gstate.time_now)) {
         log_debug("timeout for critical");
         g_is_critical = 0;
+        g_sender = 0;
     }
 }
 
 static void init()
 {
-    seqnum_cache_init(FLOOD_SEND_INTERVAL);
+    uint32_t r = 0;
+    bytes_random(&r, sizeof(r));
+
+    g_is_critical_time = gstate.time_now + (r % 10) - FULL_FLOOD_SEND_INTERVAL;
+
+    seqnum_cache_init(FULL_FLOOD_SEND_INTERVAL);
 
     // call at least every second
     net_add_handler(-1, &periodic_handler);
