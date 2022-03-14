@@ -166,6 +166,8 @@ static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
         }
     }
 
+    fprintf(fp, "================\n");
+
     return ret;
 }
 
