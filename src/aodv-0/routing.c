@@ -104,7 +104,7 @@ static void routing_entry_update(uint32_t dst_id, const Address *next_hop, uint8
     if (e) {
         if (hop_count < e->hop_count) {
             e->dst_id = dst_id;
-            memcpy(&e->next_hop, next_hop, sizeof(Address));
+            e->next_hop = *next_hop;
             e->seq_num = seq_num;
             e->hop_count = hop_count;
             e->last_updated = gstate.time_now;
@@ -113,7 +113,7 @@ static void routing_entry_update(uint32_t dst_id, const Address *next_hop, uint8
         e = (RoutingEntry*) malloc(sizeof(RoutingEntry));
 
         e->dst_id = dst_id;
-        memcpy(&e->next_hop, next_hop, sizeof(Address));
+        e->next_hop = *next_hop;
         e->seq_num = seq_num;
         e->hop_count = hop_count;
         e->last_updated = gstate.time_now;
