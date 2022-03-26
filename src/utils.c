@@ -296,6 +296,36 @@ const char *str_addr(const Address *addr)
     }
 }
 
+static int addr_is_link_local_4(const struct in_addr *addr)
+{
+    return ((addr->s_addr & 0x0000ffff) == 0x0000fea9);
+}
+
+static int addr_is_link_local_6(const struct in6_addr *addr)
+{
+    return (addr->s6_addr[0] == 0xfe) && ((addr->s6_addr[1] & 0xC0) == 0x80);
+}
+
+uint32_t address_ifindex(const Address *addr)
+{
+    switch (addr->family) {
+    case AF_INET6:
+        if (addr_is_link_local_6(&addr->ip6.sin6_addr)) {
+            return addr->ip6.sin6_flowinfo;
+        }
+        return 0;
+    case AF_INET:
+        if (addr_is_link_local_4(&addr->ip4.sin_addr)) {
+            return 0; // no interface available for IPv4?
+        }
+        return 0;
+    case AF_MAC:
+        return addr->mac.ifindex;
+    default:
+        return 0;
+    }
+}
+
 const char *str_addr6(const struct sockaddr_in6 *addr)
 {
     static char straddr6buf[4][INET6_ADDRSTRLEN + 8];
@@ -393,11 +423,11 @@ int addr_is_link_local(const struct sockaddr_storage *addr)
     switch (addr->ss_family) {
     case AF_INET: {
         const struct in_addr *a = &((const struct sockaddr_in *) addr)->sin_addr;
-        return ((a->s_addr & 0x0000ffff) == 0x0000fea9);
+        return addr_is_link_local_4(a);
     }
     case AF_INET6: {
         const struct in6_addr *a = &((const struct sockaddr_in6 *) addr)->sin6_addr;
-        return (a->s6_addr[0] == 0xfe) && ((a->s6_addr[1] & 0xC0) == 0x80);
+        return addr_is_link_local_6(a);
     }
     default:
         log_error("addr_is_link_local not implemented for protocol");

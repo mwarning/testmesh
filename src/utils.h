@@ -46,6 +46,7 @@ int bytes_random(void *buffer, size_t size); // get random bytes
 int address_is_unicast(const Address *addr);
 int address_is_multicast(const Address *addr);
 int address_is_broadcast(const Address *addr);
+uint32_t address_ifindex(const Address *addr);
 
 const char *str_enabled(uint8_t enabled);
 const char *str_mac(const struct mac *addr);
