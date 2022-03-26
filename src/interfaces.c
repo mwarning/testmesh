@@ -373,7 +373,9 @@ static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_AL
     memcpy(&socket_address.sll_addr, dst_addr, ETH_ALEN);
 
     if (sendto(ifa->ifsock_l2, sendbuf, sendlen, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0) {
-        log_warning("sendto() failed on raw socket for %s: %s", ifa->ifname, strerror(errno));
+        char ifnamebuf[IFNAMSIZ] = {0};
+        log_warning("sendto() failed on raw socket for %s: %s (sock: %d, ifindex: %d, ifname: %s, sendbuf: %p, sendlen: %u)",
+            ifa->ifname, strerror(errno), ifa->ifsock_l2, ifa->ifindex, if_indextoname(ifa->ifindex, ifnamebuf), sendbuf, sendlen);
         interface_reset_handler(ifa);
         return 1;
     }
@@ -560,8 +562,8 @@ void send_mcasts_l3(const void* data, int data_len)
     while ((ifa = utarray_next(g_interfaces, ifa))) {
         int rc = send_mcast_l3(ifa->ifindex, data, data_len);
         if (rc != 0) {
-        	// disable interface
-        	ifa->ifindex = 0;
+            // disable interface
+            ifa->ifindex = 0;
             ifa->ifmac = g_nullmac;
         }
     }
