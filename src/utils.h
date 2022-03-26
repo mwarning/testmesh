@@ -39,9 +39,9 @@ typedef union {
     struct sockaddr_in6 ip6;
 } Address;
 
-uint32_t adler32(const void *buf, size_t buflen);
+uint32_t adler32(const void *buf, size_t buflen); // a hash method
 void hex_dump(const char *desc, const void *buf, uint32_t buflen);
-int bytes_random(void *buffer, size_t size);
+int bytes_random(void *buffer, size_t size); // get random bytes
 
 int address_is_unicast(const Address *addr);
 int address_is_multicast(const Address *addr);

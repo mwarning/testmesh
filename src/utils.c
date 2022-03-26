@@ -269,6 +269,7 @@ const char *str_mac(const struct mac *addr)
     sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
             addr->data[0], addr->data[1], addr->data[2],
             addr->data[3], addr->data[4], addr->data[5]);
+
     return buf;
 }
 
@@ -445,7 +446,7 @@ static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str
 * Parse/Resolve various string representations of
 * IPv4/IPv6 addresses and optional port.
 * An address can also be a domain name.
-* A port can also be a service	(e.g. 'www').
+* A port can also be a service (e.g. 'www').
 *
 * "<address>"
 * "<ipv4_address>:<port>"

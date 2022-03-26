@@ -135,3 +135,4 @@ Interesting projects for low bandwidth networks:
 * [GoTenna](https://gotenna.com/)
 * [Meshtastic](https://meshtastic.org/)
 * [Reticulum](https://unsigned.io/projects/reticulum/)
+* [Hyperspace](https://github.com/kurthildebrand/hyperspace)

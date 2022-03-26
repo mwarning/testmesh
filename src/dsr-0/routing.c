@@ -325,7 +325,7 @@ static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
 
         log_debug("RREP: arrived at destination => accept");
 
-        // set sender to path
+        // Since the sender path set sender to path
         memcpy(&path[p->path_count - p->hop_count], address2addr(addr), sizeof(Address));
 
         // add path to cache

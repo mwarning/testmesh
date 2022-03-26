@@ -53,9 +53,9 @@ int seqnum_cache_update(uint32_t src_id, uint16_t seq_num)
         if (is_newer_seqnum(cur->seq_num, seq_num)) {
             cur->seq_num = seq_num;
             cur->updated = gstate.time_now;
-            return 1;
+            return 1; // new sequence number
         } else {
-            return 0;
+            return 0; // old sequence number, packet is a duplicate
         }
     }
 
@@ -67,7 +67,7 @@ int seqnum_cache_update(uint32_t src_id, uint16_t seq_num)
 
     HASH_ADD(hh, g_seqnum_cache, src_id, sizeof(uint32_t), cur);
 
-    return 1;
+    return 1; // new sequence number, too
 }
 
 void seqnum_cache_init(uint32_t timeout)

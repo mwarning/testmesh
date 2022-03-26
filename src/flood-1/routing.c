@@ -26,7 +26,7 @@ enum {
 
 #define FULL_FLOOD_SEND_INTERVAL 30
 
-// full flood data packet
+// flooded data packet
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
     uint16_t seq_num; // sequence number

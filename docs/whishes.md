@@ -12,7 +12,7 @@ A list of several desirable properties of a mesh routing protocol:
   - wireless networks is a pricious resource that must not be overutilized
   - => reactiv protocols, they approach the state of proactive protocols anyway
 - efficient flooding
-  - wireless networks is a pricious resource that must not be overutilized
+  - wireless networks is a precious resource that must not be overutilized
   - => use OLSRs Multi Point Relay (MPR) or even better the goTennas "critical node" approach
     - see `ECHO: Efficient Zero-Control Network-Wide Broadcast for Mobile Multi-hop Wireless Networks`)
 - good path selection
@@ -25,6 +25,6 @@ A list of several desirable properties of a mesh routing protocol:
 - incentive for nodes to participate
   - => a nodes that forwards traffic gets it's own traffic forwarded with priority
   - [Incentives in Computer Science](https://www.youtube.com/playlist?list=PLEGCF-WLh2RJdrKZ431SidRX_T4VmAKx8)
-- dynamic link aggregation
+- dynamic link aggregation for traffic
 - use multiple routes to spread traffic
   - usually it is good to send packet of one connection context on one route to preserve the packet order

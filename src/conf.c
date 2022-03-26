@@ -76,7 +76,7 @@ static const char *usage_str =
     "Usage: testmesh -i eth0 -i wlan0\n"
     "\n"
     "  --protocol,-p <protocol>    Select routing protocol\n"
-    "  --daemon,-d                 Run as daemon\n"
+    "  --daemon,-d                 Run as daemon in background\n"
     "  --interface,-i <interface>  Limit to given interfaces\n"
     "  --find-interfaces           Find and add interfaces automatically\n"
     "  --own-id <id>               Identifier of this node (default: <random>)\n"

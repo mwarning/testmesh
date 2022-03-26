@@ -24,7 +24,7 @@
 
 
 /*
- * A separate program to control the routing daemon.
+ * A separate program part to control the routing daemon.
  */
 
 int g_client_sock = -1;
@@ -104,7 +104,7 @@ void client_handler_in(int rc, int fd)
 int client_main(int argc, char *argv[])
 {
     const char *socket_path = NULL;
-    char *command = NULL;
+    char *command = NULL; // command from console
 
     int option;
     while ((option = getopt(argc, argv, "c:h")) > 0) {
