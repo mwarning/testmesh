@@ -58,28 +58,28 @@ static Neighbor *g_neighbors = NULL;
 
 static void vec_mul(float *ret, float b, const float *a)
 {
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		ret[i] = a[i] * b;
 	}
 }
 
 static void vec_sub(float *ret, const float *a, const float *b)
 {
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		ret[i] = a[i] - b[i];
 	}
 }
 
 static void vec_add(float *ret, const float *a, const float *b)
 {
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		ret[i] = a[i] + b[i];
 	}
 }
 
 static void vec_copy(float *ret, const float *a)
 {
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		ret[i] = a[i];
 	}
 }
@@ -87,7 +87,7 @@ static void vec_copy(float *ret, const float *a)
 static float vec_len(const float *a)
 {
 	float sum = 0;
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		sum += a[i] * a[i];
 	}
 
@@ -103,7 +103,7 @@ static float vec_dist(const float *a, const float *b)
 
 static int is_near_null(const float *v, float eta)
 {
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		if (v[i] >= eta && v[i] <= -eta) {
 			return 0;
 		}
@@ -122,13 +122,13 @@ static void vec_unit(float *unit, const float *a, const float *b)
 
 static void vec_random_unit(float *ret)
 {
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		ret[i] = (float) (double) rand();
 	}
 
 	float len = vec_len(ret);
 
-	for (int i = 0; i < DIM; ++i) {
+	for (size_t i = 0; i < DIM; ++i) {
 		ret[i] /= len;
 	}
 }
@@ -186,7 +186,7 @@ static void vivaldi_update_simple(float *local_pos, const float *remote_pos, flo
     vec_mul(force, error, direction);
 
     // move a small step in the direction of the force
-    for (int i = 0; i < DIM; i++) {
+    for (size_t i = 0; i < DIM; i++) {
         local_pos[i] += delta * force[i];
     }
 }
@@ -331,7 +331,7 @@ static void periodic_handler(int _events, int _fd)
 static char *str_pos(char *buf, const float *pos)
 {
     char *cur = buf;
-    for (int i = 0; i < DIM; i++) {
+    for (size_t i = 0; i < DIM; i++) {
         if (i == 0) {
             cur += sprintf(cur, "%f", pos[i]);
         } else {

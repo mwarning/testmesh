@@ -194,7 +194,7 @@ static char *format_path(const Addr *path, uint32_t path_count)
     static char buf[MAX_PATH_COUNT * 25];
     char *cur = buf;
     cur[0] = 0;
-    for (int i = 0; i < path_count; i++) {
+    for (size_t i = 0; i < path_count; i++) {
         ssize_t left = (buf + sizeof(buf)) - cur;
         switch (path[i].type) {
             case ADDR_TYPE_MAC:

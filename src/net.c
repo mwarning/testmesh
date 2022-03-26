@@ -80,7 +80,7 @@ void net_remove_handler(int fd, net_callback *cb)
 
 static void compress_entries()
 {
-	for (int i = 0; i < g_count; i += 1) {
+	for (size_t i = 0; i < g_count; i += 1) {
 		while (g_cbs[i] == NULL && i < g_count) {
 			g_count -= 1;
 			g_cbs[i] = g_cbs[g_count];
@@ -110,7 +110,7 @@ void net_loop(void)
 		all = (now > gstate.time_now);
 		gstate.time_now = now;
 
-		for (int i = 0; i < g_count; i++) {
+		for (size_t i = 0; i < g_count; i++) {
 			int revents = g_fds[i].revents;
 			int fd = g_fds[i].fd;
 			net_callback *cb = g_cbs[i];
@@ -129,7 +129,7 @@ void net_loop(void)
 
 void net_free(void)
 {
-	for (int i = 0; i < g_count; i++) {
+	for (size_t i = 0; i < g_count; i++) {
 		close(g_fds[i].fd);
 	}
 

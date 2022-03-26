@@ -74,7 +74,7 @@ static size_t get_data_size(const DATA *data)
 // degrade a random byte
 static void bloom_degrade(uint8_t *new_bloom, const uint8_t *old_bloom)
 {
-    for (int i = 0; i < BLOOM_K; i++) {
+    for (size_t i = 0; i < BLOOM_K; i++) {
         const int r = rand() % BLOOM_M;
         if (old_bloom[r] > 0) {
             new_bloom[r] = old_bloom[r] - 1;
@@ -89,7 +89,7 @@ static void bloom_init(uint8_t *bloom, uint32_t id)
 
     // simple linear congruential generator
     uint64_t next = id;
-    for (int i = 0; i < BLOOM_K; i++) {
+    for (size_t i = 0; i < BLOOM_K; i++) {
         next = next * 1103515245 + 12345;
         uint32_t r = (next / 65536) % 32768;
         bloom[r % BLOOM_M] = BLOOM_C;
@@ -99,7 +99,7 @@ static void bloom_init(uint8_t *bloom, uint32_t id)
 // add two bloom filters
 static void bloom_add(uint8_t *bloom1, const uint8_t *bloom2)
 {
-    for (int i = 0; i < BLOOM_M; i++) {
+    for (size_t i = 0; i < BLOOM_M; i++) {
         bloom1[i] = MAX(bloom1[i], bloom2[i]);
     }
 }
@@ -109,7 +109,7 @@ static void bloom_add(uint8_t *bloom1, const uint8_t *bloom2)
 static uint32_t bloom_probability(const uint8_t *origin_bloom, const uint8_t *destination_bloom)
 {
     uint32_t prob = 0;
-    for (int i = 0; i < BLOOM_M; i++) {
+    for (size_t i = 0; i < BLOOM_M; i++) {
         if (destination_bloom[i] > 0) {
             prob += origin_bloom[i];
         }
@@ -299,7 +299,7 @@ static void periodic_handler(int _events, int _fd)
 static char *str_bloom(char *buf, const uint8_t *bloom)
 {
     char *cur = buf;
-    for (int i = 0; i < BLOOM_M; i++) {
+    for (size_t i = 0; i < BLOOM_M; i++) {
         if (i == 0) {
             cur += sprintf(cur, "%u", (unsigned) bloom[i]);
         } else {

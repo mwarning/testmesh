@@ -70,7 +70,7 @@ static int g_protocols_len = 0;
 void protocols_print(FILE *fd)
 {
     fprintf(fd, "Valid protocols: ");
-    for (int i = 0; i < g_protocols_len; i += 1) {
+    for (size_t i = 0; i < g_protocols_len; i += 1) {
         fprintf(fd, i ? ", %s" : "%s", g_protocols[i]->name);
     }
     fprintf(fd, "\n");
@@ -78,7 +78,7 @@ void protocols_print(FILE *fd)
 
 const Protocol *protocols_find(const char *protocol)
 {
-    for (int i = 0; i < g_protocols_len; i += 1) {
+    for (size_t i = 0; i < g_protocols_len; i += 1) {
         if (0 == strcmp(g_protocols[i]->name, protocol)) {
             return g_protocols[i];
         }

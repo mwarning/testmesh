@@ -191,7 +191,7 @@ static const char *str_path(const uint32_t *path, uint32_t path_length)
     static char buf[MAX_PATH_COUNT * 25];
     char *cur = buf;
     cur[0] = 0;
-    for (int i = 0; i < path_length; i++) {
+    for (size_t i = 0; i < path_length; i++) {
         ssize_t left = (buf + sizeof(buf)) - cur;
         cur += snprintf(cur, left, i ? ", %u" : "%u", path[i]);
     }
@@ -204,7 +204,7 @@ static int path_contains_own(const ROOT *p)
         return 1;
     }
 
-    for (int i = 0; i < p->path_length; i++) {
+    for (size_t i = 0; i < p->path_length; i++) {
         if (p->path[i] == gstate.own_id) {
             return 1;
         }

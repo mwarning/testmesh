@@ -130,13 +130,13 @@ int client_main(int argc, char *argv[])
     if (argc > optind) {
         // concatenate extra args
         int len = 0;
-        for (int i = optind; i < argc; i += 1) {
+        for (size_t i = optind; i < argc; i += 1) {
           len += strlen(argv[i]) + 1;
         }
 
         command = (char*) malloc(len + 1);
         command[0] = '\0';
-        for (int i = optind; i < argc; i += 1) {
+        for (size_t i = optind; i < argc; i += 1) {
            strcat(command, argv[i]);
            strcat(command, " ");
         }

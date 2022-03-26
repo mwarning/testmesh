@@ -324,7 +324,7 @@ static int common_bits(const void *p1, const void* p2, int bits_n)
     const uint8_t *a1 = (const uint8_t*) p1;
     const uint8_t *a2 = (const uint8_t*) p2;
 
-    for (int i = 0; i < bits_n; i += 1) {
+    for (size_t i = 0; i < bits_n; i += 1) {
         uint8_t m = (1 << (7 - (i & 0x0F)));
         if ((a1[i / 8] & m) != (a2[i / 8] & m)) {
             return i + 1;

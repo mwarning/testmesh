@@ -72,7 +72,7 @@ static void bloom_init(uint8_t *bloom, uint64_t id)
 
     // linear congruential generator
     uint64_t next = id;
-    for (int i = 0; i < BLOOM_K; i++) {
+    for (size_t i = 0; i < BLOOM_K; i++) {
         next = next * 1103515245 + 12345;
         uint32_t r = (next / 65536) % 32768;
         uint32_t j = r % (BLOOM_M * 8);
@@ -85,7 +85,7 @@ static int bloom_ones(const uint8_t *bloom)
 {
     int ones = 0;
 
-    for (int i = 0; i < (8 * BLOOM_M); i++) {
+    for (size_t i = 0; i < (8 * BLOOM_M); i++) {
         ones += (0 != BLOOM_BITTEST(bloom, i));
     }
 
@@ -97,7 +97,7 @@ static int bloom_test(const uint8_t *bloom, uint32_t id)
     uint8_t bloom_id[BLOOM_M]; 
     bloom_init(&bloom_id[0], id);
 
-    for (int i = 0; i < BLOOM_M; i++) {
+    for (size_t i = 0; i < BLOOM_M; i++) {
         if ((bloom[i] & bloom_id[i]) != bloom_id[i]) {
             return 0;
         }
@@ -108,7 +108,7 @@ static int bloom_test(const uint8_t *bloom, uint32_t id)
 
 static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
 {
-    for (int i = 0; i < BLOOM_M; i++) {
+    for (size_t i = 0; i < BLOOM_M; i++) {
         bloom1[i] |= bloom2[i];
     }
 }
@@ -280,7 +280,7 @@ static char *format_bloom(const uint8_t *bloom)
 {
     static char buf[BLOOM_M * 8 + 1];
     char *cur = buf;
-    for (int i = 0; i < (8 * BLOOM_M); i++) {
+    for (size_t i = 0; i < (8 * BLOOM_M); i++) {
         unsigned bit = (0 != BLOOM_BITTEST(bloom, i));
         cur += sprintf(cur, "%u", bit);
     }

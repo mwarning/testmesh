@@ -44,7 +44,7 @@ static int tokenizer(char *argv[], int argc_max, char *input)
 
     char *p = NULL;
     const int len = strlen(input);
-    for (int i = 0; i < len; i++) {
+    for (size_t i = 0; i < len; i++) {
         if (input[i] <= ' ') {
             if (p) {
                 if (argc == argc_max) {

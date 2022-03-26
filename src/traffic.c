@@ -50,7 +50,7 @@ static void traffic_maintain_max_entries()
     uint32_t found_count = traffic_fetch_subset(ts, remove_count, 1);
 
     // remove entries
-    for (int i = 0; i < found_count; i++) {
+    for (size_t i = 0; i < found_count; i++) {
         Traffic *cur;
         HASH_FIND(hh, g_traffic, &ts[i]->addr, sizeof(Address), cur);
         HASH_DEL(g_traffic, cur);
@@ -223,7 +223,7 @@ void traffic_debug(FILE* out, int argc, char *argv[])
 
     uint32_t found_count = traffic_fetch_subset(entries, entries_count, 0);
 
-    for (int i = 0; i < found_count; i++) {
+    for (size_t i = 0; i < found_count; i++) {
         Traffic *cur = entries[i];
         fprintf(out, "%s/%s: in: %6s (%6s/s), out: %6s (%6s/s), %s ago\n",
             str_addr(&cur->addr),

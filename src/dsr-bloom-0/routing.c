@@ -53,7 +53,7 @@ static void bloom_init(uint8_t *bloom, uint32_t id)
 
     uint64_t next = id;
     // pseudo random generator
-    for (int i = 0; i < BLOOM_K; i++) {
+    for (size_t i = 0; i < BLOOM_K; i++) {
         next = next * 1103515245 + 12345;
         uint32_t r = (next / 65536) % 32768;
         uint32_t j = r % (BLOOM_M * 8);
@@ -66,7 +66,7 @@ static int bloom_test(const uint8_t *bloom, uint32_t id)
     uint8_t bloom_id[BLOOM_M];
     bloom_init(&bloom_id[0], id);
 
-    for (int i = 0; i < BLOOM_M; i++) {
+    for (size_t i = 0; i < BLOOM_M; i++) {
         if ((bloom_id[i] & bloom[i]) != bloom_id[i]) {
             return 0;
         }
@@ -77,7 +77,7 @@ static int bloom_test(const uint8_t *bloom, uint32_t id)
 
 static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
 {
-    for (int i = 0; i < BLOOM_M; i++) {
+    for (size_t i = 0; i < BLOOM_M; i++) {
         bloom1[i] |= bloom2[i];
     }
 }
