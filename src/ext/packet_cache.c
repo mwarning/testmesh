@@ -54,7 +54,6 @@ void packet_cache_get_and_remove(uint8_t *data_ret, size_t *data_length_ret, uin
 
         // remove entry
         packet_remove_entry(cur);
-        return;
     }
 }
 
