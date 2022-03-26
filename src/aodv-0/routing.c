@@ -65,7 +65,7 @@ typedef struct __attribute__((__packed__)) {
 static uint16_t g_sequence_number = 0;
 static RoutingEntry *g_routing_entries = NULL;
 
-static int get_data_size(DATA *p)
+static size_t get_data_size(DATA *p)
 {
     return (sizeof(DATA) + p->payload_length);
 }
