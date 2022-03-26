@@ -164,17 +164,17 @@ static const Address *addr2address(const Addr *addr)
     }
 }
 
-static int get_rreq_size(RREQ *p)
+static size_t get_rreq_size(RREQ *p)
 {
     return (offsetof(RREQ, path) + (sizeof(Addr) * p->path_count));
 }
 
-static int get_rrep_size(RREP *p)
+static size_t get_rrep_size(RREP *p)
 {
     return (offsetof(RREP, path) + (sizeof(Addr) * p->path_count));
 }
 
-static int get_data_size(DATA *p)
+static size_t get_data_size(DATA *p)
 {
     return (sizeof(DATA) + p->payload_length + (sizeof(Addr) * p->path_count));
 }
