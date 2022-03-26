@@ -100,7 +100,7 @@ static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
             const char *end = argv[1] + strlen(argv[1]);
             uint32_t log_level = strtoul(argv[1], &ptr, 10);
             if (ptr != end || log_level > MAX_LOG_LEVEL) {
-                fprintf(fp, "invalid log level");
+                fprintf(fp, "invalid log level\n");
             } else {
                 gstate.log_level = log_level;
                 fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
