@@ -494,7 +494,7 @@ void send_ucast_l3(const Address *addr, const void *data, size_t data_len)
     }
 }
 
-/*
+#ifdef MULTICAST
 static void join_mcast(int sock, int ifindex)
 {
     struct ipv6_mreq group = {0};
@@ -566,7 +566,9 @@ void send_mcasts_l3(const void* data, int data_len)
         }
     }
 }
+#endif
 
+#if 0
 static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
 {
     struct iovec iov[1];
@@ -611,7 +613,8 @@ static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *
     } else {
         return recv_length;
     }
-}*/
+}
+#endif
 
 // add interfaces automatically
 static void find_and_add_interfaces()
@@ -731,9 +734,11 @@ void interfaces_init()
         net_add_handler(gstate.sock_udp, &read_internal_l3);
     }
 
+#ifdef MULTICAST
     if (gstate.sock_mcast_receive > 0) {
         net_add_handler(gstate.sock_mcast_receive, &read_internal_l3);
     }
+#endif
 
     net_add_handler(-1, &periodic_interfaces_handler);
 }

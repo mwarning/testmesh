@@ -39,7 +39,9 @@ struct state {
     int sock_help; // helper socket used to communicate with the kernel
     int sock_console; // unix socket
     int sock_udp; // also used to send mcast
+#ifdef MULTICAST
     int sock_mcast_receive;
+#endif
     uint16_t ether_type;
     uint8_t find_interfaces;
 
@@ -54,10 +56,10 @@ struct state {
     uint8_t disable_stdin;
     time_t time_now;
     time_t time_started;
-
+#ifdef MULTICAST
     // local network discovery address
     struct sockaddr_in6 mcast_addr;
-
+#endif
     // listen address for unicast packets
     struct sockaddr_in6 ucast_addr;
 

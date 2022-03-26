@@ -30,7 +30,9 @@ struct state gstate = {
     .time_started = 0,
     .sock_help = -1,
     .sock_udp = -1,
+#ifdef MULTICAST
     .sock_mcast_receive = -1,
+#endif
     .sock_console = -1,
     .ether_type = 0x88b5, // "Local Experiment Ethertype 1"
 
@@ -42,7 +44,9 @@ struct state gstate = {
     .is_running = 1,
     .control_socket_path = NULL,
     .disable_stdin = 0,
+#ifdef MULTICAST
     .mcast_addr = {0},
+#endif
     .ucast_addr = {0},
 
     .enable_ipv4 = 0,
@@ -107,6 +111,7 @@ void protocols_register(const Protocol *p)
     g_protocols[g_protocols_len++] = p;
 }
 
+#ifdef MULTICAST
 static void setup_mcast_socket_receive(int *sock)
 {
     int fd = socket(AF_INET6, SOCK_DGRAM, 0);
@@ -157,6 +162,7 @@ static void setup_mcast_socket_receive(int *sock)
 
     *sock = fd;
 }
+#endif
 
 static void setup_unicast_socket(int *sock)
 {
@@ -263,10 +269,12 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+#ifdef MULTICAST
     // setup multicast address
     gstate.mcast_addr.sin6_family = AF_INET6;
     inet_pton(AF_INET6, MULTICAST_ADDR, &gstate.mcast_addr.sin6_addr);
     gstate.mcast_addr.sin6_port = htons(MULTICAST_PORT);
+#endif
 
     // setup unicast address for bind
     gstate.ucast_addr.sin6_family = AF_INET6;
@@ -295,9 +303,11 @@ int main(int argc, char *argv[])
 
     if (gstate.protocol->ext_handler_l3) {
         setup_unicast_socket(&gstate.sock_udp);
+#ifdef MULTICAST
         setup_mcast_socket_receive(&gstate.sock_mcast_receive);
 
         log_info("Listen on multicast: %s", str_addr6(&gstate.mcast_addr));
+#endif
         log_info("Listen on unicast:   %s", str_addr6(&gstate.ucast_addr));
     }
 
