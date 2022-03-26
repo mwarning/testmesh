@@ -61,8 +61,8 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
 
     uint8_t is_new = seqnum_cache_update(p->src_id, p->seq_num);
 
-    log_debug("DATA: got packet from %s / 0x%08x => 0x%08x (seq_num: %u, sender: 0x%08x, prev_sender: 0x%08x)",
-        str_addr(addr), p->src_id, p->dst_id, p->seq_num, p->sender, p->prev_sender);
+    log_debug("DATA: got packet from %s / 0x%08x => 0x%08x (seq_num: %u, sender: 0x%08x, prev_sender: 0x%08x, full_flood: %s)",
+        str_addr(addr), p->src_id, p->dst_id, p->seq_num, p->sender, p->prev_sender, str_enabled(is_full_flood));
 
     if (is_full_flood) {
         // prevent us from starting a full flood
