@@ -49,7 +49,7 @@ static void interface_reset_handler(struct interface *ifa)
     ifa->ifindex = 0;
 }
 
-static int is_valid_ifa(const struct interface *ifa)
+static bool is_valid_ifa(const struct interface *ifa)
 {
     return ifa && (ifa->ifindex > 0) && (memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) != 0);
 }
@@ -130,11 +130,8 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
         return 1;
     }
 
-    struct sockaddr_ll interfaceAddr;
-    struct packet_mreq mreq;
-
-    memset(&interfaceAddr,0,sizeof(interfaceAddr));
-    memset(&mreq, 0, sizeof(mreq));
+    struct sockaddr_ll interfaceAddr = {0};
+    struct packet_mreq mreq = {0};
 
     interfaceAddr.sll_ifindex = ifindex;
     interfaceAddr.sll_family = AF_PACKET;
@@ -228,16 +225,16 @@ static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
     free(ifa);
 }
 
-static int interface_add_internal(const char *ifname, int is_dynamic)
+static bool interface_add_internal(const char *ifname, int is_dynamic)
 {
     if (gstate.tun_name && 0 == strcmp(ifname, gstate.tun_name)) {
         log_error("Cannot add own tun interface: %s", ifname);
-        return 1;
+        return false;
     }
 
     if (get_interface_by_name(ifname)) {
         log_error("Cannot add duplicate interface: %s", ifname);
-        return 1;
+        return false;
     }
 
     struct interface *ifa = (struct interface*) calloc(1, sizeof(struct interface));
@@ -258,21 +255,21 @@ static int interface_add_internal(const char *ifname, int is_dynamic)
     }
     g_interfaces = ifa;
 
-    return 0;
+    return true;
 }
 
-int interface_add(const char *ifname)
+bool interface_add(const char *ifname)
 {
     return interface_add_internal(ifname, 0);
 }
 
-int interface_del(const char *ifname)
+bool interface_del(const char *ifname)
 {
     struct interface *ifa_prev;
     struct interface *ifa;
 
     if (g_interfaces == NULL) {
-        return 1;
+        return false;
     }
 
     ifa_prev = NULL;
@@ -280,13 +277,13 @@ int interface_del(const char *ifname)
     while (ifa) {
         if (0 == strcmp(ifa->ifname, ifname)) {
             interface_remove(ifa_prev, ifa);
-            return 0;
+            return true;
         }
         ifa_prev = ifa;
         ifa = ifa->next;
     }
 
-    return 1;
+    return false;
 }
 
 static void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
@@ -350,10 +347,10 @@ static void read_internal_l2(int events, int fd)
     gstate.protocol->ext_handler_l2(&src_addr, payload, payload_len);
 }
 
-static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_ALEN], const void* sendbuf, size_t sendlen)
+static bool send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_ALEN], const void* sendbuf, size_t sendlen)
 {
     if (!is_valid_ifa(ifa)) {
-        return 1;
+        return false;
     }
 
     if (!gstate.protocol->ext_handler_l2) {
@@ -377,14 +374,14 @@ static int send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_AL
         log_warning("sendto() failed on raw socket for %s: %s (sock: %d, ifindex: %d, ifname: %s, sendbuf: %p, sendlen: %u)",
             ifa->ifname, strerror(errno), ifa->ifsock_l2, ifa->ifindex, if_indextoname(ifa->ifindex, ifnamebuf), sendbuf, sendlen);
         interface_reset_handler(ifa);
-        return 1;
+        return false;
     }
 
     Address addr;
     init_macaddr(&addr, dst_addr, ifa->ifindex);
     traffic_add_bytes_write(&addr, sendlen);
 
-    return 0;
+    return true;
 }
 
 void send_bcasts_l2(const void* data, size_t data_len)
@@ -411,13 +408,13 @@ void send_bcasts_l2(const void* data, size_t data_len)
     log_trace("send_raws: %d bytes on %d interfaces", (int) data_len, count);
 }
 
-int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
+bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 {
     struct interface *ifa;
 
     if (addr->family != AF_MAC) {
         log_error("send_ucast_l2: used wrong address type");
-        return 1;
+        return false;
     }
 
     unsigned ifindex = addr->mac.ifindex;
@@ -428,12 +425,12 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 
     if (ifindex == 0) {
         log_error("send_ucast_l2(): invalid ifindex");
-        return 1;
+        return false;
     }
 
     if (sendlen > sizeof(sendbuf)) {
         log_error("send_ucast_l2(): too much data (%zu > %zu)", sendlen, sizeof(sendbuf));
-        return 1;
+        return false;
     }
 
     memcpy(&sendbuf[sizeof(struct ethhdr)], data, data_len);
@@ -450,7 +447,7 @@ int send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 
     if (!found) {
         log_error("send_raws(): ifindex not found: %u", ifindex);
-        return 1;
+        return false;
     }
 
     return send_internal_l2(ifa, dst_addr, sendbuf, sizeof(struct ethhdr) + data_len);
