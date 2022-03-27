@@ -15,17 +15,14 @@ Implemented Protocols:
   - broadcast only
   - no metric
 - [flood-1](src/flood-1/)
-  - reactive
-  - sequence number
-  - broadcast only
+  - like food-0
   - uses critical nodes
-  - no metric
 - [aodv-0](src/aodv-0/)
   - reactive
   - sequence number
 - [aodv-1](src/aodv-1/)
   - like aodv-0
-  - intermediate node can answer also route requests
+  - intermediate nodes can answer also route requests
 - [dsr-0](src/dsr-0/)
   - reactive
   - sequence number
@@ -36,8 +33,7 @@ Implemented Protocols:
   - nodes have no state
   - only bradcast
 - [dsr-bloom-1](src/dsr-bloom-1/)
-  - reactive
-  - Bloom filter in packet
+  - like dsr-bloom-0
   - nodes store Bloom filters of neighbbors
   - switches between bradcast and unicast
 - [counting-bloom-0](src/counting-bloom-0/)
