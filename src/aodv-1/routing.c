@@ -191,7 +191,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
         RoutingEntry *e = routing_entry_find(p->dst_id);
         if (e) {
             if (e->last_updated == gstate.time_now) {
-                log_debug("RREQ: just heart from destination => send RREP");
+                log_debug("RREQ: just heard from destination => send RREP");
                 RREP rrep = {
                     .type = TYPE_RREP,
                     .hop_count = e->hop_count,
@@ -303,6 +303,8 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         // avoid processing of this packet again
         seqnum_cache_update(data->src_id, data->seq_num);
 
+        log_debug("tun_handler: send DATA packet (0x%08x => 0x%08x)", data->src_id, data->dst_id);
+
         send_ucast_l2(&e->next_hop_addr, data, get_data_size(data));
     } else {
         RREQ rreq = {
@@ -317,7 +319,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
         packet_cache_add(dst_id, packet, packet_length);
 
-        log_debug("send new RREQ (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
+        log_debug("tun_handler: send RREQ packet (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
         send_bcasts_l2(&rreq, sizeof(RREQ));
     }
