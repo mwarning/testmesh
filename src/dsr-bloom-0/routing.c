@@ -61,18 +61,18 @@ static void bloom_init(uint8_t *bloom, uint32_t id)
     }
 }
 
-static int bloom_test(const uint8_t *bloom, uint32_t id)
+static bool bloom_test(const uint8_t *bloom, uint32_t id)
 {
     uint8_t bloom_id[BLOOM_M];
     bloom_init(&bloom_id[0], id);
 
     for (size_t i = 0; i < BLOOM_M; i++) {
         if ((bloom_id[i] & bloom[i]) != bloom_id[i]) {
-            return 0;
+            return false;
         }
     }
 
-    return 1;
+    return true;
 }
 
 static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
