@@ -81,9 +81,9 @@ static void bloom_init(uint8_t *bloom, uint64_t id)
 }
 
 // count of bits set in bloom filter
-static int bloom_ones(const uint8_t *bloom)
+static uint16_t bloom_ones(const uint8_t *bloom)
 {
-    int ones = 0;
+    uint16_t ones = 0;
 
     for (size_t i = 0; i < (8 * BLOOM_M); i++) {
         ones += (0 != BLOOM_BITTEST(bloom, i));
@@ -92,18 +92,18 @@ static int bloom_ones(const uint8_t *bloom)
     return ones;
 }
 
-static int bloom_test(const uint8_t *bloom, uint32_t id)
+static bool bloom_test(const uint8_t *bloom, uint32_t id)
 {
     uint8_t bloom_id[BLOOM_M]; 
     bloom_init(&bloom_id[0], id);
 
     for (size_t i = 0; i < BLOOM_M; i++) {
         if ((bloom[i] & bloom_id[i]) != bloom_id[i]) {
-            return 0;
+            return false;
         }
     }
 
-    return 1;
+    return true;
 }
 
 static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
@@ -124,9 +124,7 @@ static const char *address_type_str(const Address *addr)
 {
     if (address_is_broadcast(addr)) {
         return "broadcast";
-    }
-
-    if (address_is_multicast(addr)) {
+    } else if (address_is_multicast(addr)) {
         return "multicast";
     } else {
         return "unicast";
@@ -276,7 +274,7 @@ static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t pack
     }
 }
 
-static char *format_bloom(const uint8_t *bloom)
+static char *str_bloom(const uint8_t *bloom)
 {
     static char buf[BLOOM_M * 8 + 1];
     char *cur = buf;
@@ -297,7 +295,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
 
         fprintf(fp, "id: 0x%08x\n", gstate.own_id);
         fprintf(fp, "bloom-size: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_K);
-        fprintf(fp, "bloom: %s\n", format_bloom(&own_bloom[0]));
+        fprintf(fp, "bloom: %s\n", str_bloom(&own_bloom[0]));
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
         unsigned counter = 0;
         Entry *cur;
@@ -309,7 +307,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
                 cur->sender_id,
                 str_addr(&cur->addr),
                 str_ago(cur->last_updated),
-                format_bloom(&cur->bloom[0]),
+                str_bloom(&cur->bloom[0]),
                 (unsigned) cur->hop_cnt
             );
             counter += 1;
