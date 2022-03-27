@@ -29,7 +29,7 @@ enum {
 
 typedef struct {
     uint32_t dst_id;
-    Address next_hop;
+    Address next_hop_addr;
     uint16_t hop_count;
     uint16_t seq_num;
     time_t last_updated;
@@ -96,7 +96,7 @@ static RoutingEntry *routing_entry_find(uint32_t dst_id)
     return cur;
 }
 
-static void routing_entry_update(uint32_t dst_id, const Address *next_hop, uint8_t hop_count, uint16_t seq_num)
+static void routing_entry_update(uint32_t dst_id, const Address *next_hop_addr, uint8_t hop_count, uint16_t seq_num)
 {
     RoutingEntry *e;
 
@@ -104,7 +104,7 @@ static void routing_entry_update(uint32_t dst_id, const Address *next_hop, uint8
     if (e) {
         if (hop_count < e->hop_count) {
             e->dst_id = dst_id;
-            e->next_hop = *next_hop;
+            e->next_hop_addr = *next_hop_addr;
             e->seq_num = seq_num;
             e->hop_count = hop_count;
             e->last_updated = gstate.time_now;
@@ -113,7 +113,7 @@ static void routing_entry_update(uint32_t dst_id, const Address *next_hop, uint8
         e = (RoutingEntry*) malloc(sizeof(RoutingEntry));
 
         e->dst_id = dst_id;
-        e->next_hop = *next_hop;
+        e->next_hop_addr = *next_hop_addr;
         e->seq_num = seq_num;
         e->hop_count = hop_count;
         e->last_updated = gstate.time_now;
@@ -122,7 +122,7 @@ static void routing_entry_update(uint32_t dst_id, const Address *next_hop, uint8
     }
 }
 
-static void send_cached_packet(uint32_t dst_id, const Address *next_hop)
+static void send_cached_packet(uint32_t dst_id, const Address *next_hop_addr)
 {
     uint8_t buffer[ETH_FRAME_LEN - sizeof(DATA)];
     DATA *data = (DATA*) &buffer[0];
@@ -147,9 +147,9 @@ static void send_cached_packet(uint32_t dst_id, const Address *next_hop)
     seqnum_cache_update(data->src_id, data->seq_num);
 
     log_debug("send DATA (0x%08x => 0x%08x) to %s via next hop %s",
-        data->src_id, data->dst_id, str_addr(next_hop));
+        data->src_id, data->dst_id, str_addr(next_hop_addr));
 
-    send_ucast_l2(next_hop, data, get_data_size(data));
+    send_ucast_l2(next_hop_addr, data, get_data_size(data));
 }
 
 static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
@@ -211,9 +211,9 @@ static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
     } else {
         RoutingEntry *e = routing_entry_find(p->dst_id);
         if (e) {
-            log_debug("RREP: send to %s => forward", str_addr(&e->next_hop));
+            log_debug("RREP: send to %s => forward", str_addr(&e->next_hop_addr));
             p->hop_count += 1;
-            send_ucast_l2(&e->next_hop, p, sizeof(RREP));
+            send_ucast_l2(&e->next_hop_addr, p, sizeof(RREP));
         } else {
             log_debug("RREP: no next hop found => drop");
         }
@@ -221,8 +221,7 @@ static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
 }
 static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 {
-    if (recv_len < sizeof(DATA)
-            || recv_len != get_data_size(p)) {
+    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
         return;
     }
@@ -252,10 +251,10 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
         RoutingEntry *e = routing_entry_find(p->dst_id);
 
         if (e) {
-            p->hop_count += 1;
-            log_debug("DATA: send to next hop %s => forward", str_addr(&e->next_hop));
+            log_debug("DATA: send to next hop %s => forward", str_addr(&e->next_hop_addr));
             // forward
-            send_ucast_l2(&e->next_hop, p, get_data_size(p));
+            p->hop_count += 1;
+            send_ucast_l2(&e->next_hop_addr, p, get_data_size(p));
         } else {
             log_debug("DATA: no next hop found => drop");
         }
@@ -278,7 +277,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         // avoid processing of this packet again
         seqnum_cache_update(data->src_id, data->seq_num);
 
-        send_ucast_l2(&e->next_hop, data, get_data_size(data));
+        send_ucast_l2(&e->next_hop_addr, data, get_data_size(data));
     } else {
         RREQ rreq = {
             .type = TYPE_RREQ,
@@ -333,7 +332,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
             fprintf(fp, "0x%08x\t%u\t%s\t%s ago\n",
                 cur->dst_id,
                 cur->seq_num,
-                str_addr(&cur->next_hop),
+                str_addr(&cur->next_hop_addr),
                 str_ago(cur->last_updated)
             );
             count += 1;
