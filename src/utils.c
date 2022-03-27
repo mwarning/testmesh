@@ -35,7 +35,7 @@ uint32_t adler32(const void *buf, size_t buflength)
 }
 
 // fill buffer with random bytes
-int bytes_random(void *buffer, size_t size)
+ssize_t bytes_random(void *buffer, size_t size)
 {
    int fd;
    int rc;
@@ -53,7 +53,7 @@ int bytes_random(void *buffer, size_t size)
    return rc;
 }
 
-int address_is_multicast(const Address *addr)
+bool address_is_multicast(const Address *addr)
 {
     switch (addr->family) {
     case AF_MAC: {
@@ -70,7 +70,7 @@ int address_is_multicast(const Address *addr)
     }
 }
 
-int address_is_broadcast(const Address *addr)
+bool address_is_broadcast(const Address *addr)
 {
     static const uint8_t bmac[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
@@ -88,16 +88,16 @@ int address_is_broadcast(const Address *addr)
     }
 }
 
-int address_is_unicast(const Address *addr)
+bool address_is_unicast(const Address *addr)
 {
     return !address_is_broadcast(addr) && !address_is_multicast(addr);
 }
 
-void hex_dump(const char *desc, const void *buf, uint32_t buflen)
+void hex_dump(const char *desc, const void *buf, size_t buflen)
 {
     const unsigned char *pc = (const unsigned char *)buf;
     unsigned char buff[17];
-    int i;
+    size_t i;
 
     // Output description if given.
     if (desc != NULL) {
@@ -109,7 +109,7 @@ void hex_dump(const char *desc, const void *buf, uint32_t buflen)
         printf("  ZERO LENGTH\n");
         return;
     } else if (buflen < 0) {
-        printf("  NEGATIVE LENGTH: %d\n", buflen);
+        printf("  NEGATIVE LENGTH: %ld\n", buflen);
         return;
     }
 
@@ -123,7 +123,7 @@ void hex_dump(const char *desc, const void *buf, uint32_t buflen)
                 printf("  %s\n", buff);
 
             // Output the offset.
-            printf("  %04x ", i);
+            printf("  %04lx ", i);
         }
 
         // Now the hex code for the specific character.
@@ -296,12 +296,12 @@ const char *str_addr(const Address *addr)
     }
 }
 
-static int addr_is_link_local_4(const struct in_addr *addr)
+static bool addr_is_link_local_4(const struct in_addr *addr)
 {
     return ((addr->s_addr & 0x0000ffff) == 0x0000fea9);
 }
 
-static int addr_is_link_local_6(const struct in6_addr *addr)
+static bool addr_is_link_local_6(const struct in6_addr *addr)
 {
     return (addr->s6_addr[0] == 0xfe) && ((addr->s6_addr[1] & 0xC0) == 0x80);
 }
@@ -350,7 +350,7 @@ const char *str_in6(const struct in6_addr *addr)
     return inet_ntop(AF_INET6, addr, buf, INET6_ADDRSTRLEN);
 }
 
-static int common_bits(const void *p1, const void* p2, int bits_n)
+static uint32_t common_bits(const void *p1, const void* p2, uint32_t bits_n)
 {
     const uint8_t *a1 = (const uint8_t*) p1;
     const uint8_t *a2 = (const uint8_t*) p2;
@@ -365,7 +365,7 @@ static int common_bits(const void *p1, const void* p2, int bits_n)
     return bits_n;
 }
 
-int addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, int subnet_len)
+uint32_t addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, uint32_t subnet_len)
 {
     const void *p1;
     const void* p2;
@@ -390,7 +390,7 @@ int addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_
     return common_bits(p1, p2, subnet_len);
 }
 
-int addr_is_localhost(const struct sockaddr_storage *addr)
+bool addr_is_localhost(const struct sockaddr_storage *addr)
 {
     //return (memcmp(addr, &in6addr_loopback, 16) == 0);
     // 127.0.0.1
@@ -402,11 +402,11 @@ int addr_is_localhost(const struct sockaddr_storage *addr)
     case AF_INET6:
         return (memcmp(&((struct sockaddr_in6 *)addr)->sin6_addr, &in6addr_loopback, 16) == 0);
     default:
-        return 0;
+        return false;
     }
 }
 
-int addr_is_multicast(const struct sockaddr_storage *addr)
+bool addr_is_multicast(const struct sockaddr_storage *addr)
 {
     switch (addr->ss_family) {
     case AF_INET:
@@ -414,11 +414,11 @@ int addr_is_multicast(const struct sockaddr_storage *addr)
     case AF_INET6:
         return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr);
     default:
-        return 0;
+        return false;
     }
 }
 
-int addr_is_link_local(const struct sockaddr_storage *addr)
+bool addr_is_link_local(const struct sockaddr_storage *addr)
 {
     switch (addr->ss_family) {
     case AF_INET: {
@@ -431,11 +431,11 @@ int addr_is_link_local(const struct sockaddr_storage *addr)
     }
     default:
         log_error("addr_is_link_local not implemented for protocol");
-        return 0;
+        return false;
     }
 }
 
-static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str[], const char port_str[], int af)
+static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str[], const char port_str[], uint32_t af)
 {
     struct addrinfo hints;
     struct addrinfo *info = NULL;
@@ -483,7 +483,7 @@ static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str
 * "[<address>]"
 * "[<address>]:<port>"
 */
-int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], const char default_port[], int af)
+int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], const char default_port[], uint32_t af)
 {
     char addr_buf[256];
     char *addr_beg;

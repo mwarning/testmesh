@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <time.h>
 #include <netinet/in.h>
 
@@ -40,12 +41,12 @@ typedef union {
 } Address;
 
 uint32_t adler32(const void *buf, size_t buflen); // a hash method
-void hex_dump(const char *desc, const void *buf, uint32_t buflen);
-int bytes_random(void *buffer, size_t size); // get random bytes
+void hex_dump(const char *desc, const void *buf, size_t buflen);
+ssize_t bytes_random(void *buffer, size_t size); // get random bytes
 
-int address_is_unicast(const Address *addr);
-int address_is_multicast(const Address *addr);
-int address_is_broadcast(const Address *addr);
+bool address_is_unicast(const Address *addr);
+bool address_is_multicast(const Address *addr);
+bool address_is_broadcast(const Address *addr);
 uint32_t address_ifindex(const Address *addr);
 
 const char *str_enabled(uint8_t enabled);
@@ -60,10 +61,10 @@ const char *str_addr6(const struct sockaddr_in6 *addr);
 const char *str_in4(const struct in_addr *addr);
 const char *str_in6(const struct in6_addr *addr);
 
-int addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, int subnet_len);
-int addr_is_localhost(const struct sockaddr_storage *addr);
-int addr_is_multicast(const struct sockaddr_storage *addr);
-int addr_is_link_local(const struct sockaddr_storage *addr);
-int addr_parse(struct sockaddr_storage *addr, const char full_addr_str[], const char default_port[], int af);
+uint32_t addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, uint32_t subnet_len);
+bool addr_is_localhost(const struct sockaddr_storage *addr);
+bool addr_is_multicast(const struct sockaddr_storage *addr);
+bool addr_is_link_local(const struct sockaddr_storage *addr);
+int addr_parse(struct sockaddr_storage *addr, const char full_addr_str[], const char default_port[], uint32_t af);
 
 #endif // _UTILS_H_
