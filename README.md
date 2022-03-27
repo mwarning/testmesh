@@ -23,6 +23,9 @@ Implemented Protocols:
 - [aodv-0](src/aodv-0/)
   - reactive
   - sequence number
+- [aodv-1](src/aodv-1/)
+  - like aodv-0
+  - intermediate node can answer also route requests
 - [dsr-0](src/dsr-0/)
   - reactive
   - sequence number
