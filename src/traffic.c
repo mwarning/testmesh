@@ -159,20 +159,9 @@ static uint32_t traffic_fetch_subset(Traffic *ts[], uint32_t max_length, uint8_t
 static const char *str_addr_ifname(const Address *addr)
 {
     static char buf[16];
-    uint32_t ifindex = 0;
+    uint32_t ifindex;
 
-    switch (addr->family) {
-    case AF_INET:
-        break;
-    case AF_INET6:
-        if (addr_is_link_local((struct sockaddr_storage*) addr)) {
-            ifindex = addr->ip6.sin6_scope_id;
-        }
-        break;
-    case AF_MAC:
-        ifindex = addr->mac.ifindex;
-    }
-
+    ifindex = address_ifindex(addr);
     snprintf(buf, sizeof(buf), "<%"PRIu32">", ifindex);
 
     if (ifindex == 0) {
