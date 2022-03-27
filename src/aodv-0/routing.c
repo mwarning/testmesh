@@ -321,10 +321,10 @@ static int console_handler(FILE* fp, int argc, char *argv[])
     #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
 
     if (MATCH(1, "h")) {
-        fprintf(fp, "n: print routing table\n");
+        fprintf(fp, "r                       print routing table\n");
     } else if (MATCH(1, "i")) {
         fprintf(fp, "routing entry timeout: %ds\n", TIMEOUT_ROUTING_ENTRY);
-    } else if (MATCH(1, "n")) {
+    } else if (MATCH(1, "r")) {
         RoutingEntry *cur;
         RoutingEntry *tmp;
         int count = 0;
