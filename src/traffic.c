@@ -107,11 +107,11 @@ void traffic_add_bytes_read(const Address *addr, uint64_t bytes)
     traffic_add_bytes(addr, bytes, 0);
 }
 
-static int is_smaller(Traffic *a, Traffic *b)
+static bool is_smaller(Traffic *a, Traffic *b)
 {
     uint64_t a_sum = a->bytes_write + a->bytes_read;
     uint64_t b_sum = b->bytes_write + b->bytes_read;
-    return (a_sum < b_sum) || (a_sum == b_sum && a->time_prev < b->time_prev);
+    return (a_sum < b_sum) || ((a_sum == b_sum) && (a->time_prev < b->time_prev));
 }
 
 // get sorted list of traffic entries
@@ -228,6 +228,7 @@ void traffic_debug(FILE* out, int argc, char *argv[])
 
     fprintf(out, "%d addresses shown, %d overall, %d ever, %d max\n",
         entries_count, g_traffic_count, g_traffic_count_all, g_traffic_count_max);
+
     fprintf(out, "total: %s (%s/s) in, %s (%s/s) out\n",
         str_bytes(g_traffic_total.bytes_read),
         str_bytes(speed_read(&g_traffic_total)),
