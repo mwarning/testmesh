@@ -64,13 +64,13 @@ void packet_cache_add(uint32_t id, uint8_t *data, size_t data_length)
     // find existing entry
     HASH_FIND(hh, g_packet_cache, &id, sizeof(uint32_t), e);
 
-    int found = (e != NULL);
+    int reuse = (e != NULL);
 
-    if (found) {
+    if (reuse) {
         free(e->data);
     }
 
-    e = (PacketCacheEntry*) malloc(sizeof(PacketCacheEntry));
+    e = (PacketCacheEntry*) calloc(1, sizeof(PacketCacheEntry));
 
     e->id = id;
     e->data = (uint8_t*) malloc(data_length);
@@ -78,7 +78,7 @@ void packet_cache_add(uint32_t id, uint8_t *data, size_t data_length)
     e->data_length = data_length;
     e->updated = gstate.time_now;
 
-    if (found) {
+    if (!reuse) {
         HASH_ADD(hh, g_packet_cache, id, sizeof(uint32_t), e);
     }
 }
