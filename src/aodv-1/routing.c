@@ -175,6 +175,8 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
     routing_entry_update(p->src_id, addr, p->hop_count, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
+        log_debug("RREQ: destination reached => send RREP");
+
         RREP rrep = {
             .type = TYPE_RREP,
             .hop_count = 0,
