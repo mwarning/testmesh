@@ -22,7 +22,11 @@ Implemented Protocols:
   - sequence number
 - [aodv-1](src/aodv-1/)
   - like aodv-0
-  - intermediate nodes can answer also route requests
+  - intermediate nodes answer route requests as well
+- [aodv-bloom-0](src/aodv-bloom-0/)
+  - imcomplete!
+  - like aodv-1
+  - uses bloom filters
 - [dsr-0](src/dsr-0/)
   - reactive
   - sequence number
