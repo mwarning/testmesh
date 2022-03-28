@@ -170,6 +170,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
     routing_entry_update(p->src_id, addr, p->hop_count, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
+        log_debug("RREQ: destination reached => send RREP");
         RREP rrep = {
             .type = TYPE_RREP,
             .hop_count = 0,
@@ -182,9 +183,9 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
 
         send_ucast_l2(addr, &rrep, sizeof(rrep));
     } else {
-        p->hop_count += 1;
-
         log_debug("RREQ: send as broadcast => forward");
+
+        p->hop_count += 1;
         send_bcasts_l2(p, sizeof(RREQ));
     }
 }
