@@ -142,6 +142,7 @@ static void neighbor_timeout()
         if ((cur->last_updated + TIMEOUT_NEIGHBOR_SEC) < gstate.time_now) {
             log_debug("timeout neighbor 0x%08x", cur->sender_id);
             HASH_DEL(g_neighbors, cur);
+            free(cur);
         }
     }
 }

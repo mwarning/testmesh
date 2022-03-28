@@ -140,6 +140,7 @@ static void entry_timeout()
         if ((cur->last_updated + TIMEOUT_ENTRY_SEC) <= gstate.time_now) {
             log_debug("timeout entry 0x%08x", cur->sender_id);
             HASH_DEL(g_neighbors, cur);
+            free(cur);
         }
     }
 }

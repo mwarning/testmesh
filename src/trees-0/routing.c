@@ -100,6 +100,7 @@ static void neighbors_timeout()
         if ((cur->last_seen + TIMEOUT_NEIGHBOR) < gstate.time_now) {
             log_debug("timeout neighbor %s", str_addr(&cur->addr));
             HASH_DEL(g_neighbors, cur);
+            free(cur);
         }
     }
 }

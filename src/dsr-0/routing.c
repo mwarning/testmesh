@@ -217,6 +217,7 @@ static void path_cache_timeout()
         if ((cur->last_updated + PATH_CACHE_TIMEOUT_SECONDS) < gstate.time_now) {
             log_debug("timeout path cache entry for id 0x%08x", cur->dst_id);
             LL_DELETE(g_path_cache, cur);
+            free(cur);
         }
     }
 }

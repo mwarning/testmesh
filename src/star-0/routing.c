@@ -114,6 +114,7 @@ static void dht_node_timeout()
         if ((cur->updated + NODE_TIMEOUT_SECONDS) < gstate.time_now) {
             log_debug("timeout dht entry for id 0x%08x", cur->id);
             LL_DELETE(g_dht_nodes, cur);
+            free(cur);
         }
     }
 }
