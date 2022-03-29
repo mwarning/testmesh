@@ -153,6 +153,17 @@ static int conf_set(const char *opt, const char *val)
     case oVersion:
         printf(GEOMESH_VERSION "\n");
         exit(0);
+    case oPeer:
+        if (gstate.protocol == NULL) {
+            log_error("%s needs to be used after a protocol", option->name);
+            return EXIT_FAILURE;
+        }
+        if (gstate.protocol->add_peer == NULL) {
+            log_error("Protocol %s does not support peers", gstate.protocol->name);
+            return EXIT_FAILURE;
+        }
+        gstate.protocol->add_peer(stdout, val);
+        break;
     case oProtocol:
         gstate.protocol = protocols_find(val);
         if (gstate.protocol == NULL) {
