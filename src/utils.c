@@ -148,6 +148,44 @@ void hex_dump(const char *desc, const void *buf, size_t buflen)
     printf("  %s\n", buff);
 }
 
+// add source and destination and ports to create a connection fingerprint
+uint32_t get_ip_connection_fingerprint(const uint8_t *packet, size_t length)
+{
+    uint32_t fp = 0;
+
+    if (packet == NULL || length == 0) {
+        return fp;
+    }
+
+    uint8_t ip_version = (packet[0] >> 4) & 0x0f;
+    if (ip_version == 4 && length >= 20) {
+        // IPv4 packet
+        const uint32_t *p = (uint32_t*) &packet[12];
+        fp = p[0] + p[1];
+        const uint8_t protocol = packet[9];
+        if (protocol == 0x06 || protocol == 0x11) {
+            uint8_t ihl = packet[0] & 0x0f;
+            if (ihl >= 5 && length > (6 + ihl * 4)) {
+                // add ports data for TCP and UDP
+                fp += p[2 + ihl * 4];
+            }
+        }
+    } else if (ip_version == 6 && length >= 40) {
+        // IPv6 packet
+        const uint32_t *p = (uint32_t*) &packet[8];
+        for (size_t i = 0; i < 8; i++) {
+            fp += p[i];
+        }
+        const uint8_t protocol = packet[6];
+        if (length >= 44 && (protocol == 0x06 || protocol == 0x11)) {
+            // add ports data for TCP and UDP
+            fp += p[8];
+        }
+    }
+
+    return fp;
+}
+
 struct in6_ifreq {
     struct in6_addr addr;
     uint32_t prefixlen;
