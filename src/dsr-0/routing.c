@@ -532,7 +532,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
             );
             counter += 1;
         }
-        fprintf(fp, "%d entries\n", counter);
+        fprintf(fp, "%u entries\n", counter);
     } else {
         return 1;
     }

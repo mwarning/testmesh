@@ -141,7 +141,7 @@ static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t pack
         handle_DATA(src_addr, (DATA*) packet, packet_length, 0);
         break;
     default:
-        log_warning("unknown packet type 0x%02 from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
     }
 }
 

@@ -340,7 +340,7 @@ static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t pack
         handle_RREP(src_addr, (RREP*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02 from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
     }
 }
 
@@ -351,7 +351,7 @@ static int console_handler(FILE* fp, int argc, char *argv[])
     if (MATCH(1, "h")) {
         fprintf(fp, "r                       print routing table\n");
     } else if (MATCH(1, "i")) {
-        fprintf(fp, "routing entry timeout: %ds\n", TIMEOUT_ROUTING_ENTRY);
+        fprintf(fp, "routing entry timeout: %us\n", TIMEOUT_ROUTING_ENTRY);
     } else if (MATCH(1, "r")) {
         RoutingEntry *cur;
         RoutingEntry *tmp;
