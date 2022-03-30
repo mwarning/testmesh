@@ -278,7 +278,8 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         // avoid processing of this packet again
         seqnum_cache_update(data->src_id, data->seq_num);
 
-        log_debug("tun_handler: send DATA packet (0x%08x => 0x%08x)", data->src_id, data->dst_id);
+        log_debug("tun_handler: send DATA packet (0x%08x => 0x%08x) to %s",
+            data->src_id, data->dst_id, str_addr(&e->next_hop_addr));
 
         send_ucast_l2(&e->next_hop_addr, data, get_data_size(data));
     } else {
