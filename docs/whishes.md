@@ -26,5 +26,8 @@ A list of several desirable properties of a mesh routing protocol:
   - => a nodes that forwards traffic gets it's own traffic forwarded with priority
   - [Incentives in Computer Science](https://www.youtube.com/playlist?list=PLEGCF-WLh2RJdrKZ431SidRX_T4VmAKx8)
 - dynamic link aggregation for traffic
+- keep related traffic between two nodes on one path
+  - this avoids fluctuation in transmission time
+  - keeps packet order intact
 - use multiple routes to spread traffic
   - usually it is good to send packet of one connection context on one route to preserve the packet order
