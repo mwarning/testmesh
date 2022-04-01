@@ -93,6 +93,11 @@ bool address_is_unicast(const Address *addr)
     return !address_is_broadcast(addr) && !address_is_multicast(addr);
 }
 
+bool address_equal(const Address *a, const Address *b)
+{
+    return 0 == memcmp(a, b, sizeof(Address));
+}
+
 void hex_dump(const char *desc, const void *buf, size_t buflen)
 {
     const unsigned char *pc = (const unsigned char *)buf;

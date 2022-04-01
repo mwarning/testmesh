@@ -228,9 +228,9 @@ static uint8_t *get_data_payload(const DATA *p)
     return ((uint8_t*) p) + sizeof(DATA);
 }
 
-static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
+static void handle_DATA(const Address *rcv, const Address *src, const Address *dst, DATA *p, size_t length)
 {
-    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+    if (length < sizeof(DATA) || length != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
         return;
     }
@@ -241,9 +241,9 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     }
 
     log_debug("DATA: got packet: %s / 0x%08x => 0x%08x / %u",
-        str_addr(addr), p->src_id, p->dst_id, p->dst_root_hop_count);
+        str_addr(src), p->src_id, p->dst_id, p->dst_root_hop_count);
 
-    dht_add_node(p->src_id, p->src_root_hop_count, addr);
+    dht_add_node(p->src_id, p->src_root_hop_count, src);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("DATA: packet arrived at destination => accept");
@@ -289,9 +289,15 @@ static void send_cached_packet(uint32_t dst_id, uint16_t dst_hop_count, const Ad
     send_ucast_l2(addr, data, get_data_size(data));
 }
 
-static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
+static void handle_RREP(const Address *rcv, const Address *src, const Address *dst, RREP *p, size_t length)
 {
-    if (recv_len != sizeof(RREP)) {
+    // we expect broadcasts or packets for us
+    if (!address_is_unicast(dst)) {
+        log_trace("RREQ: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length != sizeof(RREP)) {
         log_debug("RREP: invalid packet size => drop");
         return;
     }
@@ -301,27 +307,31 @@ static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
         return;
     }
 
-    dht_add_node(p->ask_id, p->ask_root_hop_count, addr);
+    dht_add_node(p->ask_id, p->ask_root_hop_count, src);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("RREP: received destination => accept");
         // send cached packets
-        send_cached_packet(p->ask_id, p->ask_root_hop_count, addr);
+        send_cached_packet(p->ask_id, p->ask_root_hop_count, src);
     } else {
         Node *node = nodes_find_by_hop_count(p->dst_id);
         if (node) {
-            send_ucast_l2(&node->next_hop_addr, p, recv_len);
+            send_ucast_l2(&node->next_hop_addr, p, length);
         } else {
             log_debug("RREP: no next neighbor hop => drop");
         }
     }
 }
 
-static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
+static void handle_RREQ(const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
 {
-    Node *node;
+    // we expect broadcasts or packets for us
+    if (!address_is_unicast(dst)) {
+        log_trace("RREQ: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
 
-    if (recv_len != sizeof(RREQ)) {
+    if (length != sizeof(RREQ)) {
         log_debug("RREQ: invalid packet size => drop");
         return;
     }
@@ -333,8 +343,9 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
 
     log_debug("RREQ: got packet from 0x%08x to 0x%08x to ask for 0x%08x", p->src_id, p->dst_id, p->ask_id);
 
-    dht_add_node(p->src_id, p->src_root_hop_count, addr);
+    dht_add_node(p->src_id, p->src_root_hop_count, src);
 
+    Node *node;
     if (p->ask_id == gstate.own_id) {
         // the request is for&about us => send reply
         log_debug("RREQ: send RREP => reply");
@@ -347,7 +358,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
             .ask_root_hop_count = g_current_root.hop_count,
         };
 
-        send_ucast_l2(addr, &rrep, sizeof(RREP));
+        send_ucast_l2(src, &rrep, sizeof(RREP));
     } else if (p->dst_id == gstate.own_id) {
         // we are a intermediatary dht hop => forward to nearer hop on DHT
         node = nodes_find_by_id_space(p->ask_id);
@@ -355,7 +366,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
             log_debug("RREQ: send to next dht hop 0x%08x => forward", node->id);
             p->dst_id = node->id;
             p->dst_root_hop_count = node->hop_count;
-            send_ucast_l2(&node->next_hop_addr, p, recv_len);
+            send_ucast_l2(&node->next_hop_addr, p, length);
         } else {
             log_debug("RREQ: no next dht hop known => drop");
         }
@@ -364,7 +375,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
         node = nodes_find_by_hop_count(p->dst_id);
         if (node) {
             log_debug("RREQ: send to next dht hop 0x%08x => forward", node->id);
-            send_ucast_l2(&node->next_hop_addr, p, recv_len);
+            send_ucast_l2(&node->next_hop_addr, p, length);
         } else {
             log_debug("RREQ: no next hop neighbor => drop");
         }
@@ -381,9 +392,15 @@ static int is_newer_seqnum(uint16_t cur, uint16_t new)
     }
 }
 
-static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
+static void handle_ROOT(const Address *rcv, const Address *src, const Address *dst, ROOT *p, size_t length)
 {
-    if (recv_len != sizeof(ROOT)) {
+    // we expect broadcasts only
+    if (!address_is_broadcast(dst)) {
+        log_trace("ROOT: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length != sizeof(ROOT)) {
         log_debug("ROOT: invalid packet size => drop");
         return;
     }
@@ -399,14 +416,14 @@ static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
     }
 
     log_debug("ROOT: got packet: %s / 0x%08x / %u",
-        str_addr(addr), p->id, p->hop_count);
+        str_addr(src), p->id, p->hop_count);
 
     p->hop_count += 1;
 
     // feed the DHT
-    dht_add_node(p->id, 0, addr); // root node is 0 hops from itself
+    dht_add_node(p->id, 0, src); // root node is 0 hops from itself
     if (p->id != p->sender_id) {
-        dht_add_node(p->sender_id, p->hop_count, addr);
+        dht_add_node(p->sender_id, p->hop_count, src);
     }
 
     if (p->id < g_current_root.id) {
@@ -414,14 +431,14 @@ static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
         return;
     } else if (p->id > g_current_root.id) {
         log_debug("ROOT: got higher id (0x%08x > 0x%08x) => accept", p->id, g_current_root.id);
-        memcpy(&g_current_root.next_hop_addr, addr, sizeof(Address));
+        memcpy(&g_current_root.next_hop_addr, src, sizeof(Address));
         g_current_root.id = p->id;
     } else {
         // p->id == g_current_root.id
         if (is_newer_seqnum(g_current_root.seq_num, p->seq_num)) {
             if (p->hop_count <= g_current_root.hop_count) {
                 log_trace("ROOT: update root => accept", p->id);
-                memcpy(&g_current_root.next_hop_addr, addr, sizeof(Address));
+                memcpy(&g_current_root.next_hop_addr, src, sizeof(Address));
             } else {
                 // longer route, but it might still be good as a fallback
                 log_trace("ROOT: got longer root (%u < %u) => ignore",
@@ -487,23 +504,23 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     }
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(src_addr, (DATA*) packet, packet_length);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     case TYPE_ROOT:
-        handle_ROOT(src_addr, (ROOT*) packet, packet_length);
+        handle_ROOT(rcv, src, dst, (ROOT*) packet, packet_length);
         break;
     case TYPE_RREQ:
-        handle_RREQ(src_addr, (RREQ*) packet, packet_length);
+        handle_RREQ(rcv, src, dst, (RREQ*) packet, packet_length);
         break;
     case TYPE_RREP:
-        handle_RREP(src_addr, (RREP*) packet, packet_length);
+        handle_RREP(rcv, src, dst, (RREP*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src));
     }
 }
 

@@ -47,9 +47,14 @@ static size_t get_data_size(const DATA *data)
     return sizeof(DATA) + data->payload_length;
 }
 
-static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
+static void handle_DATA(const Address *rcv, const Address *src, const Address *dst, DATA *p, size_t length)
 {
-    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+    if (!address_is_broadcast(dst)) {
+        log_trace("unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length < sizeof(DATA) || length != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
         return;
     }
@@ -62,7 +67,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     uint8_t is_new = seqnum_cache_update(p->src_id, p->seq_num);
 
     log_debug("DATA: got packet from %s / 0x%08x => 0x%08x",
-        str_addr(addr), p->src_id, p->dst_id);
+        str_addr(src), p->src_id, p->dst_id);
 
     if (!is_new) {
         log_trace("DATA: received old packet => drop");
@@ -76,7 +81,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
         tun_write(get_data_payload(p), p->payload_length);
     } else {
         log_debug("DATA: destination not reached => rebroadcast");
-        send_bcasts_l2(p, recv_len);
+        send_bcasts_l2(p, length);
     }
 }
 
@@ -97,14 +102,14 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     send_bcasts_l2(p, get_data_size(p));
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(src_addr, (DATA*) packet, packet_length);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src));
     }
 }
 

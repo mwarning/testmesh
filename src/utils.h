@@ -48,6 +48,7 @@ uint32_t get_ip_connection_fingerprint(const uint8_t *packet, size_t length); //
 bool address_is_unicast(const Address *addr);
 bool address_is_multicast(const Address *addr);
 bool address_is_broadcast(const Address *addr);
+bool address_equal(const Address *a, const Address *b);
 uint32_t address_ifindex(const Address *addr);
 
 const char *str_enabled(uint8_t enabled);

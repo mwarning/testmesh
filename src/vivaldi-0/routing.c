@@ -192,14 +192,14 @@ static void vivaldi_update_simple(float *local_pos, const float *remote_pos, flo
     }
 }
 
-static void handle_COMM(const Address *from_addr, COMM *p, size_t recv_len)
+static void handle_COMM(const Address *rcv, const Address *src, const Address *dst, COMM *p, size_t length)
 {
-    if (recv_len != sizeof(COMM)) {
+    if (length != sizeof(COMM)) {
         log_debug("COMM: invalid packet size => drop");
         return;
     }
 
-    log_debug("COMM: got packet: %s / 0x%08x", str_addr(from_addr), p->sender_id);
+    log_debug("COMM: got packet: %s / 0x%08x", str_addr(src), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
         log_debug("COMM: recevied own packet => drop");
@@ -220,13 +220,13 @@ static void handle_COMM(const Address *from_addr, COMM *p, size_t recv_len)
         memcpy(&new[0], &p->pos[0], sizeof(new));
         memcpy(&old[0], &p->pos[0], sizeof(old));
 
-        neighbor = neighbor_add(p->sender_id, &new[0], from_addr);
+        neighbor = neighbor_add(p->sender_id, &new[0], src);
     }
 
     vivaldi_update_simple(&g_own_pos[0], &neighbor->pos[0], 1.5f);
 }
 
-static void forward_DATA(const DATA *p, size_t recv_len)
+static void forward_DATA(const DATA *p, size_t length)
 {
     unsigned send_counter = 0;
 
@@ -244,7 +244,7 @@ static void forward_DATA(const DATA *p, size_t recv_len)
         const float dist_neighbor = vec_dist(&cur->pos[0], &dst_pos[0]);
         log_debug("dist_neighbor: %.2f", dist_neighbor);
         if (dist_neighbor > dist_own) {
-            send_ucast_l2(&cur->addr, p, recv_len);
+            send_ucast_l2(&cur->addr, p, length);
             send_counter += 1;
         }
     }
@@ -252,9 +252,9 @@ static void forward_DATA(const DATA *p, size_t recv_len)
     log_debug("forward data packet to %u neighbors", send_counter);
 }
 
-static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
+static void handle_DATA(const Address *rcv, const Address *src, const Address *dst, DATA *p, size_t length)
 {
-    if (recv_len < offsetof(DATA, payload) || recv_len != (offsetof(DATA, payload) + p->length)) {
+    if (length < offsetof(DATA, payload) || length != (offsetof(DATA, payload) + p->length)) {
         log_debug("DATA: invalid packet size => drop");
         return;
     }
@@ -272,7 +272,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     p->sender_id = gstate.own_id;
     p->hop_count += 1;
 
-    forward_DATA(p, recv_len);
+    forward_DATA(p, length);
 }
 
 // receive traffic from tun0 and send to peers
@@ -282,17 +282,17 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     //forward_DATA();
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_COMM:
-        handle_COMM(src_addr, (COMM*) packet, packet_length);
+        handle_COMM(rcv, src, dst, (COMM*) packet, packet_length);
         break;
     case TYPE_DATA:
-        handle_DATA(src_addr, (DATA*) packet, packet_length);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(src));
     }
 }
 

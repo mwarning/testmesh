@@ -264,14 +264,14 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     forward_DATA(data, get_data_size(data));
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(src_addr, (DATA*) packet, packet_length);
+        handle_DATA(src, (DATA*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(src));
     }
 }
 

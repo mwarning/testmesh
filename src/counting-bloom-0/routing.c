@@ -152,14 +152,20 @@ static Neighbor *neighbor_add(uint32_t sender_id, uint8_t *bloom, const Address 
     return e;
 }
 
-static void handle_COMM(const Address *from_addr, COMM *p, size_t recv_len)
+static void handle_COMM(const Address *rcv, const Address *src, const Address *dst, COMM *p, size_t length)
 {
-    if (recv_len != sizeof(COMM)) {
+    // we expect broadcasts only
+    if (!address_is_broadcast(dst)) {
+        log_trace("COMM: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length != sizeof(COMM)) {
         log_debug("invalid COMM packet size => drop");
         return;
     }
 
-    log_debug("got COMM packet: %s / 0x%08x", str_addr(from_addr), p->sender_id);
+    log_debug("got COMM packet: %s / 0x%08x", str_addr(src), p->sender_id);
 
     if (p->sender_id == gstate.own_id) {
         log_debug("own COMM packet => drop");
@@ -178,15 +184,15 @@ only add full bloom filter if it adds zero or one more fields to be >0?
 
     Neighbor *neighbor = neighbor_find(p->sender_id);
     if (neighbor) {
-        memcpy(&neighbor->bloom, &p->bloom, sizeof(neighbor->bloom));
-        memcpy(&neighbor->addr, from_addr, sizeof(neighbor->addr)); // not expected to change but update anyway
+        memcpy(&neighbor->bloom, &p->bloom, BLOOM_M);
+        memcpy(&neighbor->addr, src, sizeof(Address)); // not expected to change but update anyway
         neighbor->last_updated = gstate.time_now;
     } else {
-        neighbor = neighbor_add(p->sender_id, p->bloom, from_addr);
+        neighbor = neighbor_add(p->sender_id, p->bloom, src);
     }
 }
 
-static void forward_DATA(const DATA *p, size_t recv_len)
+static void forward_DATA(const DATA *p, size_t length)
 {
     uint8_t dst_bloom[BLOOM_M];
     bloom_init(dst_bloom, p->dst_id);
@@ -204,7 +210,7 @@ static void forward_DATA(const DATA *p, size_t recv_len)
         const uint32_t p_neighbor = bloom_probability(&cur->bloom[0], &dst_bloom[0]);
         log_warning("p_neighbor: %u", (unsigned) p_neighbor);
         if (p_neighbor > p_own) {
-            send_ucast_l2(&cur->addr, p, recv_len);
+            send_ucast_l2(&cur->addr, p, length);
             send_counter += 1;
         }
     }
@@ -212,21 +218,27 @@ static void forward_DATA(const DATA *p, size_t recv_len)
     log_debug("forward data packet to %u neighbors", send_counter);
 }
 
-static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
+static void handle_DATA(const Address *rcv, const Address *src, const Address *dst, DATA *p, size_t recv_len)
 {
+    // we expect unicast to us only
+    if (!address_equal(rcv, dst)) {
+        log_trace("DATA: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
     if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
-        log_debug("invalid DATA packet size => drop");
+        log_debug("DATA: invalid packet size => drop");
         return;
     }
 
     if (p->sender_id == gstate.own_id) {
-        log_debug("own DATA packet => drop");
+        log_debug("DATA: received own packet => drop");
         return;
     }
 
     // just a precaution
     if (p->hop_count > 200) {
-        log_warning("max hop count reached (200)");
+        log_warning("DATA: max hop count reached (200)");
         return;
     }
 
@@ -249,17 +261,17 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     forward_DATA(data, get_data_size(data));
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_COMM:
-        handle_COMM(src_addr, (COMM*) packet, packet_length);
+        handle_COMM(rcv, src, dst, (COMM*) packet, packet_length);
         break;
     case TYPE_DATA:
-        handle_DATA(src_addr, (DATA*) packet, packet_length);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src));
     }
 }
 

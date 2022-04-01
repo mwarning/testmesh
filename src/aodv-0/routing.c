@@ -152,9 +152,15 @@ static void send_cached_packet(uint32_t dst_id, const Address *next_hop_addr)
     send_ucast_l2(next_hop_addr, data, get_data_size(data));
 }
 
-static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
+static void handle_RREQ(const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
 {
-    if (recv_len != sizeof(RREQ)) {
+    // we expect broadcasts or packets for us
+    if (!(address_is_broadcast(dst) || address_equal(rcv, dst))) {
+        log_trace("RREP: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length != sizeof(RREQ)) {
         log_debug("RREQ: invalid packet size => drop");
         return;
     }
@@ -165,9 +171,9 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
     }
 
     log_debug("RREQ: got packet: %s / 0x%08x => 0x%08x / hop_count: %u, seq_num: %u",
-        str_addr(addr), p->src_id, p->dst_id, p->hop_count, p->seq_num);
+        str_addr(dst), p->src_id, p->dst_id, p->hop_count, p->seq_num);
 
-    routing_entry_update(p->src_id, addr, p->hop_count, p->seq_num);
+    routing_entry_update(p->src_id, src, p->hop_count, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("RREQ: destination reached => send RREP");
@@ -181,7 +187,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
 
         seqnum_cache_update(rrep.src_id, rrep.seq_num);
 
-        send_ucast_l2(addr, &rrep, sizeof(rrep));
+        send_ucast_l2(src, &rrep, sizeof(rrep));
     } else {
         log_debug("RREQ: send as broadcast => forward");
 
@@ -190,9 +196,15 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
     }
 }
 
-static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
+static void handle_RREP(const Address *rcv, const Address *src, const Address *dst, RREP *p, size_t length)
 {
-    if (recv_len != sizeof(RREP)) {
+    // we expect (unicast) packets for us only
+    if (!address_equal(rcv, dst)) {
+        log_trace("RREP: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length != sizeof(RREP)) {
         log_debug("RREP: invalid packet size => drop");
         return;
     }
@@ -203,12 +215,12 @@ static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
     }
 
     log_debug("RREP: got packet: %s / 0x%08x => 0x%08x / hop_count: %u, seq_num: %u",
-        str_addr(addr), p->src_id, p->dst_id, p->hop_count, p->seq_num);
+        str_addr(src), p->src_id, p->dst_id, p->hop_count, p->seq_num);
 
-    routing_entry_update(p->src_id, addr, p->hop_count, p->seq_num);
+    routing_entry_update(p->src_id, src, p->hop_count, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
-        send_cached_packet(p->src_id, addr);
+        send_cached_packet(p->src_id, src);
     } else {
         RoutingEntry *e = routing_entry_find(p->dst_id);
         if (e) {
@@ -220,9 +232,15 @@ static void handle_RREP(const Address *addr, RREP *p, size_t recv_len)
         }
     }
 }
-static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
+static void handle_DATA(const Address *rcv, const Address *src, const Address *dst, DATA *p, size_t length)
 {
-    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+    // we expect (unicast) packets for us only
+    if (!address_equal(rcv, dst)) {
+        log_trace("DATA: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length < sizeof(DATA) || length != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
         return;
     }
@@ -240,9 +258,9 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     uint8_t *payload = get_data_payload(p);
 
     log_debug("DATA: got packet from %s / 0x%08x => 0x%08x / hop_count: %u",
-        str_addr(addr), p->src_id, p->dst_id, p->hop_count);
+        str_addr(src), p->src_id, p->dst_id, p->hop_count);
 
-    routing_entry_update(p->src_id, addr, p->hop_count, p->seq_num);
+    routing_entry_update(p->src_id, src, p->hop_count, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("DATA: reached destination => accept");
@@ -301,20 +319,20 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     }
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(src_addr, (DATA*) packet, packet_length);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     case TYPE_RREQ:
-        handle_RREQ(src_addr, (RREQ*) packet, packet_length);
+        handle_RREQ(rcv, src, dst, (RREQ*) packet, packet_length);
         break;
     case TYPE_RREP:
-        handle_RREP(src_addr, (RREP*) packet, packet_length);
+        handle_RREP(rcv, src, dst, (RREP*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src));
     }
 }
 

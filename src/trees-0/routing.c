@@ -141,22 +141,28 @@ static Neighbor *neighbors_update(const Address *addr, uint32_t path_length, con
     return cur;
 }
 
-static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
+static void handle_DATA(const Address *rcv, const Address *src, const Address *dst, DATA *p, size_t length)
 {
-    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+    // we expect (unicast) packets for us only
+    if (!address_equal(rcv, dst)) {
+        log_trace("DATA: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length < sizeof(DATA) || length != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
         return;
     }
 
     log_debug("DATA: got packet: %s / 0x%08x => 0x%08x",
-        str_addr(addr), p->src_id, p->dst_id);
+        str_addr(src), p->src_id, p->dst_id);
 
     if (p->src_id == gstate.own_id) {
         log_debug("DATA: own source id => drop packet");
         return;
     }
 
-    //neighbors_update(addr, path, p->path_length);
+    //neighbors_update(src, path, p->path_length);
 
 /*
     Entry *entry = entry_find(p->src_id);
@@ -220,10 +226,10 @@ static void set_critical(uint8_t is_critical)
     g_is_critical_time = gstate.time_now;
 }
 
-static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
+static void handle_ROOT(const Address *rcv, const Address *src, const Address *dst, ROOT *p, size_t length)
 {
-    if (recv_len < offsetof(ROOT, path)
-            || recv_len != get_root_size(p)
+    if (length < offsetof(ROOT, path)
+            || length != get_root_size(p)
             || p->path_length >= MAX_PATH_COUNT) {
         log_debug("ROOT: invalid packet size => drop");
         return;
@@ -237,10 +243,10 @@ static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
     // //(path_length >= 2 && path[path_length - 2] == gstate.own_id);
 
     log_debug("ROOT: got packet from %s, seq_num: %u, full_flood: %s, path: %u:[%s], is_echo: %s",
-        str_addr(addr), p->seq_num, str_enabled(p->full_flood), p->root_id,
+        str_addr(src), p->seq_num, str_enabled(p->full_flood), p->root_id,
         str_path(path, path_length), str_enabled(is_echo));
 
-    Neighbor *neigh = neighbors_update(addr, path_length, path);
+    Neighbor *neigh = neighbors_update(src, path_length, path);
 
     Root *root = &g_root;
 
@@ -264,10 +270,10 @@ static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
             }
             */
             log_debug("ROOT: shorter or equal path => update");
-            if (0 == memcmp(&root->parent_addr, addr, sizeof(Address))) {
+            if (0 == memcmp(&root->parent_addr, src, sizeof(Address))) {
                 root->updated_count += 1;
             } else {
-                root->parent_addr = *addr;
+                root->parent_addr = *src;
             }
             root->seq_num = p->seq_num;
             root->full_flood = p->full_flood;
@@ -281,7 +287,7 @@ static void handle_ROOT(const Address *addr, ROOT *p, size_t recv_len)
         }
     } else if (p->root_id < root->root_id) {
         log_debug("ROOT: got smaller root id => take");
-        root->parent_addr = *addr;
+        root->parent_addr = *src;
         root->root_id = p->root_id;
         root->updated_count = 0;
         root->seq_num = p->seq_num;
@@ -310,17 +316,17 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     }*/
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_DATA:
-        handle_DATA(src_addr, (DATA*) packet, packet_length);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     case TYPE_ROOT:
-        handle_ROOT(src_addr, (ROOT*) packet, packet_length);
+        handle_ROOT(rcv, src, dst, (ROOT*) packet, packet_length);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src));
     }
 }
 

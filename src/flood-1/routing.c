@@ -52,9 +52,14 @@ static size_t get_data_size(const DATA *data)
     return sizeof(DATA) + data->payload_length;
 }
 
-static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t is_full_flood)
+static void handle_DATA(const Address *rcv, const Address *src, const Address *dst, DATA *p, size_t length, uint8_t is_full_flood)
 {
-    if (recv_len < sizeof(DATA) || recv_len != get_data_size(p)) {
+    if (!address_is_broadcast(dst)) {
+        log_trace("DATA: unexpected destination (%s) => drop", str_addr(dst));
+        return;
+    }
+
+    if (length < sizeof(DATA) || length != get_data_size(p)) {
         log_debug("DATA: invalid packet size => drop");
         return;
     }
@@ -62,7 +67,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
     uint8_t is_new = seqnum_cache_update(p->src_id, p->seq_num);
 
     log_debug("DATA: got packet from %s / 0x%08x => 0x%08x (seq_num: %u, sender: 0x%08x, prev_sender: 0x%08x, full_flood: %s)",
-        str_addr(addr), p->src_id, p->dst_id, p->seq_num, p->sender, p->prev_sender, str_enabled(is_full_flood));
+        str_addr(src), p->src_id, p->dst_id, p->seq_num, p->sender, p->prev_sender, str_enabled(is_full_flood));
 
     if (is_full_flood) {
         // prevent us from starting a full flood
@@ -78,7 +83,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
                 log_debug("DATA: new packet => forward");
                 p->prev_sender = p->sender;
                 p->sender = gstate.own_id;
-                send_bcasts_l2(p, recv_len);
+                send_bcasts_l2(p, length);
             }
         } else {
             // packet already seen
@@ -101,7 +106,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len, uint8_t i
         } else {
             if (g_is_critical) {
                 log_debug("DATA: is critical => rebroadcast");
-                send_bcasts_l2(p, recv_len);
+                send_bcasts_l2(p, length);
             } else {
                 log_debug("DATA: not critical => drop");
             }
@@ -131,17 +136,17 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     send_bcasts_l2(p, get_data_size(p));
 }
 
-static void ext_handler_l2(const Address *src_addr, uint8_t *packet, size_t packet_length)
+static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
     switch (packet[0]) {
     case TYPE_DATA_FF:
-        handle_DATA(src_addr, (DATA*) packet, packet_length, 1);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length, 1);
         break;
     case TYPE_DATA_PF:
-        handle_DATA(src_addr, (DATA*) packet, packet_length, 0);
+        handle_DATA(rcv, src, dst, (DATA*) packet, packet_length, 0);
         break;
     default:
-        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src_addr));
+        log_warning("unknown packet type 0x%02x from %s", packet[0], str_addr(src));
     }
 }
 
