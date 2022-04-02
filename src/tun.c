@@ -131,7 +131,7 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
     return ret;
 }
 
-// is an IPv4 address to get a mesh ID from
+// IPv4 address, we can extract a mesh ID
 // e.g. 10.0.0.0/8 or 192.168.0.0/16
 static int addr4_is_mesh(const struct in_addr *addr)
 {
@@ -139,7 +139,7 @@ static int addr4_is_mesh(const struct in_addr *addr)
     return (a[0] == 10) || (a[0] == 192 && a[1] == 168);
 }
 
-// is an IPv6 address to get a mesh ID from
+// IPv6 address, we can extract a mesh ID
 // e.g. 200::/8 or 300::/8 or fe80::/16 (we skip the full /7 here)
 static int addr6_is_mesh(const struct in6_addr *addr)
 {
@@ -148,6 +148,7 @@ static int addr6_is_mesh(const struct in6_addr *addr)
     return (a1 == 0x02) || (a1 == 0x03) || (a1 == 0xfe && a2 == 0x80);
 }
 
+// extract node id from mesh IPv6 address
 static uint32_t in6_addr_id(const struct in6_addr *addr)
 {
     uint32_t id = 0;
@@ -161,6 +162,7 @@ static uint32_t in6_addr_id(const struct in6_addr *addr)
     return id;
 }
 
+// extract node id from mesh IPv4 address
 static uint32_t in4_addr_id(const struct in_addr *addr)
 {
     uint32_t id = 0;
