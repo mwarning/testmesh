@@ -61,10 +61,10 @@ Implemented Protocols:
 
 Notes:
  - 32Bit node identifiers are mapped to and from IP addresses
- - the hop count metric is used in all examples
- - DSR stands for Dynamic Source Routing
- - AODV stands for Ad-hoc Distance Vector
- - the number after a routing protocol name differentiates variants
+ - the hop count metric is used in all examples (so far)
+ - `DSR` stands for `Dynamic Source Routing`
+ - `AODV` stands for `Ad-hoc On-demand Distance Vector`
+ - the number after a routing protocol names variants
 
 ## Usage
 
