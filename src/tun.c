@@ -294,6 +294,12 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
 
     ssize_t write_len = write(gstate.tun_fd, buf, buflen);
 
+    log_trace("tun_write: %zu bytes, %s", write_len, debug_payload(buf, buflen));
+
+    if (write_len != buflen) {
+        log_error("write() %s", strerror(errno));
+    }
+
     if (write_len > 0) {
         if ((g_tun_bytes_updated + 1) < gstate.time_now) {
             g_tun_bytes_write_prev = g_tun_bytes_write;
@@ -301,12 +307,6 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
 
         g_tun_bytes_write += write_len;
         g_tun_bytes_updated = gstate.time_now;
-    }
-
-    log_trace("tun_write: %zu bytes, %s", write_len, debug_payload(buf, buflen));
-
-    if (write_len != buflen) {
-        log_error("write() %s", strerror(errno));
     }
 
     return write_len;
