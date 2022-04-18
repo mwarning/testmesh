@@ -280,7 +280,7 @@ static char *str_bloom(const uint8_t *bloom)
     static char buf[BLOOM_M * 8 + 1];
     char *cur = buf;
     for (size_t i = 0; i < (8 * BLOOM_M); i++) {
-        unsigned bit = (0 != BLOOM_BITTEST(bloom, i));
+        uint32_t bit = (0 != BLOOM_BITTEST(bloom, i));
         cur += sprintf(cur, "%u", bit);
     }
     return buf;
