@@ -166,6 +166,7 @@ uint32_t get_ip_connection_fingerprint(const uint8_t *packet, size_t length)
     if (ip_version == 4 && length >= 20) {
         // IPv4 packet
         const uint32_t *p = (uint32_t*) &packet[12];
+        // add addresses
         fp = p[0] + p[1];
         const uint8_t protocol = packet[9];
         if (protocol == 0x06 || protocol == 0x11) {
@@ -178,6 +179,7 @@ uint32_t get_ip_connection_fingerprint(const uint8_t *packet, size_t length)
     } else if (ip_version == 6 && length >= 40) {
         // IPv6 packet
         const uint32_t *p = (uint32_t*) &packet[8];
+        // add addresses
         for (size_t i = 0; i < 8; i++) {
             fp += p[i];
         }
@@ -239,7 +241,7 @@ const char *str_duration(time_t from, time_t to)
         secs = to - from;
     } else {
         secs = from - to;
-        // Prepend minus sign
+        // prepend minus sign
         neg = "-";
     }
 
