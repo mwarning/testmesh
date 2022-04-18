@@ -416,7 +416,7 @@ static void execute(const char *fmt, ...)
     }
 }
 
-static void sanity_check()
+static void address_mapping_sanity_check()
 {
     uint32_t id = 0x12345678;
     const uint8_t *addr = (const uint8_t*) &id;
@@ -431,14 +431,14 @@ static void sanity_check()
 
     uint32_t extracted_id = in6_addr_id(&addr_bin);
     if (extracted_id != id) {
-        log_error("inconsistent id in sanity_check(): 0x%08x != 0x%08x", extracted_id, id);
+        log_error("inconsistent id in address_mapping_sanity_check(): 0x%08x != 0x%08x", extracted_id, id);
         exit(1);
     }
 }
 
 int tun_init(uint32_t id, const char *ifname)
 {
-    sanity_check();
+    address_mapping_sanity_check();
 
     if (ifname == NULL) {
         log_error("No tunnel interface name set.");
