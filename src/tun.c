@@ -98,7 +98,7 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
             uint16_t sport = ntohs(*((uint16_t*) &buf[20]));
             uint16_t dport = ntohs(*((uint16_t*) &buf[22]));
 
-            snprintf(ret, sizeof(ret), "IPv4/%s, iplen: %zu, %s:%d => %s:%d",
+            snprintf(ret, sizeof(ret), "IPv4/%s, iplen: %zu, %s:%hu => %s:%hu",
                 protocol_str(protocol), length, str_in4(saddr), sport, str_in4(daddr), dport
             );
         } else {
@@ -116,7 +116,7 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
         if (protocol == 0x06 || protocol == 0x11) {
             uint16_t sport = ntohs(*((uint16_t*) &buf[40]));
             uint16_t dport = ntohs(*((uint16_t*) &buf[42]));
-            snprintf(ret, sizeof(ret), "IPv6/%s, iplen: %zu, [%s]:%d => [%s]:%d",
+            snprintf(ret, sizeof(ret), "IPv6/%s, iplen: %zu, [%s]:%hu => [%s]:%hu",
                 protocol_str(protocol), length, str_in6(saddr), sport, str_in6(daddr), dport
             );
         } else {
@@ -275,7 +275,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 
 static int ip_enabled(const uint8_t ip_byte)
 {
-    int ip_version = (ip_byte >> 4) & 0x0f;
+    uint8_t ip_version = (ip_byte >> 4) & 0x0f;
     switch (ip_version) {
         case 4:
             return gstate.enable_ipv4;
