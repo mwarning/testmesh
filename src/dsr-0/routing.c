@@ -519,7 +519,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     if (argc == 1 && !strcmp(argv[0], "h")) {
         fprintf(fp, "n: print routing table\n");
     } else if (argc == 1 && !strcmp(argv[0], "n")) {
-        int counter = 0;
+        uint32_t counter = 0;
         PathCacheEntry *cur;
 
         fprintf(fp, "dst-id\tupdated\tpath-count\tpath\n");
