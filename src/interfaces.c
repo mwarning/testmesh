@@ -104,7 +104,7 @@ static struct mac if_nametomac(const char *ifname)
 }
 
 // for raw socket
-static int set_promisc_mode(const char *ifname)
+static bool set_promisc_mode(const char *ifname)
 {
     struct ifreq ifopts;
 
@@ -116,7 +116,7 @@ static int set_promisc_mode(const char *ifname)
     return (rc1 == 0 && rc2 == 0) ? 0 : 1;
 }
 
-static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
+static bool setup_raw_socket(int *sock_ret, const char *ifname, uint32_t ifindex)
 {
     int sock = *sock_ret;
 
@@ -127,7 +127,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 
     if ((sock = socket(PF_PACKET, SOCK_RAW, htons(gstate.ether_type))) == -1) {
         log_error("setup_raw_socket: socket(SOCK_RAW): %s", strerror(errno));
-        return 1;
+        return false;
     }
 
     struct sockaddr_ll interfaceAddr = {0};
@@ -138,7 +138,7 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 
     if (bind(sock, (struct sockaddr *)&interfaceAddr, sizeof(interfaceAddr)) == -1) {
         log_error("setup_raw_socket: bind(): %s", strerror(errno));
-        return 1;
+        return false;
     }
 
     mreq.mr_ifindex = ifindex;
@@ -147,17 +147,17 @@ static int setup_raw_socket(int *sock_ret, const char *ifname, unsigned ifindex)
 
     if (setsockopt(sock, SOL_PACKET, PACKET_ADD_MEMBERSHIP, (void*)&mreq, (socklen_t) sizeof(mreq)) == -1) {
         log_error("setup_raw_socket: setsockopt(PACKET_ADD_MEMBERSHIP): %s", strerror(errno));
-        return 1;
+        return false;
     }
 
     *sock_ret = sock;
 
     net_add_handler(sock, &read_internal_l2);
 
-    return 0;
+    return true;
 }
 
-static int interface_setup(struct interface *ifa)
+static bool interface_setup(struct interface *ifa)
 {
     const char *ifname = ifa->ifname;
     int quiet = ifa->is_dynamic;
@@ -167,31 +167,31 @@ static int interface_setup(struct interface *ifa)
         if (!quiet) {
             log_warning("interface not found: %s", ifname);
         }
-        return 1;
+        return false;
     }
 
     ifa->ifmac = if_nametomac(ifname);
     if (memcmp(&ifa->ifmac, &g_nullmac, ETH_ALEN) == 0) {
         if (!quiet)
            log_warning("failed to get interface MAC address: %s", ifname);
-        return 1;
+        return false;
     }
 
     if (gstate.protocol->ext_handler_l2) {
         if (set_promisc_mode(ifname)) {
             if (!quiet)
                 log_warning("failed to set interface into promisc mode: %s", ifname);
-            return 1;
+            return false;
         }
 
-        if (setup_raw_socket(&ifa->ifsock_l2, ifa->ifname, ifa->ifindex)) {
-            return 1;
+        if (!setup_raw_socket(&ifa->ifsock_l2, ifa->ifname, ifa->ifindex)) {
+            return false;
         }
     }
 
     log_info("interface added: %s (%s)", ifa->ifname, ifa->is_dynamic ? "dynamic" : "static");
 
-    return 0;
+    return true;
 }
 
 static struct interface *get_interface_by_fd(int fd)
@@ -397,7 +397,7 @@ void send_bcasts_l2(const void* data, size_t data_len)
 
     memcpy(&sendbuf[sizeof(struct ethhdr)], data, data_len);
 
-    int count = 0;
+    uint32_t count = 0;
     struct interface *ifa = g_interfaces;
     while (ifa) {
         send_internal_l2(ifa, &dst_addr[0], &sendbuf[0], sendlen);
@@ -405,7 +405,7 @@ void send_bcasts_l2(const void* data, size_t data_len)
         ifa = ifa->next;
     }
 
-    log_trace("send_raws: %d bytes on %d interfaces", (int) data_len, count);
+    log_trace("send_raws: %zu bytes on %u interfaces", data_len, count);
 }
 
 bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
@@ -515,15 +515,15 @@ static void join_mcast(int sock, int ifindex)
     //}
 }
 
-int send_mcast_l3(unsigned ifindex, const void* data, int data_len)
+bool send_mcast_l3(unsigned ifindex, const void* data, int data_len)
 {
     if (ifindex == 0) {
-        return 1;
+        return false;
     }
 
     if (gstate.sock_udp == -1) {
         log_error("no handler registered for udp socket!");
-        return 1;
+        return false;
     }
 
     // ignore errors if we already have joined
@@ -534,14 +534,15 @@ int send_mcast_l3(unsigned ifindex, const void* data, int data_len)
         log_warning("setsockopt(IPV6_MULTICAST_IF) %s\n", strerror(errno));
         // interface vanished or have been recreated (for VPN tunnels or usb ethernet dongles)
         //g_do_detect_interfaces = 1;
-        return 1;
+        return false;
     }
 
     if (sendto(gstate.sock_udp, data, data_len, 0, (struct sockaddr*) &gstate.mcast_addr, sizeof(gstate.mcast_addr)) < 0) {
         log_warning("sendto() %s", strerror(errno));
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
 void send_mcasts_l3(const void* data, int data_len)
@@ -557,8 +558,8 @@ void send_mcasts_l3(const void* data, int data_len)
 
     struct interface *ifa = NULL;
     while ((ifa = utarray_next(g_interfaces, ifa))) {
-        int rc = send_mcast_l3(ifa->ifindex, data, data_len);
-        if (rc != 0) {
+        bool ok = send_mcast_l3(ifa->ifindex, data, data_len);
+        if (!ok) {
             // disable interface
             ifa->ifindex = 0;
             ifa->ifmac = g_nullmac;
@@ -685,8 +686,8 @@ static void periodic_interfaces_handler(int _events, int _fd)
         }
 
         if (!is_valid_ifa(ifa)) {
-            int rc = interface_setup(ifa);
-            if (rc && ifa->is_dynamic) {
+            bool ok = interface_setup(ifa);
+            if (!ok && ifa->is_dynamic) {
                 struct interface *next = ifa->next;
                 interface_remove(ifa_prev, ifa);
                 ifa = next;
