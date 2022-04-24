@@ -228,7 +228,7 @@ static void handle_COMM(const Address *rcv, const Address *src, const Address *d
 
 static void forward_DATA(const DATA *p, size_t length)
 {
-    unsigned send_counter = 0;
+    uint32_t send_counter = 0;
 
     float dst_pos[DIM];
     memcpy(&dst_pos[0], &p->dst_pos[0], sizeof(p->dst_pos));
@@ -353,7 +353,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
     } else if (MATCH(1, "i")) {
         fprintf(fp, "  own pos: %s\n", str_pos(buf_pos, g_own_pos));
     } else if (MATCH(1, "n")) {
-        unsigned counter = 0;
+        uint32_t counter = 0;
         Neighbor *cur;
         Neighbor *tmp;
 
