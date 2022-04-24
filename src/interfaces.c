@@ -286,8 +286,9 @@ bool interface_del(const char *ifname)
     return false;
 }
 
-static void set_macaddr(Address *dst, const void *mac_addr, int ifindex)
+static void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
 {
+    memset(dst, 0, sizeof(Address));
     dst->mac.family = AF_MAC;
     memcpy(&dst->mac.addr, mac_addr, ETH_ALEN);
     dst->mac.ifindex = ifindex;
@@ -331,13 +332,14 @@ static void read_internal_l2(int events, int fd)
 
     struct ethhdr *eh = (struct ethhdr *) &buf[0];
 
-    Address src_addr = {0};
-    Address dst_addr = {0};
-    Address rcv_addr = {0};
+    Address src_addr;
+    Address dst_addr;
+    Address rcv_addr;
 
-    set_macaddr(&src_addr, &eh->h_source, ifa->ifindex);
-    set_macaddr(&dst_addr, &eh->h_dest, ifa->ifindex);
-    set_macaddr(&rcv_addr, &ifa->ifmac, ifa->ifindex);
+    init_macaddr(&src_addr, &eh->h_source, ifa->ifindex);
+    init_macaddr(&dst_addr, &eh->h_dest, ifa->ifindex);
+    init_macaddr(&rcv_addr, &ifa->ifmac, ifa->ifindex);
+
 
     traffic_add_bytes_read(&src_addr, readlen);
 
@@ -377,8 +379,8 @@ static bool send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_A
         return false;
     }
 
-    Address addr = {0};
-    set_macaddr(&addr, dst_addr, ifa->ifindex);
+    Address addr;
+    init_macaddr(&addr, dst_addr, ifa->ifindex);
     traffic_add_bytes_write(&addr, sendlen);
 
     return true;
