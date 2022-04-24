@@ -123,6 +123,10 @@ socat - UNIX-CONNECT:/tmp/testmesh.sock
 * [Development Notes](docs/notes.md)
 * [Whish List](docs/whishes.md)
 
+## Similar Projects
+
+* [LightKone](https://www.lightkone.eu): abstract mesh routing protocol via 5 parameters
+
 ## Other Mobile Ad-hoc Network Protocols
 
 Some popular or interesting Mobile Ad-hoc mesh routing protocols.
