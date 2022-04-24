@@ -15,6 +15,8 @@ typedef struct {
 
     uint64_t bytes_write;
     uint64_t bytes_read;
+    uint64_t packets_write;
+    uint64_t packets_read;
     time_t time_prev;
 
     // for speed measurement
@@ -70,10 +72,6 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_read, uint64_t
         g_traffic_total.bytes_write_prev = g_traffic_total.bytes_write;
     }
 
-    g_traffic_total.bytes_read += bytes_read;
-    g_traffic_total.bytes_write += bytes_write;
-    g_traffic_total.time_prev = gstate.time_now;
-
     HASH_FIND(hh, g_traffic, addr, sizeof(Address), cur);
     if (cur == NULL) {
         traffic_maintain_max_entries();
@@ -93,8 +91,21 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_read, uint64_t
         cur->time_prev = gstate.time_now;
     }
 
-    cur->bytes_read += bytes_read;
-    cur->bytes_write += bytes_write;
+    if (bytes_read > 0) {
+        cur->packets_read += 1;
+        cur->bytes_read += bytes_read;
+        g_traffic_total.packets_read += 1;
+        g_traffic_total.bytes_read += bytes_read;
+        g_traffic_total.time_prev = gstate.time_now;
+    }
+
+    if (bytes_write > 0) {
+        cur->packets_write += 1;
+        cur->bytes_write += bytes_write;
+        g_traffic_total.packets_write += 1;
+        g_traffic_total.bytes_write += bytes_write;
+        g_traffic_total.time_prev = gstate.time_now;
+    }
 }
 
 void traffic_add_bytes_write(const Address *addr, uint64_t bytes)
@@ -207,33 +218,40 @@ void traffic_debug(FILE* out, int argc, char *argv[])
         return;
     }
 
-    uint32_t entries_count = MIN(g_traffic_count, max_print);
-    Traffic **entries = malloc(entries_count * sizeof(Traffic*));
+    if (max_print > 0) {
+        uint32_t entries_count = MIN(g_traffic_count, max_print);
+        Traffic **entries = malloc(entries_count * sizeof(Traffic*));
 
-    uint32_t found_count = traffic_fetch_subset(entries, entries_count, 0);
+        uint32_t found_count = traffic_fetch_subset(entries, entries_count, 0);
 
-    for (size_t i = 0; i < found_count; i++) {
-        Traffic *cur = entries[i];
-        fprintf(out, "%s/%s: in: %6s (%6s/s), out: %6s (%6s/s), %s ago\n",
-            str_addr(&cur->addr),
-            str_addr_ifname(&cur->addr),
-            str_bytes(cur->bytes_read),
-            str_bytes(speed_read(cur)),
-            str_bytes(cur->bytes_write),
-            str_bytes(speed_write(cur)),
-            str_ago(cur->time_prev));
+        for (size_t i = 0; i < found_count; i++) {
+            Traffic *cur = entries[i];
+            fprintf(out, "%s/%s: RX: %6s (%6s/s), TX: %6s (%6s/s), %s ago\n",
+                str_addr(&cur->addr),
+                str_addr_ifname(&cur->addr),
+                str_bytes(cur->bytes_read),
+                str_bytes(speed_read(cur)),
+                str_bytes(cur->bytes_write),
+                str_bytes(speed_write(cur)),
+                str_ago(cur->time_prev));
+        }
+
+        free(entries);
+
+        fprintf(out, "%d addresses shown, %d overall, %d ever, %d max\n",
+            entries_count, g_traffic_count, g_traffic_count_all, g_traffic_count_max);
     }
 
-    free(entries);
-
-    fprintf(out, "%d addresses shown, %d overall, %d ever, %d max\n",
-        entries_count, g_traffic_count, g_traffic_count_all, g_traffic_count_max);
-
-    fprintf(out, "total: %s (%s/s) in, %s (%s/s) out\n",
+    fprintf(out, "total RX: %s (speed: %s/s, packets: %"PRIu64")\n",
         str_bytes(g_traffic_total.bytes_read),
         str_bytes(speed_read(&g_traffic_total)),
+        g_traffic_total.packets_read
+    );
+
+    fprintf(out, "total TX: %s (speed: %s/s, packets: %"PRIu64")\n",
         str_bytes(g_traffic_total.bytes_write),
-        str_bytes(speed_write(&g_traffic_total))
+        str_bytes(speed_write(&g_traffic_total)),
+        g_traffic_total.packets_write
     );
 }
 
