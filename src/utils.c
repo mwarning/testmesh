@@ -233,6 +233,10 @@ const char *str_duration(time_t from, time_t to)
     static size_t strdurationbuf_i = 0;
     char *buf = strdurationbuf[++strdurationbuf_i % 4];
 
+    if (from == 0 || to == 0) {
+        return "unknown";
+    }
+
     size_t years, days, hours, minutes, seconds;
     uint64_t secs;
     const char *neg = "";
