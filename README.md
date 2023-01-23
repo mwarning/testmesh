@@ -81,25 +81,26 @@ Use the `tun0` interface to exchange packets with other instances.
 $ ./build/testmesh -h
 Usage: testmesh -i eth0 -i wlan0
 
-  --protocol,-p <protocol>    Select routing protocol
-  --daemon,-d                 Run as daemon
-  --interface,-i <interface>  Limit to given interfaces
-  --find-interfaces           Find and add interfaces automatically
-  --own-id <id>               Identifier of this node (default: <random>)
-  --gateway-id <id>           Identifier of the gateway node (default: <none>)
-  --peer <address>            Add a peer manually by address
-  --control,-c <path>         Control socket to connect to a daemon
-  --tun-name <ifname>         Network entry interface, use none to disable (Default: tun0)
-  --tun-setup <1/0>           Auto configure entrey interface with IP address (Default: 1)
-  --ether-type <hex>          Ethernet type (Default: 88B5)
-  --log-file,-lf <path>       Write log output to file
-  --log-level,-ll <level>     Log level. From 0 to 6 (Default: 3).
-  --log-time,-lt              Add time stamps to log output.
-  --disable-stdin             Disable interactive console on startup
-  --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)
-  --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)
-  --help,-h                   Prints this help text
-  --version                   Print version
+  --protocol,-p <protocol>        Select routing protocol
+  --daemon,-d                     Run as daemon
+  --interface,-i <interface>      Limit to given interfaces
+  --find-interfaces [on/off/auto] Find and add interfaces automatically (default: auto)
+  --find-interfaces               Find and add interfaces automatically
+  --own-id <id>                   Identifier of this node (default: <random>)
+  --gateway-id <id>               Identifier of the gateway node (default: <none>)
+  --peer <address>                Add a peer manually by address
+  --control,-c <path>             Control socket to connect to a daemon
+  --tun-name <ifname>             Network entry interface, use none to disable (default: tun0)
+  --tun-setup <on/off>            Auto configure entry interface with IP address (default: on)
+  --ether-type <hex>              Ethernet type (default: 88B5)
+  --log-file,-lf <path>           Write log output to file
+  --log-level,-ll <level>         Log level. From 0 to 6 (Default: 3).
+  --log-time,-lt                  Add time stamps to log output.
+  --disable-stdin                 Disable interactive console on startup
+  --enable-ipv4,-4 <on/off>       Enable IPv4 (default: off)
+  --enable-ipv6,-6 <on/off>       Enable IPv6 (default: on)
+  --help,-h                       Print this help text
+  --version                       Print version
 
 Valid protocols: dsr-0, flood-0, ...
 ```

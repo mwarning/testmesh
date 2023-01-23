@@ -34,6 +34,17 @@ struct interface {
 static struct interface *g_interfaces = NULL;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
+
+const char *str_find_interfaces(int find_interfaces_value)
+{
+    switch (find_interfaces_value) {
+        case FIND_INTERFACES_ON: return "on";
+        case FIND_INTERFACES_OFF: return "off";
+        case FIND_INTERFACES_AUTO: return "auto";
+        default: return "<invalid>";
+    }
+}
+
 // forward declaration
 static void read_internal_l2(int events, int fd);
 
@@ -671,7 +682,8 @@ static void periodic_interfaces_handler(int _events, int _fd)
         check_time = gstate.time_now + 5;
     }
 
-    if (gstate.find_interfaces) {
+    if ((gstate.find_interfaces == FIND_INTERFACES_ON)
+            || (g_interfaces == NULL && gstate.find_interfaces == FIND_INTERFACES_AUTO)) {
         find_and_add_interfaces();
     }
 
@@ -726,10 +738,11 @@ int interfaces_debug(FILE *fd)
     return 0;
 }
 
-void interfaces_init()
+int interfaces_init()
 {
-    if (g_interfaces == NULL && gstate.find_interfaces == 0) {
-        log_warning("No mesh interfaces given.");
+    if (g_interfaces == NULL && gstate.find_interfaces == FIND_INTERFACES_OFF) {
+        log_error("No mesh interfaces given.");
+        return 1;
     }
 
     if (gstate.sock_udp > 0) {
@@ -743,4 +756,6 @@ void interfaces_init()
 #endif
 
     net_add_handler(-1, &periodic_interfaces_handler);
+
+    return 0;
 }

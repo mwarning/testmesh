@@ -43,7 +43,7 @@ static struct option_t g_options[] = {
     {"--gateway-id", 1, oGatewayIdentifier},
     {"--own-id", 1, oOwnIdentifier},
     {"--ifname", 1, oInterface},
-    {"--find-interfaces", 0, oFindInterfaces},
+    {"--find-interfaces", 1, oFindInterfaces},
     {"--interface", 1, oInterface},
     {"-i", 1, oInterface},
     {"--log-file", 1, oLogFile},
@@ -75,25 +75,25 @@ static struct option_t g_options[] = {
 static const char *usage_str = 
     "Usage: testmesh -i eth0 -i wlan0\n"
     "\n"
-    "  --protocol,-p <protocol>    Select routing protocol\n"
-    "  --daemon,-d                 Run as daemon in background\n"
-    "  --interface,-i <interface>  Limit to given interfaces\n"
-    "  --find-interfaces           Find and add interfaces automatically\n"
-    "  --own-id <id>               Identifier of this node (default: <random>)\n"
-    "  --gateway-id <id>           Identifier of the gateway node (default: <none>)\n"
-    "  --peer <address>            Add a peer manually by address\n"
-    "  --control,-c <path>         Control socket to connect to a daemon\n"
-    "  --tun-name <ifname>         Network entry interface, use none to disable (Default: tun0)\n"
-    "  --tun-setup <1/0>           Auto configure entrey interface with IP address (Default: 1)\n"
-    "  --ether-type <hex>          Ethernet type (Default: 88B5)\n"
-    "  --log-file,-lf <path>       Write log output to file\n"
-    "  --log-level,-ll <level>     Log level. From 0 to " STR(MAX_LOG_LEVEL) " (Default: 3)\n"
-    "  --log-timestamp,-lt         Add timestamps to log output\n"
-    "  --disable-stdin             Disable interactive console on startup\n"
-    "  --enable-ipv4,-4 <0/1>      Enable IPv4 (Default: 0)\n"
-    "  --enable-ipv6,-6 <1/0>      Enable IPv6 (Default: 1)\n"
-    "  --help,-h                   Prints this help text\n"
-    "  --version                   Print version";
+    "  --protocol,-p <protocol>        Select routing protocol\n"
+    "  --daemon,-d                     Run as daemon in background\n"
+    "  --interface,-i <interface>      Limit to given interfaces\n"
+    "  --find-interfaces [on/off/auto] Find and add interfaces automatically (default: auto)\n"
+    "  --own-id <id>                   Identifier of this node (default: <random>)\n"
+    "  --gateway-id <id>               Identifier of the gateway node (default: <none>)\n"
+    "  --peer <address>                Add a peer manually by address\n"
+    "  --control,-c <path>             Control socket to connect to a daemon\n"
+    "  --tun-name <ifname>             Network entry interface, use none to disable (default: tun0)\n"
+    "  --tun-setup <on/off>            Auto configure entry interface with IP address (default: on)\n"
+    "  --ether-type <hex>              Ethernet type (default: 88B5)\n"
+    "  --log-file,-lf <path>           Write log output to file\n"
+    "  --log-level,-ll <level>         Log level. From 0 to " STR(MAX_LOG_LEVEL) " (default: 3)\n"
+    "  --log-timestamp,-lt             Add timestamps to log output\n"
+    "  --disable-stdin                 Disable interactive console on startup\n"
+    "  --enable-ipv4,-4 <on/off>       Enable IPv4 (default: off)\n"
+    "  --enable-ipv6,-6 <on/off>       Enable IPv6 (default: on)\n"
+    "  --help,-h                       Print this help text\n"
+    "  --version                       Print version";
 
 static int parse_hex(uint64_t *ret, const char *val, int bytes)
 {
@@ -151,7 +151,7 @@ static int conf_set(const char *opt, const char *val)
         protocols_print(stdout);
         exit(0);
     case oVersion:
-        printf(GEOMESH_VERSION "\n");
+        printf(PROGRAMM_VERSION "\n");
         exit(0);
     case oPeer:
         if (gstate.protocol == NULL) {
@@ -175,7 +175,16 @@ static int conf_set(const char *opt, const char *val)
         gstate.do_fork = 1;
         break;
     case oFindInterfaces:
-        gstate.find_interfaces = 1;
+        if (0 == strcmp(val, "on")) {
+            gstate.find_interfaces = FIND_INTERFACES_ON;
+        } else if (0 == strcmp(val, "off")) {
+            gstate.find_interfaces = FIND_INTERFACES_OFF;
+        } else if (0 == strcmp(val, "auto")) {
+            gstate.find_interfaces = FIND_INTERFACES_AUTO;
+        } else {
+            log_error("Unknown value for %s %s", opt, val);
+            return EXIT_FAILURE;
+        }
         break;
     case oInterface:
         if (gstate.protocol == NULL) {
@@ -202,7 +211,14 @@ static int conf_set(const char *opt, const char *val)
         }
         break;
     case oTunSetup:
-        gstate.tun_setup = 1;
+        if (0 == strcmp(val, "on")) {
+            gstate.tun_setup = 1;
+        } else if (0 == strcmp(val, "off")) {
+            gstate.tun_setup = 0;
+        } else {
+            log_error("Unknown value for %s %s", opt, val);
+            return EXIT_FAILURE;
+        }
         break;
     case oControlSocket:
         gstate.control_socket_path = strdup(val);
@@ -235,10 +251,24 @@ static int conf_set(const char *opt, const char *val)
         gstate.disable_stdin = 1;
         break;
     case oEnableIPv4:
-        gstate.enable_ipv4 = n;
+        if (0 == strcmp(val, "on")) {
+            gstate.enable_ipv4 = 1;
+        } else if (0 == strcmp(val, "off")) {
+            gstate.enable_ipv4 = 0;
+        } else {
+            log_error("Unknown value for %s %s", opt, val);
+            return EXIT_FAILURE;
+        }
         break;
     case oEnableIPv6:
-        gstate.enable_ipv6 = n;
+        if (0 == strcmp(val, "on")) {
+            gstate.enable_ipv6 = 1;
+        } else if (0 == strcmp(val, "off")) {
+            gstate.enable_ipv6 = 0;
+        } else {
+            log_error("Unknown value for %s %s", opt, val);
+            return EXIT_FAILURE;
+        }
         break;
     case oEtherType:
         if (parse_hex(&n, val, sizeof(gstate.ether_type)) || n == 0) {

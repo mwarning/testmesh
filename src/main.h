@@ -11,7 +11,7 @@
 #include "utils.h"
 
 #define MAIN_SRVNAME "testmesh"
-#define GEOMESH_VERSION "1.0.0"
+#define PROGRAMM_VERSION "1.0.0"
 
 #define MULTICAST_ADDR "ff12::114"
 #define MULTICAST_PORT 4321

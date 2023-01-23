@@ -117,22 +117,22 @@ static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
             }
         }
     } else if (MATCH(1, "i")) {
-        fprintf(fp, "protocol:   %s\n", gstate.protocol->name);
-        fprintf(fp, "own id:     0x%08x\n", gstate.own_id);
+        fprintf(fp, "protocol:        %s\n", gstate.protocol->name);
+        fprintf(fp, "own id:          0x%08x\n", gstate.own_id);
         if (gstate.gateway_id_set) {
-            fprintf(fp, "gateway id: 0x%08x\n", gstate.gateway_id);
+            fprintf(fp, "gateway id:      0x%08x\n", gstate.gateway_id);
         } else {
-            fprintf(fp, "gateway id: none\n");
+            fprintf(fp, "gateway id:      none\n");
         }
-        fprintf(fp, "process id: %u\n", (unsigned) getpid());
-        fprintf(fp, "log level:  %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
-        fprintf(fp, "uptime:     %s\n", str_ago(gstate.time_started));
+        fprintf(fp, "process id:      %u\n", (unsigned) getpid());
+        fprintf(fp, "log level:       %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
+        fprintf(fp, "uptime:          %s\n", str_ago(gstate.time_started));
+        fprintf(fp, "find interfaces: %s\n", str_find_interfaces(gstate.find_interfaces));
         if (gstate.tun_name) {
-            fprintf(fp, "tun device: %s\n", gstate.tun_name);
-            fprintf(fp, "tun read:   %s (%s/s)\n",
-                str_bytes(tun_read_total()), str_bytes(tun_read_speed()));
-            fprintf(fp, "tun write:  %s (%s/s)\n",
-                str_bytes(tun_write_total()), str_bytes(tun_write_speed()));
+            fprintf(fp, "tun device:      %s\n", gstate.tun_name);
+            fprintf(fp, "tun traffic:     %s (%"PRIu64") / %s (%"PRIu64")\n",
+                str_bytes(tun_read_bytes()), tun_read_count(),
+                str_bytes(tun_write_bytes()), tun_write_count());
         }
         if (gstate.protocol->console) {
             gstate.protocol->console(fp, argc, argv);
