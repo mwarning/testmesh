@@ -229,7 +229,7 @@ const char *str_enabled(uint8_t enabled)
 
 const char *str_duration(time_t from, time_t to)
 {
-    static char strdurationbuf[4][16];
+    static char strdurationbuf[4][64];
     static size_t strdurationbuf_i = 0;
     char *buf = strdurationbuf[++strdurationbuf_i % 4];
 
@@ -260,15 +260,15 @@ const char *str_duration(time_t from, time_t to)
     seconds = secs;
 
     if (years > 0) {
-        snprintf(buf, 16, "%s%zuy%zud", neg, years, days);
+        snprintf(buf, 64, "%s%zuy%zud", neg, years, days);
     } else if (days > 0) {
-        snprintf(buf, 16, "%s%zud%zuh", neg, days, hours);
+        snprintf(buf, 64, "%s%zud%zuh", neg, days, hours);
     } else if (hours > 0) {
-        snprintf(buf, 16, "%s%zuh%zum", neg, hours, minutes);
+        snprintf(buf, 64, "%s%zuh%zum", neg, hours, minutes);
     } else if (minutes > 0) {
-        snprintf(buf, 16, "%s%zum%zus", neg, minutes, seconds);
+        snprintf(buf, 64, "%s%zum%zus", neg, minutes, seconds);
     } else {
-        snprintf(buf, 16, "%s%zus", neg, seconds);
+        snprintf(buf, 64, "%s%zus", neg, seconds);
     }
 
     return buf;
