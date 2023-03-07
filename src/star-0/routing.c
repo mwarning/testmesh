@@ -524,20 +524,18 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE *fp, int argc, char *argv[])
+static int console_handler(FILE *fp, const char *argv[])
 {
-    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
-
-    if (MATCH(1, "h")) {
+    if (match(argv, "h")) {
         fprintf(fp,
             "r                       print root\n"
             "n                       print routing table\n"
         );
-    } else if (MATCH(1, "r")) {
+    } else if (match(argv, "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
             g_current_root.id, g_current_root.hop_count, g_current_root.seq_num,
             str_ago(g_current_root.updated));
-    } else if (MATCH(1, "n")) {
+    } else if (match(argv, "n")) {
         int counter = 0;
         Node *cur;
 

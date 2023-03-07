@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <stdarg.h>
+#include <inttypes.h>
 
 #include "log.h"
 #include "utils.h"
@@ -38,7 +39,7 @@ void console_log_message(const char *message)
     }
 }
 
-static int tokenizer(char *argv[], int argc_max, char *input)
+static int tokenizer(char *argv[], size_t argv_length, char *input)
 {
     int argc = 0;
 
@@ -47,8 +48,8 @@ static int tokenizer(char *argv[], int argc_max, char *input)
     for (size_t i = 0; i < len; i++) {
         if (input[i] <= ' ') {
             if (p) {
-                if (argc == argc_max) {
-                    log_warning("too many tokens\n");
+                if ((argc + 1) == argv_length) {
+                    log_warning("tokenizer: too many tokens");
                     return 0;
                 }
                 argv[argc++] = p;
@@ -61,62 +62,61 @@ static int tokenizer(char *argv[], int argc_max, char *input)
     }
 
     if (p) {
-        if (argc == argc_max) {
-            log_warning("too many tokens\n");
+        if ((argc + 1) == argv_length) {
+            log_warning("tokenizer: too many tokens");
             return 0;
         }
         argv[argc++] = p;
     }
 
+    // NULL terminate
+    argv[argc + 1] = NULL;
+
     return argc;
 }
 
-static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
+static int console_exec(int clientsock, FILE *fp, const char *argv[])
 {
-    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
-
     int ret = 0;
 
-    if (argc > 0 && !strcmp(argv[0], "t")) {
-        traffic_debug(fp, argc, argv);
-    } else if (MATCH(2, "peer-add")) {
+    if (match(argv, "t")) {
+        traffic_debug(fp, argv);
+    } else if (match(argv, "peer-add")) {
         if (gstate.protocol->add_peer) {
             gstate.protocol->add_peer(fp, argv[1]);
         } else {
             fprintf(fp, "not supported by protocol %s\n", gstate.protocol->name);
         }
-    } else if (MATCH(1, "q")) {
+    } else if (match(argv, "q")) {
         // close console
         ret = 1;
-    } else if (MATCH(2, "interface-add")) {
+    } else if (match(argv, "interface-add,*")) {
         interface_add(argv[1]);
-    } else if (MATCH(2, "interface-del")) {
+    } else if (match(argv, "interface-del,*")) {
         interface_del(argv[1]);
-    } else if (MATCH(1, "interfaces")) {
+    } else if (match(argv, "interfaces")) {
         interfaces_debug(fp);
-    } else if (MATCH(1, "v") || MATCH(2, "v")) {
-        if (argc == 2) {
-            char *ptr = NULL;
-            const char *end = argv[1] + strlen(argv[1]);
-            uint32_t log_level = strtoul(argv[1], &ptr, 10);
-            if (ptr != end || log_level > MAX_LOG_LEVEL) {
-                fprintf(fp, "invalid log level\n");
-            } else {
-                gstate.log_level = log_level;
-                fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
-            }
+    } else if (match(argv, "v")) {
+        if (g_console_socket == -1) {
+            g_console_socket = clientsock;
+            fprintf(fp, "log to console enabled\n");
+        } else if (g_console_socket == clientsock) {
+            g_console_socket = -1;
+            fprintf(fp, "log to console disabled\n");
         } else {
-            if (g_console_socket == -1) {
-                g_console_socket = clientsock;
-                fprintf(fp, "log to console enabled\n");
-            } else if (g_console_socket == clientsock) {
-                g_console_socket = -1;
-                fprintf(fp, "log to console disabled\n");
-            } else {
-                fprintf(fp, "log goes to different remote console already\n");
-            }
+            fprintf(fp, "log goes to different remote console already\n");
         }
-    } else if (MATCH(1, "i")) {
+    } else if (match(argv, "v,*")) {
+        char *ptr = NULL;
+        const char *end = argv[1] + strlen(argv[1]);
+        uint32_t log_level = strtoul(argv[1], &ptr, 10);
+        if (ptr != end || log_level > MAX_LOG_LEVEL) {
+            fprintf(fp, "invalid log level\n");
+        } else {
+            gstate.log_level = log_level;
+            fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
+        }
+    } else if (match(argv, "i")) {
         fprintf(fp, "protocol:        %s\n", gstate.protocol->name);
         fprintf(fp, "own id:          0x%08x\n", gstate.own_id);
         if (gstate.gateway_id_set) {
@@ -135,9 +135,9 @@ static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
                 str_bytes(tun_write_bytes()), tun_write_count());
         }
         if (gstate.protocol->console) {
-            gstate.protocol->console(fp, argc, argv);
+            gstate.protocol->console(fp, argv);
         }
-    } else if (MATCH(1, "h")) {
+    } else if (match(argv, "h")) {
         fprintf(fp,
             "i                       General information.\n"
             "t [<show-num>]          Show traffic statistics\n"
@@ -151,14 +151,14 @@ static int console_exec(int clientsock, FILE *fp, int argc, char *argv[])
         );
 
         if (gstate.protocol->console) {
-            gstate.protocol->console(fp, argc, argv);
+            gstate.protocol->console(fp, argv);
         }
     } else {
         int rc = 1;
 
         // call protocol specific console handler
         if (gstate.protocol->console) {
-            rc = gstate.protocol->console(fp, argc, argv);
+            rc = gstate.protocol->console(fp, argv);
         }
 
         if (rc != 0) {
@@ -175,7 +175,6 @@ void console_client_handler(int rc, int clientsock)
 {
     char request[256];
     char *argv[8];
-    int argc;
 
     int ret = 0;
     FILE *fp;
@@ -187,7 +186,7 @@ void console_client_handler(int rc, int clientsock)
     fp = fdopen(dup(clientsock), "w");
 
     while (1) {
-        int read_len = read(clientsock, request, sizeof(request));
+        ssize_t read_len = read(clientsock, request, sizeof(request));
         if (read_len == 0) {
             // connection was closed by the remote
             ret = 1;
@@ -200,8 +199,8 @@ void console_client_handler(int rc, int clientsock)
         }
 
         request[read_len] = '\0';
-        argc = tokenizer(argv, ARRAY_NELEMS(argv), request);
-        ret = console_exec(clientsock, fp, argc, argv);
+        tokenizer(argv, ARRAY_NELEMS(argv), request);
+        ret = console_exec(clientsock, fp, argv);
     }
 
     if (fp) {

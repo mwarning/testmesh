@@ -150,11 +150,9 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE* fp, int argc, char *argv[])
+static int console_handler(FILE* fp, const char *argv[])
 {
-    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
-
-    if (MATCH(1, "i")) {
+    if (match(argv, "i")) {
         fprintf(fp, "critical:   %s (%s ago)\n",
             str_enabled(g_is_critical), str_ago(g_is_critical_time));
     } else {

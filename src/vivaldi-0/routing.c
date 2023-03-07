@@ -342,17 +342,15 @@ static char *str_pos(char *buf, const float *pos)
     return buf;
 }
 
-static int console_handler(FILE *fp, int argc, char *argv[])
+static int console_handler(FILE *fp, const char *argv[])
 {
     char buf_pos[8 * DIM];
 
-    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
-
-    if (MATCH(1, "h")) {
+    if (match(argv, "h")) {
         fprintf(fp, "n: print neighbor table\n");
-    } else if (MATCH(1, "i")) {
+    } else if (match(argv, "i")) {
         fprintf(fp, "  own pos: %s\n", str_pos(buf_pos, g_own_pos));
-    } else if (MATCH(1, "n")) {
+    } else if (match(argv, "n")) {
         uint32_t counter = 0;
         Neighbor *cur;
         Neighbor *tmp;

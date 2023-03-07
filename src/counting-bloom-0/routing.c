@@ -322,18 +322,18 @@ static char *str_bloom(char *buf, const uint8_t *bloom)
     return buf;
 }
 
-static int console_handler(FILE *fp, int argc, char *argv[])
+static int console_handler(FILE *fp, const char *argv[])
 {
     char buf_bloom[BLOOM_M * 6];
 
-    if (argc == 1 && !strcmp(argv[0], "h")) {
+    if (match(argv, "h")) {
         fprintf(fp, "  n: print neighbor table\n");
-    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+    } else if (match(argv, "i")) {
         fprintf(fp, "  id: 0x%08x / %s\n", gstate.own_id, str_bloom(buf_bloom, &g_own_id_bloom[0]));
         fprintf(fp, "  bloom-size: %u, bloom-capacity: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_C, BLOOM_K);
         fprintf(fp, "  bloom: %s\n", str_bloom(buf_bloom, &g_own_bloom[0]));
-    } else if (argc == 1 && !strcmp(argv[0], "n")) {
-        unsigned counter = 0;
+    } else if (match(argv, "n")) {
+        size_t counter = 0;
         Neighbor *cur;
         Neighbor *tmp;
 
@@ -347,7 +347,7 @@ static int console_handler(FILE *fp, int argc, char *argv[])
             );
             counter += 1;
         }
-        fprintf(fp, "%u entries\n", counter);
+        fprintf(fp, "%zu entries\n", counter);
     } else {
         return 1;
     }

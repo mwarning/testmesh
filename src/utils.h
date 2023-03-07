@@ -40,6 +40,8 @@ typedef union {
     struct sockaddr_in6 ip6;
 } Address;
 
+// match e.g. ["get", "1234", "foo"] with a comma separated string "get,*,foo", the asterisk matches anything
+bool match(const char *argv[], const char *pattern);
 uint32_t adler32(const void *buf, size_t buflen); // a hash method
 void hex_dump(const char *desc, const void *buf, size_t buflen);
 ssize_t bytes_random(void *buffer, size_t size); // get random bytes

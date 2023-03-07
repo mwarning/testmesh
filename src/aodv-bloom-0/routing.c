@@ -528,15 +528,13 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE* fp, int argc, char *argv[])
+static int console_handler(FILE* fp, const char *argv[])
 {
-    #define MATCH(n, cmd) ((n) == argc && !strcmp(argv[0], (cmd)))
-
-    if (MATCH(1, "h")) {
+    if (match(argv, "h")) {
         fprintf(fp, "r                       print routing table\n");
-    } else if (MATCH(1, "i")) {
+    } else if (match(argv, "i")) {
         fprintf(fp, "routing entry timeout: %us\n", TIMEOUT_ROUTING_ENTRY);
-    } else if (MATCH(1, "r")) {
+    } else if (match(argv, "r")) {
         RoutingEntries *tmp;
         RoutingEntries *cur;
         RoutingEntry *e;

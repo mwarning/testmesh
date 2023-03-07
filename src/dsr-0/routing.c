@@ -514,11 +514,11 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE *fp, int argc, char *argv[])
+static int console_handler(FILE *fp, const char *argv[])
 {
-    if (argc == 1 && !strcmp(argv[0], "h")) {
+    if (match(argv, "h")) {
         fprintf(fp, "n: print routing table\n");
-    } else if (argc == 1 && !strcmp(argv[0], "n")) {
+    } else if (match(argv, "n")) {
         uint32_t counter = 0;
         PathCacheEntry *cur;
 

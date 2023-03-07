@@ -286,18 +286,18 @@ static char *str_bloom(const uint8_t *bloom)
     return buf;
 }
 
-static int console_handler(FILE *fp, int argc, char *argv[])
+static int console_handler(FILE *fp, const char *argv[])
 {
-    if (argc == 1 && !strcmp(argv[0], "h")) {
+    if (match(argv, "h")) {
         fprintf(fp, "n: print routing table\n");
-    } else if (argc == 1 && !strcmp(argv[0], "i")) {
+    } else if (match(argv, "i")) {
         uint8_t own_bloom[BLOOM_M];
         bloom_init(&own_bloom[0], gstate.own_id);
 
         fprintf(fp, "id: 0x%08x\n", gstate.own_id);
         fprintf(fp, "bloom-size: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_K);
         fprintf(fp, "bloom: %s\n", str_bloom(&own_bloom[0]));
-    } else if (argc == 1 && !strcmp(argv[0], "n")) {
+    } else if (match(argv, "n")) {
         unsigned counter = 0;
         Entry *cur;
         Entry *tmp;

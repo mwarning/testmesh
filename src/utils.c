@@ -594,3 +594,35 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
 
     return addr_parse_internal(addr_ret, addr_str, port_str, af);
 }
+
+bool match(const char *argv[], const char *pattern)
+{
+    const char *beg = &pattern[0];
+    size_t j = 0;
+
+    for (size_t i = 0; ; i += 1) {
+        const char c = pattern[i];
+        if (c == ',' || c == '\0') {
+            const char *end = &pattern[i];
+            const char *v = argv[j];
+
+            if (v && (0 == strncmp(v, beg, end - beg) || 0 == strcmp(v, "*"))) {
+                j += 1;
+            } else {
+                return false;
+            }
+
+            beg = end + 1;
+            if (c == '\0') {
+                break;
+            }
+        }
+    }
+
+    if (argv[j] != NULL) {
+        // another value without a pattern
+        return false;
+    } else {
+        return true;
+    }
+}
