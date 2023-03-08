@@ -172,7 +172,7 @@ static int conf_set(const char *opt, const char *val)
         }
         break;
     case oDaemon:
-        gstate.do_fork = 1;
+        gstate.do_fork = true;
         break;
     case oFindInterfaces:
         if (0 == strcmp(val, "on")) {
@@ -201,7 +201,7 @@ static int conf_set(const char *opt, const char *val)
         }
         break;
     case oLogTime:
-        gstate.log_time = 1;
+        gstate.log_time = true;
         break;
     case oTunName:
         if (0 == strcmp(val, "none")) {
@@ -212,9 +212,9 @@ static int conf_set(const char *opt, const char *val)
         break;
     case oTunSetup:
         if (0 == strcmp(val, "on")) {
-            gstate.tun_setup = 1;
+            gstate.tun_setup = true;
         } else if (0 == strcmp(val, "off")) {
-            gstate.tun_setup = 0;
+            gstate.tun_setup = false;
         } else {
             log_error("Unknown value for %s %s", opt, val);
             return EXIT_FAILURE;
@@ -233,7 +233,7 @@ static int conf_set(const char *opt, const char *val)
             return EXIT_FAILURE;
         }
         gstate.gateway_id = n;
-        gstate.gateway_id_set = 1;
+        gstate.gateway_id_set = true;
         break;
     case oOwnIdentifier:
         if (parse_hex(&n, val, sizeof(gstate.own_id))) {
@@ -245,16 +245,16 @@ static int conf_set(const char *opt, const char *val)
             return EXIT_FAILURE;
         }
         gstate.own_id = n;
-        gstate.own_id_set = 1;
+        gstate.own_id_set = true;
         break;
     case oDisableStdin:
-        gstate.disable_stdin = 1;
+        gstate.disable_stdin = true;
         break;
     case oEnableIPv4:
         if (0 == strcmp(val, "on")) {
-            gstate.enable_ipv4 = 1;
+            gstate.enable_ipv4 = true;
         } else if (0 == strcmp(val, "off")) {
-            gstate.enable_ipv4 = 0;
+            gstate.enable_ipv4 = false;
         } else {
             log_error("Unknown value for %s %s", opt, val);
             return EXIT_FAILURE;
@@ -262,9 +262,9 @@ static int conf_set(const char *opt, const char *val)
         break;
     case oEnableIPv6:
         if (0 == strcmp(val, "on")) {
-            gstate.enable_ipv6 = 1;
+            gstate.enable_ipv6 = true;
         } else if (0 == strcmp(val, "off")) {
-            gstate.enable_ipv6 = 0;
+            gstate.enable_ipv6 = false;
         } else {
             log_error("Unknown value for %s %s", opt, val);
             return EXIT_FAILURE;
@@ -301,7 +301,7 @@ int conf_setup(int argc, char **argv)
     const char *opt;
     const char *val;
     int rc;
-    int i;
+    size_t i;
 
     for (i = 1; i < argc; ++i) {
         opt = argv[i];

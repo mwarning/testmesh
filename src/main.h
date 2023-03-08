@@ -5,10 +5,12 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
 #include "utils.h"
+#include "interfaces.h"
 
 #define MAIN_SRVNAME "testmesh"
 #define PROGRAMM_VERSION "1.0.0"
@@ -43,17 +45,17 @@ struct state {
     int sock_mcast_receive;
 #endif
     uint16_t ether_type;
-    uint8_t find_interfaces;
+    enum FIND_INTERFACES find_interfaces;
 
     uint32_t gateway_id;
-    uint8_t gateway_id_set;
+    bool gateway_id_set;
     uint32_t own_id;
-    uint8_t own_id_set;
+    bool own_id_set;
 
-    uint8_t do_fork;
+    bool do_fork;
     // state
-    uint8_t is_running;
-    uint8_t disable_stdin;
+    bool is_running;
+    bool disable_stdin;
     time_t time_now;
     time_t time_started;
 #ifdef MULTICAST
@@ -63,24 +65,24 @@ struct state {
     // listen address for unicast packets
     struct sockaddr_in6 ucast_addr;
 
-    uint8_t enable_ipv4;
-    uint8_t enable_ipv6;
+    bool enable_ipv4;
+    bool enable_ipv6;
 
     // tun0 - entry to the mesh
     const char *tun_name;
     int tun_fd;
 
-    uint8_t tun_setup;
+    bool tun_setup;
     uint16_t tun_setup_ipv4_mtu;
 
     const char *control_socket_path;
 
     // settings
-    uint8_t log_to_syslog;
-    uint8_t log_to_terminal;
+    bool log_to_syslog;
+    bool log_to_terminal;
     FILE* log_to_file;
-    uint8_t log_to_socket;
-    uint8_t log_time;
+    bool log_to_socket;
+    bool log_time;
     uint8_t log_level;
 };
 

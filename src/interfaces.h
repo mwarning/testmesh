@@ -3,7 +3,7 @@
 
 #include <linux/if_ether.h>   // ETH_ALEN(6), ETH_HLEN(14), ETH_FRAME_LEN(1514), struct ethhdr
 
-enum {
+enum FIND_INTERFACES {
     FIND_INTERFACES_ON,
     FIND_INTERFACES_OFF,
     FIND_INTERFACES_AUTO
