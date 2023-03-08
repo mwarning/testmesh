@@ -136,6 +136,11 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
 static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
+    if (!address_is_broadcast(dst) && !address_equal(dst, rcv)) {
+        // packet is not for us (possible e.g. when device is in monitor mode)
+        return;
+    }
+
     switch (packet[0]) {
     case TYPE_DATA:
         handle_DATA(src, (DATA*) packet, packet_length);
