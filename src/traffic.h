@@ -12,7 +12,7 @@
 
 void traffic_add_bytes_write(const Address *addr, uint64_t bytes);
 void traffic_add_bytes_read(const Address *addr, uint64_t bytes);
-void traffic_debug(FILE* out, int argc, char *argv[]);
+void traffic_debug(FILE* out, const char *argv[]);
 void traffic_cleanup();
 
 #endif /* _TRAFFIC_H_ */

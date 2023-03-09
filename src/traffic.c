@@ -205,13 +205,13 @@ static uint64_t speed_write(const Traffic *cur)
     }
 }
 
-void traffic_debug(FILE* out, int argc, char *argv[])
+void traffic_debug(FILE* out, const char *argv[])
 {
     uint32_t max_print;
 
-    if (argc == 1) {
+    if (argv[1] == NULL) {
         max_print = g_traffic_count; // default
-    } else if (argc == 2) {
+    } else if (argv[2] == NULL) {
         max_print = atoi(argv[1]);
     } else {
         fprintf(out, "invalid traffic statistics command\n");
