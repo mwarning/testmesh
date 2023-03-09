@@ -17,45 +17,30 @@
 #include "utils.h"
 
 
-static uint64_t g_tun_bytes_read = 0;
-static uint64_t g_tun_bytes_write = 0;
+static uint64_t g_tun_read_count = 0;
+static uint64_t g_tun_write_count = 0;
+static uint64_t g_tun_read_bytes = 0;
+static uint64_t g_tun_write_bytes = 0;
 static time_t g_tun_bytes_updated = 0;
 
-// for speed measurement
-static uint64_t g_tun_bytes_read_prev = 0;
-static uint64_t g_tun_bytes_write_prev = 0;
-
-
-uint64_t tun_read_total()
+uint64_t tun_read_bytes()
 {
-    return g_tun_bytes_read;
+    return g_tun_read_bytes;
 }
 
-uint64_t tun_write_total()
+uint64_t tun_write_bytes()
 {
-    return g_tun_bytes_write;
+    return g_tun_write_bytes;
 }
 
-uint64_t tun_write_speed()
+uint64_t tun_read_count()
 {
-    if (g_tun_bytes_write >= g_tun_bytes_write_prev
-            && gstate.time_now > g_tun_bytes_updated) {
-        return (g_tun_bytes_write - g_tun_bytes_write_prev)
-            / (gstate.time_now - g_tun_bytes_updated);
-    } else {
-        return 0;
-    }
+    return g_tun_read_count;
 }
 
-uint64_t tun_read_speed()
+uint64_t tun_write_count()
 {
-    if (g_tun_bytes_read >= g_tun_bytes_read_prev
-            && gstate.time_now > g_tun_bytes_updated) {
-        return (g_tun_bytes_read - g_tun_bytes_read_prev)
-            / (gstate.time_now - g_tun_bytes_updated);
-    } else {
-        return 0;
-    }
+    return g_tun_write_count;
 }
 
 static const char *protocol_str(int protocol)
@@ -75,7 +60,7 @@ static const char *protocol_str(int protocol)
 /*
  * Write some payload information. It is usually an IP packet.
  */
-static const char *debug_payload(uint8_t *buf, size_t buflen)
+static const char *debug_payload(const uint8_t *buf, size_t buflen)
 {
     static char ret[200];
 
@@ -95,6 +80,7 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
         uint8_t protocol = buf[9];
 
         if (protocol == 0x06 || protocol == 0x11) {
+            // TCP or UDP
             uint16_t sport = ntohs(*((uint16_t*) &buf[20]));
             uint16_t dport = ntohs(*((uint16_t*) &buf[22]));
 
@@ -114,6 +100,7 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
         uint8_t protocol = buf[6];
 
         if (protocol == 0x06 || protocol == 0x11) {
+            // TCP or UDP
             uint16_t sport = ntohs(*((uint16_t*) &buf[40]));
             uint16_t dport = ntohs(*((uint16_t*) &buf[42]));
             snprintf(ret, sizeof(ret), "IPv6/%s, iplen: %zu, [%s]:%hu => [%s]:%hu",
@@ -131,7 +118,7 @@ static const char *debug_payload(uint8_t *buf, size_t buflen)
     return ret;
 }
 
-// IPv4 address, we can extract a mesh ID
+// Check if IPv4 address is something we can extract a mesh ID from.
 // e.g. 10.0.0.0/8 or 192.168.0.0/16
 static int addr4_is_mesh(const struct in_addr *addr)
 {
@@ -139,7 +126,7 @@ static int addr4_is_mesh(const struct in_addr *addr)
     return (a[0] == 10) || (a[0] == 192 && a[1] == 168);
 }
 
-// IPv6 address, we can extract a mesh ID
+// Check if IPv6 address is something we can extract a mesh ID from.
 // e.g. 200::/8 or 300::/8 or fe80::/16 (we skip the full /7 here)
 static int addr6_is_mesh(const struct in6_addr *addr)
 {
@@ -148,7 +135,8 @@ static int addr6_is_mesh(const struct in6_addr *addr)
     return (a1 == 0x02) || (a1 == 0x03) || (a1 == 0xfe && a2 == 0x80);
 }
 
-// extract node id from mesh IPv6 address
+// Extract node id from mesh IPv6 address.
+// e.g. fe80::2edf:27ac => 0x2edf27ac
 static uint32_t in6_addr_id(const struct in6_addr *addr)
 {
     uint32_t id = 0;
@@ -162,7 +150,7 @@ static uint32_t in6_addr_id(const struct in6_addr *addr)
     return id;
 }
 
-// extract node id from mesh IPv4 address
+// Extract node id from mesh IPv4 address.
 static uint32_t in4_addr_id(const struct in_addr *addr)
 {
     uint32_t id = 0;
@@ -212,14 +200,16 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (addr4_is_mesh(saddr)) {
             src_id = in4_addr_id(saddr);
         } else {
-            log_warning("read packet with non-mesh IPv4 source address (%s) on %s => drop", str_in4(saddr), gstate.tun_name);
+            log_warning("read packet with non-mesh IPv4 source address (%s) on %s => drop",
+                str_in4(saddr), gstate.tun_name);
             return 1;
         }
 
         log_debug("got 0x%08x => 0x%08x", src_id, dst_id);
 
         if (read_len < length) {
-            log_warning("parse_ip_packet: Partial IPv4 packet (%zu < %zu). Consider to set an MTU. => drop", read_len, length);
+            log_warning("parse_ip_packet: Partial IPv4 packet (%zu < %zu). Consider to set an MTU. => drop",
+                read_len, length);
             return 1;
         }
 
@@ -254,12 +244,14 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (addr6_is_mesh(saddr)) {
             src_id = in6_addr_id(saddr);
         } else {
-            log_warning("read packet with non-mesh IPv6 source address (%s) on %s => drop", str_in6(saddr), gstate.tun_name);
+            log_warning("read packet with non-mesh IPv6 source address (%s) on %s => drop",
+                str_in6(saddr), gstate.tun_name);
             return 1;
         }
 
         if (read_len < length) {
-            log_warning("parse_ip_packet: IPv6 packet bigger than received data (%zu < %zu). => drop", read_len, length);
+            log_warning("parse_ip_packet: IPv6 packet bigger than received data (%zu < %zu). => drop",
+                read_len, length);
             return 1;
         }
 
@@ -273,9 +265,9 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
     return 1;
 }
 
-static int ip_enabled(const uint8_t ip_byte)
+static int ip_enabled(const uint8_t *bytes)
 {
-    uint8_t ip_version = (ip_byte >> 4) & 0x0f;
+    const uint8_t ip_version = (bytes[0] >> 4) & 0x0f;
     switch (ip_version) {
         case 4:
             return gstate.enable_ipv4;
@@ -286,9 +278,9 @@ static int ip_enabled(const uint8_t ip_byte)
     }
 }
 
-ssize_t tun_write(uint8_t *buf, ssize_t buflen)
+ssize_t tun_write(const void *buf, ssize_t buflen)
 {
-    if (buf == NULL || buflen <= 0 || !ip_enabled(buf[0])) {
+    if (buf == NULL || buflen <= 0 || !ip_enabled(buf)) {
         return -1;
     }
 
@@ -300,12 +292,10 @@ ssize_t tun_write(uint8_t *buf, ssize_t buflen)
         log_error("write() %s", strerror(errno));
     }
 
+    // statistics
     if (write_len > 0) {
-        if ((g_tun_bytes_updated + 1) < gstate.time_now) {
-            g_tun_bytes_write_prev = g_tun_bytes_write;
-        }
-
-        g_tun_bytes_write += write_len;
+        g_tun_write_count += 1;
+        g_tun_write_bytes += write_len;
         g_tun_bytes_updated = gstate.time_now;
     }
 
@@ -332,17 +322,14 @@ static void tun_read_internal(int events, int fd)
             break;
         }
 
-        if (!ip_enabled(buf[0])) {
+        if (!ip_enabled(buf)) {
             continue;
         }
 
-        log_trace("tun_read_internal: %zu bytes, %s", read_len, debug_payload(buf, read_len));
+        log_trace("tun_read_internal: %zd bytes, %s", read_len, debug_payload(buf, read_len));
 
-        if ((g_tun_bytes_updated + 1) < gstate.time_now) {
-            g_tun_bytes_read_prev = g_tun_bytes_read;
-        }
-
-        g_tun_bytes_read += read_len;
+        g_tun_read_count += 1;
+        g_tun_read_bytes += read_len;
         g_tun_bytes_updated = gstate.time_now;
 
         if (parse_ip_packet(&dst_id, buf, read_len)) {
@@ -357,15 +344,15 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 {
     ssize_t read_len = read(gstate.tun_fd, buf, buflen);
 
-    if (buf == NULL || read_len <= 0 || !ip_enabled(buf[0])) {
+    if (buf == NULL || read_len <= 0 || !ip_enabled(buf)) {
         return -1;
     }
 
     if (read_len > 0) {
-        g_tun_bytes_read += read_len;
+        g_tun_read_bytes += read_len;
     }
 
-    log_trace("tun_read: %zu bytes, %s", read_len, debug_payload(buf, read_len));
+    log_trace("tun_read: %zd bytes, %s", read_len, debug_payload(buf, read_len));
 
     if (parse_ip_packet(dst_id, buf, read_len)) {
         return -1;
@@ -465,7 +452,7 @@ int tun_init(uint32_t id, const char *ifname)
 
         if (gstate.enable_ipv4) {
             execute("ip -4 addr flush dev %s", ifname);
-            if (id < 0xffff) {
+            if (id <= 0xffff) {
                 execute("ip -4 addr add 169.254.%u.%u/16 dev tun0", (unsigned) addr[1], (unsigned) addr[0]);
             } else {
                 log_warning("Own identifier too big for use with IPv4!");
