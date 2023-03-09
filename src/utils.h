@@ -54,6 +54,7 @@ bool address_equal(const Address *a, const Address *b);
 uint32_t address_ifindex(const Address *addr);
 
 const char *str_enabled(uint8_t enabled);
+const char *str_bool(bool enabled);
 const char *str_mac(const struct mac *addr);
 const char *str_bytes(uint64_t bytes);
 const char *str_duration(time_t from, time_t to);

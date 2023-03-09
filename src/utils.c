@@ -227,6 +227,11 @@ const char *str_enabled(uint8_t enabled)
     return enabled ? "yes" : "no";
 }
 
+const char *str_bool(bool enabled)
+{
+    return enabled ? "true" : "false";
+}
+
 const char *str_duration(time_t from, time_t to)
 {
     static char strdurationbuf[4][64];
