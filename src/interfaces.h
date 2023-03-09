@@ -21,7 +21,7 @@ bool interface_add(const char *ifname);
 bool interface_del(const char *ifname);
 
 // send as Ethernet packet (e.g. over mesh WiFi)
-void send_bcasts_l2(const void* data, size_t data_len); // TODO: rename to send_bcast_l2(...)
+void send_bcast_l2(const void* data, size_t data_len);
 bool send_ucast_l2(const Address *addr, const void* data, size_t data_len);
 
 // send as IP packet (UDP)

@@ -114,7 +114,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
     } else if (!bloom_test(&p->bloom[0], gstate.own_id)) {
         log_debug("DATA: own id not in bloom filter => forward");
         bloom_add(&p->bloom[0], gstate.own_id);
-        send_bcasts_l2(p, recv_len);
+        send_bcast_l2(p, recv_len);
     } else {
         log_debug("DATA: own id in bloom filter => drop");
     }
@@ -131,7 +131,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     data->payload_length = packet_length;
     memset(&data->bloom, 0, sizeof(data->bloom));
 
-    send_bcasts_l2(data, get_data_size(data));
+    send_bcast_l2(data, get_data_size(data));
 }
 
 static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)

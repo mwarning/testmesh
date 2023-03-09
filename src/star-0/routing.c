@@ -457,7 +457,7 @@ static void handle_ROOT(const Address *rcv, const Address *src, const Address *d
 
     p->sender_id = gstate.own_id;
 
-    send_bcasts_l2(p, sizeof(ROOT));
+    send_bcast_l2(p, sizeof(ROOT));
 }
 
 // receive traffic from tun0 and send to peers
@@ -597,7 +597,7 @@ static void send_root()
         g_current_root.seq_num = g_sequence_number - 1;
         g_current_root.updated = gstate.time_now;
 
-        send_bcasts_l2(&root, sizeof(ROOT));
+        send_bcast_l2(&root, sizeof(ROOT));
     }
 }
 

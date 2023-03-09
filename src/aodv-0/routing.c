@@ -192,7 +192,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
         log_debug("RREQ: send as broadcast => forward");
 
         p->hop_count += 1;
-        send_bcasts_l2(p, sizeof(RREQ));
+        send_bcast_l2(p, sizeof(RREQ));
     }
 }
 
@@ -315,7 +315,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
         log_debug("tun_handler: send RREQ packet (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
-        send_bcasts_l2(&rreq, sizeof(RREQ));
+        send_bcast_l2(&rreq, sizeof(RREQ));
     }
 }
 

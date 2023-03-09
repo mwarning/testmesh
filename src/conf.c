@@ -88,7 +88,7 @@ static const char *usage_str =
     "  --ether-type <hex>              Ethernet type (default: 88B5)\n"
     "  --log-file,-lf <path>           Write log output to file\n"
     "  --log-level,-ll <level>         Log level. From 0 to " STR(MAX_LOG_LEVEL) " (default: 3)\n"
-    "  --log-timestamp,-lt             Add timestamps to log output\n"
+    "  --log-time,-lt                  Add timestamps to log output\n"
     "  --disable-stdin                 Disable interactive console on startup\n"
     "  --enable-ipv4,-4 <on/off>       Enable IPv4 (default: off)\n"
     "  --enable-ipv6,-6 <on/off>       Enable IPv6 (default: on)\n"
@@ -98,7 +98,7 @@ static const char *usage_str =
 static int parse_hex(uint64_t *ret, const char *val, int bytes)
 {
     int len = strlen(val);
-    if (len < 3 || len > (2 + 2 * bytes) || (len % 2) || val[0] != '0' || val[1] != 'x') {
+    if (len < 3 || len > (2 + 2 * bytes) || (len % 2) != 0 || val[0] != '0' || val[1] != 'x') {
        return 1;
     }
 
@@ -144,8 +144,7 @@ static int conf_set(const char *opt, const char *val)
         return EXIT_FAILURE;
     }
 
-    switch (option->code)
-    {
+    switch (option->code) {
     case oHelp:
         printf("%s\n\n", usage_str);
         protocols_print(stdout);

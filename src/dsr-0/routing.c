@@ -409,7 +409,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
         log_debug("RREQ: resend as broadcast => forward", format_path(path, p->path_count));
 
         // forward as broadcast
-        send_bcasts_l2(p, get_rreq_size(p));
+        send_bcast_l2(p, get_rreq_size(p));
     }
 }
 
@@ -493,7 +493,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         log_debug("send new RREQ (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
         // we drop data until the path is discovered?
-        send_bcasts_l2(&rreq, get_rreq_size(&rreq));
+        send_bcast_l2(&rreq, get_rreq_size(&rreq));
     }
 }
 

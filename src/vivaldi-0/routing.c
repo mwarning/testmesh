@@ -318,7 +318,7 @@ static void send_COMMs()
 
     memcpy(&data.pos[0], &g_own_pos[0], sizeof(data.pos));
 
-    send_bcasts_l2(&data, sizeof(data));
+    send_bcast_l2(&data, sizeof(data));
 }
 
 static void periodic_handler(int _events, int _fd)

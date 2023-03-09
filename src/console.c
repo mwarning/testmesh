@@ -39,7 +39,7 @@ void console_log_message(const char *message)
     }
 }
 
-static int tokenizer(char *argv[], size_t argv_length, char *input)
+static int tokenizer(const char *argv[], size_t argv_length, char *input)
 {
     int argc = 0;
 
@@ -166,7 +166,7 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
         }
     }
 
-    fprintf(fp, "======================\n");
+    fprintf(fp, "\n");
 
     return ret;
 }
@@ -174,7 +174,7 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
 void console_client_handler(int rc, int clientsock)
 {
     char request[256];
-    char *argv[8];
+    const char *argv[8];
 
     int ret = 0;
     FILE *fp;

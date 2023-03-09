@@ -190,7 +190,7 @@ static void forward_DATA(DATA *p, size_t recv_len)
     } else {
         log_debug("DATA: send as broadcast (seq_num: %d, hop_cnt: %d)",
             (int) p->seq_num, (int) p->hop_cnt);
-        send_bcasts_l2(p, recv_len);
+        send_bcast_l2(p, recv_len);
     }
 }
 

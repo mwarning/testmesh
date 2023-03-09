@@ -297,7 +297,7 @@ static void send_COMMs()
 
     memcpy(&data.bloom[0], &g_own_bloom[0], sizeof(data.bloom));
 
-    send_bcasts_l2(&data, sizeof(data));
+    send_bcast_l2(&data, sizeof(data));
 }
 
 static void periodic_handler(int _events, int _fd)

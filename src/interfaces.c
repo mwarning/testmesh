@@ -397,7 +397,7 @@ static bool send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_A
     return true;
 }
 
-void send_bcasts_l2(const void* data, size_t data_len)
+void send_bcast_l2(const void* data, size_t data_len)
 {
     static uint8_t dst_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     char sendbuf[ETH_FRAME_LEN] = {0};
