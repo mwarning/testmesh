@@ -611,7 +611,7 @@ bool match(const char *argv[], const char *pattern)
             const char *end = &pattern[i];
             const char *v = argv[j];
 
-            if (v && (0 == strncmp(v, beg, end - beg) || 0 == strcmp(v, "*"))) {
+            if (v && (0 == strncmp(v, beg, end - beg) || 0 == strncmp("*", beg, end - beg))) {
                 j += 1;
             } else {
                 return false;
