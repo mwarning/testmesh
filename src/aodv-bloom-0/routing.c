@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <net/if.h>
 #include <sys/time.h>
+#include <inttypes.h>
 
 #include "../ext/utlist.h"
 #include "../ext/uthash.h"
@@ -36,8 +37,11 @@ enum {
 typedef struct RoutingEntry_ {
     Address next_hop_addr;
     uint16_t hop_count;
-    uint8_t bloom[BLOOM_M];
+    time_t first_updated; // == created
     time_t last_updated;
+    uint8_t bloom[BLOOM_M];
+    time_t bloom_first_updated;
+    time_t bloom_last_updated;
     struct RoutingEntry_ *next;
 } RoutingEntry;
 
@@ -47,6 +51,11 @@ typedef struct {
     RoutingEntry *entries;
     UT_hash_handle hh;
 } RoutingEntries;
+
+typedef struct {
+    Address id;
+    UT_hash_handle hh;
+} AddressSetEntry;
 
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
@@ -77,8 +86,11 @@ typedef struct __attribute__((__packed__)) {
 } DATA;
 
 static uint16_t g_sequence_number = 0;
-// <destiantion id> => [<per neighbor>]
+// {<destiantion id> : [<next-hop-neighbor>]}
 static RoutingEntries *g_routing_table = NULL;
+//static uint8_t full_flood = 1;
+//static time_t full_flood_time = 0;
+static uint32_t broadcast_capacity = 1;
 
 static size_t get_data_size(DATA *p)
 {
@@ -94,6 +106,7 @@ static uint8_t* get_data_payload(DATA *p)
 // added
 
 #define BLOOM_BITSET(bv, idx) (bv[(idx)/8U] |= (1U << ((idx)%8U)))
+#define BLOOM_BITUNSET(bv, idx) (bv[(idx)/8U] &= ~(1U << ((idx)%8U)))
 #define BLOOM_BITTEST(bv, idx) (bv[(idx)/8U] & (1U << ((idx)%8U)))
 
 // set BLOOM_K bits based on id
@@ -137,6 +150,7 @@ static uint8_t bloom_test(const uint8_t *bloom, uint32_t id)
     return true;
 }
 
+/*
 // is this good?
 static bool bloom_good(const uint8_t *bloom, uint16_t hop_count)
 {
@@ -154,31 +168,58 @@ static bool bloom_good(const uint8_t *bloom, uint16_t hop_count)
         // if at most BLOOM_K bits are set per hop, then this bloom is ok 
         return (1000U * ones / (BLOOM_K * hop_count)) <= 2000;
     }
-}
+}*/
 
 static char *str_bloom(const uint8_t *bloom)
 {
     static char buf[BLOOM_M * 8 + 1];
     char *cur = buf;
     for (size_t i = 0; i < (8 * BLOOM_M); i++) {
-        unsigned bit = (0 != BLOOM_BITTEST(bloom, i));
-        cur += sprintf(cur, "%u", bit);
+        uint32_t bit = (0 != BLOOM_BITTEST(bloom, i));
+        cur += sprintf(cur, "%"PRIu32, bit);
     }
     return buf;
 }
 
+/*
 static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
 {
     for (size_t i = 0; i < BLOOM_M; i++) {
         bloom1[i] |= bloom2[i];
     }
-}
+}*/
 
 static void bloom_add(uint8_t *bloom, uint32_t id)
 {
     uint8_t bloom_id[BLOOM_M];
     bloom_init(&bloom_id[0], id);
-    bloom_merge(bloom, &bloom_id[0]);
+    //bloom_merge(bloom, &bloom_id[0]);
+
+    for (size_t i = 0; i < BLOOM_M; i++) {
+        bloom[i] |= bloom_id[i];
+    }
+}
+
+static void bloom_delete(uint8_t *bloom, uint32_t id)
+{
+    uint8_t bloom_id[BLOOM_M];
+    bloom_init(&bloom_id[0], id);
+    //bloom_merge(bloom, &bloom_id[0]);
+
+    for (size_t i = 0; i < BLOOM_M; i++) {
+        bloom[i] &= ~bloom_id[i];
+    }
+}
+
+static uint16_t bloom_similar(uint8_t *bloom1, uint8_t *bloom2)
+{
+    uint8_t bloom[BLOOM_M] = {0};
+
+    for (size_t i = 0; i < BLOOM_M; i++) {
+        bloom[i] = bloom1[i] & bloom2[i];
+    }
+
+    return bloom_ones(bloom);
 }
 
 static void routing_entry_timeout(RoutingEntries *e)
@@ -235,11 +276,39 @@ static RoutingEntry *routing_entry_find(uint32_t dst_id)
     return e;
 }
 
+#if 0
+static RoutingEntry *routing_entry_find2(uint32_t dst_id)
+{
+    RoutingEntry *e_tmp;
+    RoutingEntry *e;
+    RoutingEntries *es_tmp;
+    RoutingEntries *es;
+
+    e = routing_entry_find(dst_id);
+    if (e) {
+        return e;
+    }
+
+    HASH_ITER(hh, g_routing_table, es, es_tmp) {
+        LL_FOREACH(es->entries, e_tmp) {
+            /*
+                ???
+            */
+            if (e == NULL || tmp->hop_count < e->hop_count) {
+                e = tmp;
+            }
+        }
+    }
+
+    return e;
+}
+#endif
+
 /*
 we want to send a 
 */
 static void routing_table_update(uint32_t dst_id, const Address *next_hop_addr,
-    uint8_t hop_count, uint8_t *bloom, uint16_t seq_num)
+    uint8_t hop_count, uint16_t seq_num, uint8_t *bloom)
 {
     RoutingEntries *es;
     RoutingEntry *e;
@@ -262,16 +331,25 @@ static void routing_table_update(uint32_t dst_id, const Address *next_hop_addr,
     if (e == NULL) {
         e = (RoutingEntry*) calloc(1, sizeof(RoutingEntry));
         e->next_hop_addr = *next_hop_addr;
+        e->first_updated = gstate.time_now;
         LL_PREPEND(es->entries, e);
-    }
+        e->hop_count = hop_count;
+        e->last_updated = gstate.time_now; // updated count more usefull?
 
-    e->hop_count = hop_count;
-    e->last_updated = gstate.time_now;
-
-    if (bloom) {
-        memcpy(&e->bloom, bloom, BLOOM_M);
+        if (bloom) {
+            memcpy(&e->bloom, bloom, BLOOM_M);
+            e->bloom_first_updated = gstate.time_now;
+            e->bloom_last_updated = gstate.time_now;
+        }
     } else {
-        memset(&e->bloom, 0, BLOOM_M);
+        if (e->hop_count >= hop_count) {
+            e->hop_count = hop_count;
+            e->last_updated = gstate.time_now;
+            if (bloom) {
+                memcpy(&e->bloom, bloom, BLOOM_M);
+                e->bloom_last_updated = gstate.time_now;
+            }
+        }
     }
 }
 
@@ -306,6 +384,30 @@ static void send_cached_packet(uint32_t dst_id, const Address *next_hop_addr)
     send_ucast_l2(next_hop_addr, data, get_data_size(data));
 }
 
+static bool neighbor_check_add(AddressSetEntry **neighbors, const Address *addr)
+{
+    AddressSetEntry *entry = NULL;
+    HASH_FIND(hh, *neighbors, addr, sizeof(Address), entry);
+    if (entry == NULL) {
+        entry = calloc(1, sizeof(AddressSetEntry));
+        memcpy(&entry->id, addr, sizeof(Address));
+        HASH_ADD(hh, *neighbors, id, sizeof(Address), entry);
+        return false;
+    } else {
+        return true;
+    }
+}
+
+static void neighbor_check_clear(AddressSetEntry *neighbors)
+{
+    AddressSetEntry *neighbor;
+    AddressSetEntry *tmp;
+    HASH_ITER(hh, neighbors, neighbor, tmp) {
+        HASH_DEL(neighbors, neighbor);
+        free(neighbor);
+    }
+}
+
 static void handle_RREQ(const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
 {
     // we expect broadcasts or packets for us
@@ -327,7 +429,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
     log_debug("RREQ: got packet: %s / 0x%08x => 0x%08x / hop_count: %u, seq_num: %u",
         str_addr(src), p->src_id, p->dst_id, p->hop_count, p->seq_num);
 
-    routing_table_update(p->src_id, src, p->hop_count, &p->bloom[0], p->seq_num);
+    routing_table_update(p->src_id, src, p->hop_count, p->seq_num, &p->bloom[0]);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("RREQ: destination reached => send RREP");
@@ -344,6 +446,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
 
         send_ucast_l2(src, &rrep, sizeof(rrep));
     } else {
+        //RoutingEntries *es = routing_entries_find(p->dst_id);
         RoutingEntry *e = routing_entry_find(p->dst_id);
         if (e) {
             if (e->last_updated == gstate.time_now) {
@@ -365,22 +468,53 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
                 send_ucast_l2(&e->next_hop_addr, p, sizeof(RREQ));
             }
         } else {
+            p->hop_count += 1;
+
+            bloom_add(&p->bloom[0], gstate.own_id);
+
 /*
-Send to all neighbors via unicast?
-Can we search depth first?
+    
 */
-/*
-            if (!bloom_good(&p->bloom[0], p->hop_count)) {
-                log_debug("RREQ: bad bloom => drop");
-                // we already check for the sequence number => not needed?
-                // might happen for bad bloom
-            } else { */
-                log_debug("RREQ: send as broadcast => broadcast forward");
-                bloom_add(&p->bloom[0], gstate.own_id);
-                p->hop_count += 1;
-                send_bcasts_l2(p, sizeof(RREQ)); // if critical or once per seconds at max
-                //send_ucasts_l2()? // 
-            //}
+            /*
+            * Send as ucast to each neighbor that matches.
+            */
+            // TODO: do better foreach neighbor
+            AddressSetEntry *neighbors = NULL;
+            neighbor_check_add(&neighbors, dst); // prevent packet from being send back
+
+            RoutingEntries *es_tmp;
+            RoutingEntries *es;
+            RoutingEntry *e;
+            uint32_t forwarded_count = 0;
+            HASH_ITER(hh, g_routing_table, es, es_tmp) {
+                /*
+                if (bloom_test(&e->bloom[0], p->src_id)) {
+                    continue; // hm?
+                }
+                */
+                LL_FOREACH(es->entries, e) {
+                    if (bloom_test(&e->bloom[0], p->dst_id)) {
+                        if (!neighbor_check_add(&neighbors, &e->next_hop_addr)) {
+                            log_debug("RREQ: forward to %s", str_addr(&e->next_hop_addr));
+                            send_ucast_l2(&e->next_hop_addr, p, sizeof(RREQ));
+                            forwarded_count += 1;
+                        }
+                    }
+                }
+            }
+
+            neighbor_check_clear(neighbors);
+
+            if (forwarded_count > 0) {
+                log_debug("RREQ: send to "PRIu32" neighbors => forwarded", forwarded_count);
+            } else if(broadcast_capacity > 0) {
+                log_debug("RREQ: no next hop neighbor found => broadcast");
+                send_bcast_l2(0, p, sizeof(RREQ));
+                broadcast_capacity -= 1;
+            } else {
+                // if we are allowed to broadcast (full broadcast), then broadcast
+                log_debug("RREQ: no next hop neighbor found => drop");
+            }
         }
     }
 }
@@ -406,7 +540,7 @@ static void handle_RREP(const Address *rcv, const Address *src, const Address *d
     log_debug("RREP: got packet: %s / 0x%08x (0x%08x) => 0x%08x / hop_count: %u, seq_num: %u",
         str_addr(src), p->origin_id, p->src_id, p->dst_id, p->hop_count, p->seq_num);
 
-    routing_table_update(p->origin_id, src, p->hop_count, NULL, p->seq_num);
+    routing_table_update(p->origin_id, src, p->hop_count, p->seq_num, NULL);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("RREP: reached destination => send cached packet");
@@ -451,7 +585,7 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
     log_debug("DATA: got packet from %s / 0x%08x => 0x%08x / hop_count: %u",
         str_addr(src), p->src_id, p->dst_id, p->hop_count);
 
-    routing_table_update(p->src_id, src, p->hop_count, NULL, p->seq_num);
+    routing_table_update(p->src_id, src, p->hop_count, p->seq_num, NULL);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("DATA: reached destination => accept");
@@ -500,6 +634,8 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
             .bloom = {0},
         };
 
+        bloom_add(&rreq.bloom[0], gstate.own_id);
+
         // avoid processing of this packet again
         seqnum_cache_update(rreq.src_id, rreq.seq_num);
 
@@ -507,7 +643,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
         log_debug("tun_handler: send RREQ packet (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
-        send_bcast_l2(&rreq, sizeof(RREQ));
+        send_bcast_l2(0, &rreq, sizeof(RREQ));
     }
 }
 
@@ -533,7 +669,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE* fp, const char *argv[])
+static bool console_handler(FILE* fp, const char *argv[])
 {
     if (match(argv, "h")) {
         fprintf(fp, "r                       print routing table\n");
@@ -548,31 +684,39 @@ static int console_handler(FILE* fp, const char *argv[])
 
         d_count = 0;
         HASH_ITER(hh, g_routing_table, cur, tmp) {
-            fprintf(fp, "0x%08x (seq_num: %u)\n", cur->dst_id, cur->seq_num);
+            fprintf(fp, "destination: 0x%08x, seq_num: %u\n", cur->dst_id, cur->seq_num);
+            fprintf(fp, "        [addr]      [hop-count]                            [bloom]                                [first-updated] [last-updated]\n");
             e_count = 0;
-            fprintf(fp, "  [addr] [bloom] [last-updated]\n");
             LL_FOREACH(cur->entries, e) {
-                fprintf(fp, "  %s %s %s ago\n",
+                fprintf(fp, "  %s %6u      %6s   %8s ago    %8s ago\n",
                     str_addr(&e->next_hop_addr),
+                    e->hop_count,
                     str_bloom(&e->bloom[0]),
-                    str_ago(e->last_updated)
+                    str_ago(e->bloom_first_updated),
+                    str_ago(e->bloom_last_updated)
                 );
                 e_count += 1;
             }
-            fprintf(fp, "%u entries\n", e_count);
+            fprintf(fp, "  %u entries\n", e_count);
             d_count += 1;
         }
         fprintf(fp, "%u destinations\n", d_count);
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
+}
+
+static void periodic_handler()
+{
+    routing_entries_timeout();
+    broadcast_capacity = 1;
 }
 
 static void init()
 {
-    net_add_handler(-1, &routing_entries_timeout);
+    net_add_handler(-1, &periodic_handler);
     seqnum_cache_init(20);
     packet_cache_init(20);
 }
@@ -584,7 +728,7 @@ void aodv_bloom_0_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);

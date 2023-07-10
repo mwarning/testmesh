@@ -153,44 +153,48 @@ void hex_dump(const char *desc, const void *buf, size_t buflen)
     printf("  %s\n", buff);
 }
 
-// add source and destination and ports to create a connection fingerprint
-uint32_t get_ip_connection_fingerprint(const uint8_t *packet, size_t length)
+// add source and destination and ports to create a connection fingerprint / stream id
+uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen)
 {
-    uint32_t fp = 0;
-
-    if (packet == NULL || length == 0) {
-        return fp;
+    if (buf == NULL || buflen == 0) {
+        return 0;
     }
 
-    uint8_t ip_version = (packet[0] >> 4) & 0x0f;
-    if (ip_version == 4 && length >= 20) {
+    uint8_t ip_version = (buf[0] >> 4) & 0x0f;
+
+    if (ip_version == 4 && buflen >= 20) {
         // IPv4 packet
-        const uint32_t *p = (uint32_t*) &packet[12];
-        // add addresses
-        fp = p[0] + p[1];
-        const uint8_t protocol = packet[9];
+        uint32_t saddr = ((const struct in_addr *) &buf[12])->s_addr;
+        uint32_t daddr = ((const struct in_addr *) &buf[16])->s_addr;
+        uint8_t protocol = buf[9];
+        uint32_t id = saddr ^ daddr;
+
         if (protocol == 0x06 || protocol == 0x11) {
-            uint8_t ihl = packet[0] & 0x0f;
-            if (ihl >= 5 && length > (6 + ihl * 4)) {
-                // add ports data for TCP and UDP
-                fp += p[2 + ihl * 4];
-            }
+            // TCP or UDP
+            uint16_t sport = *((const uint16_t*) &buf[20]);
+            uint16_t dport = *((const uint16_t*) &buf[22]);
+            return id ^ (sport + (((uint32_t) dport) << 16));
+        } else {
+            return id;
         }
-    } else if (ip_version == 6 && length >= 40) {
+    } else if (ip_version == 6 && buflen >= 44) {
         // IPv6 packet
-        const uint32_t *p = (uint32_t*) &packet[8];
-        // add addresses
-        for (size_t i = 0; i < 8; i++) {
-            fp += p[i];
-        }
-        const uint8_t protocol = packet[6];
-        if (length >= 44 && (protocol == 0x06 || protocol == 0x11)) {
-            // add ports data for TCP and UDP
-            fp += p[8];
+        const uint32_t *saddr = (const uint32_t*) &((const struct in6_addr *) &buf[8])->s6_addr;
+        const uint32_t *daddr = (const uint32_t*) &((const struct in6_addr *) &buf[24])->s6_addr;
+        uint8_t protocol = buf[6];
+        uint32_t id = saddr[0] ^ saddr[1] ^ daddr[0] ^ daddr[1];
+
+        if (protocol == 0x06 || protocol == 0x11) {
+            // TCP or UDP
+            uint16_t sport = *((const uint16_t*) &buf[40]);
+            uint16_t dport = *((const uint16_t*) &buf[42]);
+            return id ^ (sport + (((uint32_t) dport) << 16));
+        } else {
+            return id;
         }
     }
 
-    return fp;
+    return 0;
 }
 
 struct in6_ifreq {
@@ -232,51 +236,53 @@ const char *str_bool(bool enabled)
     return enabled ? "true" : "false";
 }
 
-const char *str_duration(time_t from, time_t to)
+const char *str_time(time_t time)
 {
     static char strdurationbuf[4][64];
     static size_t strdurationbuf_i = 0;
     char *buf = strdurationbuf[++strdurationbuf_i % 4];
 
+    size_t years, days, hours, minutes, seconds;
+    const char *prefix = "";
+
+    if (time < 0) {
+        time = -time;
+        // prepend minus sign
+        prefix = "-";
+    }
+
+    years = time / (365 * 24 * 60 * 60);
+    time -= years * (365 * 24 * 60 * 60);
+    days = time / (24 * 60 * 60);
+    time -= days * (24 * 60 * 60);
+    hours = time / (60 * 60);
+    time -= hours * (60 * 60);
+    minutes = time / 60;
+    time -= minutes * 60;
+    seconds = time;
+
+    if (years > 0) {
+        snprintf(buf, 64, "%s%zuy%zud", prefix, years, days);
+    } else if (days > 0) {
+        snprintf(buf, 64, "%s%zud%zuh", prefix, days, hours);
+    } else if (hours > 0) {
+        snprintf(buf, 64, "%s%zuh%zum", prefix, hours, minutes);
+    } else if (minutes > 0) {
+        snprintf(buf, 64, "%s%zum%zus", prefix, minutes, seconds);
+    } else {
+        snprintf(buf, 64, "%s%zus", prefix, seconds);
+    }
+
+    return buf;
+}
+
+const char *str_duration(time_t from, time_t to)
+{
     if (from == 0 || to == 0) {
         return "unknown";
     }
 
-    size_t years, days, hours, minutes, seconds;
-    uint64_t secs;
-    const char *neg = "";
-
-    if (from <= to) {
-        secs = to - from;
-    } else {
-        secs = from - to;
-        // prepend minus sign
-        neg = "-";
-    }
-
-    years = secs / (365 * 24 * 60 * 60);
-    secs -= years * (365 * 24 * 60 * 60);
-    days = secs / (24 * 60 * 60);
-    secs -= days * (24 * 60 * 60);
-    hours = secs / (60 * 60);
-    secs -= hours * (60 * 60);
-    minutes = secs / 60;
-    secs -= minutes * 60;
-    seconds = secs;
-
-    if (years > 0) {
-        snprintf(buf, 64, "%s%zuy%zud", neg, years, days);
-    } else if (days > 0) {
-        snprintf(buf, 64, "%s%zud%zuh", neg, days, hours);
-    } else if (hours > 0) {
-        snprintf(buf, 64, "%s%zuh%zum", neg, hours, minutes);
-    } else if (minutes > 0) {
-        snprintf(buf, 64, "%s%zum%zus", neg, minutes, seconds);
-    } else {
-        snprintf(buf, 64, "%s%zus", neg, seconds);
-    }
-
-    return buf;
+    return str_time(to - from);
 }
 
 const char *str_since(time_t time)
@@ -350,12 +356,12 @@ const char *str_addr(const Address *addr)
     }
 }
 
-static bool addr_is_link_local_4(const struct in_addr *addr)
+static bool addr_is_link_local_ipv4(const struct in_addr *addr)
 {
     return ((addr->s_addr & 0x0000ffff) == 0x0000fea9);
 }
 
-static bool addr_is_link_local_6(const struct in6_addr *addr)
+static bool addr_is_link_local_ipv6(const struct in6_addr *addr)
 {
     return (addr->s6_addr[0] == 0xfe) && ((addr->s6_addr[1] & 0xC0) == 0x80);
 }
@@ -364,12 +370,12 @@ uint32_t address_ifindex(const Address *addr)
 {
     switch (addr->family) {
     case AF_INET6:
-        if (addr_is_link_local_6(&addr->ip6.sin6_addr)) {
+        if (addr_is_link_local_ipv6(&addr->ip6.sin6_addr)) {
             return addr->ip6.sin6_flowinfo;
         }
         return 0;
     case AF_INET:
-        if (addr_is_link_local_4(&addr->ip4.sin_addr)) {
+        if (addr_is_link_local_ipv4(&addr->ip4.sin_addr)) {
             return 0; // no interface available for IPv4?
         }
         return 0;
@@ -477,11 +483,11 @@ bool addr_is_link_local(const struct sockaddr_storage *addr)
     switch (addr->ss_family) {
     case AF_INET: {
         const struct in_addr *a = &((const struct sockaddr_in *) addr)->sin_addr;
-        return addr_is_link_local_4(a);
+        return addr_is_link_local_ipv4(a);
     }
     case AF_INET6: {
         const struct in6_addr *a = &((const struct sockaddr_in6 *) addr)->sin6_addr;
-        return addr_is_link_local_6(a);
+        return addr_is_link_local_ipv6(a);
     }
     default:
         log_error("addr_is_link_local not implemented for protocol");

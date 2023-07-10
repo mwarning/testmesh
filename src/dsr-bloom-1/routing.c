@@ -190,7 +190,7 @@ static void forward_DATA(DATA *p, size_t recv_len)
     } else {
         log_debug("DATA: send as broadcast (seq_num: %d, hop_cnt: %d)",
             (int) p->seq_num, (int) p->hop_cnt);
-        send_bcast_l2(p, recv_len);
+        send_bcast_l2(0, p, recv_len);
     }
 }
 
@@ -291,7 +291,7 @@ static char *str_bloom(const uint8_t *bloom)
     return buf;
 }
 
-static int console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, const char *argv[])
 {
     if (match(argv, "h")) {
         fprintf(fp, "n: print routing table\n");
@@ -320,10 +320,10 @@ static int console_handler(FILE *fp, const char *argv[])
         }
         fprintf(fp, "%u entries\n", counter);
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 static void init()
@@ -338,7 +338,7 @@ void dsr_bloom_1_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);

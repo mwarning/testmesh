@@ -9,10 +9,10 @@ enum FIND_INTERFACES {
     FIND_INTERFACES_AUTO
 };
 
-const char *str_find_interfaces(int find_interfaces_value);
+const char *str_find_interfaces(enum FIND_INTERFACES value);
 
-int interfaces_init();
-int interfaces_debug(FILE *fd);
+bool interfaces_init();
+bool interfaces_debug(FILE *fd);
 
 const char *str_ifindex(unsigned ifindex);
 
@@ -21,7 +21,7 @@ bool interface_add(const char *ifname);
 bool interface_del(const char *ifname);
 
 // send as Ethernet packet (e.g. over mesh WiFi)
-void send_bcast_l2(const void* data, size_t data_len);
+void send_bcast_l2(const uint32_t ifindex, const void* data, size_t data_len);
 bool send_ucast_l2(const Address *addr, const void* data, size_t data_len);
 
 // send as IP packet (UDP)

@@ -81,7 +81,7 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
         tun_write(get_data_payload(p), p->payload_length);
     } else {
         log_debug("DATA: destination not reached => rebroadcast");
-        send_bcast_l2(p, length);
+        send_bcast_l2(0, p, length);
     }
 }
 
@@ -99,7 +99,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     seqnum_cache_update(p->src_id, p->seq_num);
 
     log_debug("send DATA packet as broadcast");
-    send_bcast_l2(p, get_data_size(p));
+    send_bcast_l2(0, p, get_data_size(p));
 }
 
 static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)

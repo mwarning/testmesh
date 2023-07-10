@@ -318,7 +318,7 @@ static void send_COMMs()
 
     memcpy(&data.pos[0], &g_own_pos[0], sizeof(data.pos));
 
-    send_bcast_l2(&data, sizeof(data));
+    send_bcast_l2(0, &data, sizeof(data));
 }
 
 static void periodic_handler(int _events, int _fd)
@@ -347,7 +347,7 @@ static char *str_pos(char *buf, const float *pos)
     return buf;
 }
 
-static int console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, const char *argv[])
 {
     char buf_pos[8 * DIM];
 
@@ -372,10 +372,10 @@ static int console_handler(FILE *fp, const char *argv[])
         }
         fprintf(fp, "%u entries\n", counter);
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 static void init()
@@ -392,7 +392,7 @@ void vivaldi_0_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);

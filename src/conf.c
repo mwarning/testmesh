@@ -51,7 +51,7 @@ static struct option_t g_options[] = {
     {"--ether-type", 1, oEtherType},
     {"--peer", 1, oPeer},
     {"--tun-name", 1, oTunName},
-    {"--tun-setup", 0, oTunSetup},
+    {"--tun-setup", 1, oTunSetup},
     {"--disable-stdin", 0, oDisableStdin},
     {"--control", 1, oControlSocket},
     {"-c", 1, oControlSocket},
@@ -85,10 +85,10 @@ static const char *usage_str =
     "  --control,-c <path>             Control socket to connect to a daemon\n"
     "  --tun-name <ifname>             Network entry interface, use none to disable (default: tun0)\n"
     "  --tun-setup <on/off>            Auto configure entry interface with IP address (default: on)\n"
-    "  --ether-type <hex>              Ethernet type (default: 88B5)\n"
+    "  --ether-type <hex>              Ethernet type for layer-2 packets (default: 88B5)\n"
     "  --log-file,-lf <path>           Write log output to file\n"
-    "  --log-level,-ll <level>         Log level. From 0 to " STR(MAX_LOG_LEVEL) " (default: 3)\n"
-    "  --log-time,-lt                  Add timestamps to log output\n"
+    "  --log-level,-ll <level>         Logging level. From 0 to " STR(MAX_LOG_LEVEL) " (default: 3)\n"
+    "  --log-time,-lt                  Add timestamps to logging output\n"
     "  --disable-stdin                 Disable interactive console on startup\n"
     "  --enable-ipv4,-4 <on/off>       Enable IPv4 (default: off)\n"
     "  --enable-ipv6,-6 <on/off>       Enable IPv6 (default: on)\n"
@@ -157,11 +157,14 @@ static int conf_set(const char *opt, const char *val)
             log_error("%s needs to be used after a protocol", option->name);
             return EXIT_FAILURE;
         }
-        if (gstate.protocol->add_peer == NULL) {
+        if (gstate.protocol->peer_handler == NULL) {
             log_error("Protocol %s does not support peers", gstate.protocol->name);
             return EXIT_FAILURE;
         }
-        gstate.protocol->add_peer(stdout, val);
+        if (!gstate.protocol->peer_handler(val, true)) {
+            log_error("Failed to add peer: %s", val);
+            return EXIT_SUCCESS;
+        }
         break;
     case oProtocol:
         gstate.protocol = protocols_find(val);
@@ -187,9 +190,10 @@ static int conf_set(const char *opt, const char *val)
         break;
     case oInterface:
         if (gstate.protocol == NULL) {
-            log_error("Please set protocol first!");
+            log_error("%s needs to be used after a protocol", option->name);
             return EXIT_FAILURE;
         }
+
         interface_add(val);
         break;
     case oLogFile:

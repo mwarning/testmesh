@@ -219,7 +219,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
         } else {
             log_debug("RREQ: found destination => broadcast forward");
             p->hop_count += 1;
-            send_bcast_l2(p, sizeof(RREQ));
+            send_bcast_l2(0, p, sizeof(RREQ));
         }
     }
 }
@@ -342,7 +342,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
         log_debug("tun_handler: send RREQ packet (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
-        send_bcast_l2(&rreq, sizeof(RREQ));
+        send_bcast_l2(0, &rreq, sizeof(RREQ));
     }
 }
 
@@ -368,7 +368,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE* fp, const char *argv[])
+static bool console_handler(FILE* fp, const char *argv[])
 {
     if (match(argv, "h")) {
         fprintf(fp, "r                       print routing table\n");
@@ -391,10 +391,10 @@ static int console_handler(FILE* fp, const char *argv[])
         }
         fprintf(fp, "%d entries\n", count);
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 static void init()
@@ -411,7 +411,7 @@ void aodv_1_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);

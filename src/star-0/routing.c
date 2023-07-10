@@ -43,14 +43,6 @@ typedef struct __attribute__((__packed__)) {
     uint32_t sender_id; // used to spread ids for the DHT
  } ROOT;
 
-typedef struct Node {
-    uint32_t id;
-    uint16_t hop_count;
-    Address next_hop_addr;
-    time_t updated;
-    struct Node *next;
-} Node;
-
 // Fallback mechanism: looks for the coordinates of a node
 // ask for position of ID
 typedef struct __attribute__((__packed__)) {
@@ -80,6 +72,14 @@ typedef struct __attribute__((__packed__)) {
     // these field are invisible here
     //uint8_t payload[2000];
 } DATA;
+
+typedef struct Node {
+    uint32_t id;
+    uint16_t hop_count;
+    Address next_hop_addr;
+    time_t updated;
+    struct Node *next;
+} Node;
 
 typedef struct CurrentRoot {
     Address next_hop_addr; // lower level address (MAC or IP) of path[0]
@@ -223,7 +223,7 @@ static size_t get_data_size(const DATA *p)
     return sizeof(DATA) + p->payload_length;
 }
 
-static uint8_t *get_data_payload(const DATA *p)
+static uint8_t *get_data_payload(DATA *p)
 {
     return ((uint8_t*) p) + sizeof(DATA);
 }
@@ -457,7 +457,7 @@ static void handle_ROOT(const Address *rcv, const Address *src, const Address *d
 
     p->sender_id = gstate.own_id;
 
-    send_bcast_l2(p, sizeof(ROOT));
+    send_bcast_l2(0, p, sizeof(ROOT));
 }
 
 // receive traffic from tun0 and send to peers
@@ -529,7 +529,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, const char *argv[])
 {
     if (match(argv, "h")) {
         fprintf(fp,
@@ -541,7 +541,7 @@ static int console_handler(FILE *fp, const char *argv[])
             g_current_root.id, g_current_root.hop_count, g_current_root.seq_num,
             str_ago(g_current_root.updated));
     } else if (match(argv, "n")) {
-        int counter = 0;
+        uint32_t counter = 0;
         Node *cur;
 
         fprintf(fp, "id          hop-count  next-hop-addr          updated\n");
@@ -557,10 +557,10 @@ static int console_handler(FILE *fp, const char *argv[])
 
         fprintf(fp, "%d entries\n", counter);
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 static void send_root()
@@ -597,7 +597,7 @@ static void send_root()
         g_current_root.seq_num = g_sequence_number - 1;
         g_current_root.updated = gstate.time_now;
 
-        send_bcast_l2(&root, sizeof(ROOT));
+        send_bcast_l2(0, &root, sizeof(ROOT));
     }
 }
 
@@ -630,7 +630,7 @@ void star_0_register()
         .exit = &exit_handler,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);

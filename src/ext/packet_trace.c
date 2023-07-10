@@ -44,7 +44,7 @@ static void packet_trace_clear()
     }
 }
 
-void packet_trace_set(const char *action, const uint8_t* data, size_t data_length)
+void packet_trace_set(const char *action, const void* data, size_t data_length)
 {
     packet_trace_clear();
 
@@ -55,7 +55,7 @@ void packet_trace_set(const char *action, const uint8_t* data, size_t data_lengt
     char marker[MARKER_MAX_LENGTH + 1];
     size_t j = 0;
     for (size_t i = 0; i < data_length; i += 1) {
-        const char c = data[i];
+        const char c = ((uint8_t*) data)[i];
         if ((c >= 'a' && c <= 'z')
                 || (c >= 'A' && c <= 'Z')
                 || (c >= '0' && c <= '9')
@@ -81,7 +81,7 @@ void packet_trace_set(const char *action, const uint8_t* data, size_t data_lengt
     }
     marker[j] = 0;
 
-    log_debug("marker: %s", marker);
+    log_trace("found marker: %s", marker);
 
     g_debug_data.marker = strdup(marker);
 }

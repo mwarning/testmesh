@@ -23,10 +23,10 @@
 
 
 struct interface {
-    unsigned ifindex;
+    uint32_t ifindex;
     struct mac ifmac;
     int ifsock_l2;
-    int is_dynamic;     // added dynamically
+    bool is_dynamic;    // added dynamically
     char *ifname;       // persistent
     struct interface *next;
 };
@@ -35,9 +35,9 @@ static struct interface *g_interfaces = NULL;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
 
-const char *str_find_interfaces(int find_interfaces_value)
+const char *str_find_interfaces(enum FIND_INTERFACES value)
 {
-    switch (find_interfaces_value) {
+    switch (value) {
         case FIND_INTERFACES_ON: return "on";
         case FIND_INTERFACES_OFF: return "off";
         case FIND_INTERFACES_AUTO: return "auto";
@@ -80,7 +80,7 @@ static struct interface *get_interface_by_name(const char *ifname)
     return NULL;
 }
 
-const char *str_ifindex(unsigned ifindex)
+const char *str_ifindex(uint32_t ifindex)
 {
     struct interface *ifa;
 
@@ -171,12 +171,12 @@ static bool setup_raw_socket(int *sock_ret, const char *ifname, uint32_t ifindex
 static bool interface_setup(struct interface *ifa)
 {
     const char *ifname = ifa->ifname;
-    int quiet = ifa->is_dynamic;
+    bool quiet = ifa->is_dynamic;
 
     ifa->ifindex = if_nametoindex(ifname);
     if (ifa->ifindex == 0) {
         if (!quiet) {
-            log_warning("interface not found: %s", ifname);
+            log_warning("interface not found: %s (%s)", ifname, strerror(errno));
         }
         return false;
     }
@@ -226,6 +226,10 @@ static struct interface *get_interface_by_fd(int fd)
 
 static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
 {
+    if (gstate.protocol->interface_handler) {
+        gstate.protocol->interface_handler(ifa->ifindex, false);
+    }
+
     if (ifa == g_interfaces) {
         g_interfaces = ifa->next;
     } else {
@@ -236,7 +240,7 @@ static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
     free(ifa);
 }
 
-static bool interface_add_internal(const char *ifname, int is_dynamic)
+static bool interface_add_internal(const char *ifname, bool is_dynamic)
 {
     if (gstate.tun_name && 0 == strcmp(ifname, gstate.tun_name)) {
         log_error("Cannot add own tun interface: %s", ifname);
@@ -266,12 +270,16 @@ static bool interface_add_internal(const char *ifname, int is_dynamic)
     }
     g_interfaces = ifa;
 
+    if (gstate.protocol->interface_handler) {
+        gstate.protocol->interface_handler(ifa->ifindex, true);
+    }
+
     return true;
 }
 
 bool interface_add(const char *ifname)
 {
-    return interface_add_internal(ifname, 0);
+    return interface_add_internal(ifname, false);
 }
 
 bool interface_del(const char *ifname)
@@ -307,19 +315,19 @@ static void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
 
 static void read_internal_l2(int events, int fd)
 {
-    // some offset to prepend a header before forwarding
-    #define OFFSET 100
+    // some offset to prepend a header before forwarding (as optimization)
+    #define PADDING 100
 
     struct interface *ifa;
     ssize_t readlen;
-    uint8_t buffer[OFFSET + ETH_FRAME_LEN];
-    uint8_t *buf = &buffer[OFFSET];
+    uint8_t buffer[PADDING + ETH_FRAME_LEN];
+    uint8_t *begin = &buffer[PADDING];
 
     if (events <= 0) {
         return;
     }
 
-    readlen = read(fd, buf, ETH_FRAME_LEN);
+    readlen = read(fd, begin, ETH_FRAME_LEN);
 
     if (readlen < 0 || readlen > ETH_FRAME_LEN) {
         log_warning("recv(): %zd %s", readlen, strerror(errno));
@@ -327,6 +335,11 @@ static void read_internal_l2(int events, int fd)
     }
 
     ifa = get_interface_by_fd(fd);
+
+    if (!is_valid_ifa(ifa)) {
+        log_error("recvfrom() on invalid interface %s", (ifa ? ifa->ifname : "???"));
+        return;
+    }
 
     if (readlen < sizeof(struct ethhdr)) {
         log_error("recvfrom() for %s returned %lld: %s",
@@ -336,12 +349,7 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
-    if (!is_valid_ifa(ifa)) {
-        log_error("recvfrom() on invalid interface %s", (ifa ? ifa->ifname : "???"));
-        return;
-    }
-
-    struct ethhdr *eh = (struct ethhdr *) &buf[0];
+    struct ethhdr *eh = (struct ethhdr *) begin;
 
     Address src_addr;
     Address dst_addr;
@@ -351,10 +359,9 @@ static void read_internal_l2(int events, int fd)
     init_macaddr(&dst_addr, &eh->h_dest, ifa->ifindex);
     init_macaddr(&rcv_addr, &ifa->ifmac, ifa->ifindex);
 
-
     traffic_add_bytes_read(&src_addr, readlen);
 
-    uint8_t *payload = &buf[sizeof(struct ethhdr)];
+    uint8_t *payload = &begin[sizeof(struct ethhdr)];
     size_t payload_len = readlen - sizeof(struct ethhdr);
 
     gstate.protocol->ext_handler_l2(&rcv_addr, &src_addr, &dst_addr, payload, payload_len);
@@ -397,14 +404,14 @@ static bool send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_A
     return true;
 }
 
-void send_bcast_l2(const void* data, size_t data_len)
+void send_bcast_l2(const uint32_t ifindex, const void* data, size_t data_len)
 {
     static uint8_t dst_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     char sendbuf[ETH_FRAME_LEN] = {0};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
     if (sendlen >= sizeof(sendbuf)) {
-        log_error("send_raws(): too much data");
+        log_error("send_bcast_l2() too much data");
         return;
     }
 
@@ -412,13 +419,26 @@ void send_bcast_l2(const void* data, size_t data_len)
 
     uint32_t count = 0;
     struct interface *ifa = g_interfaces;
-    while (ifa) {
-        send_internal_l2(ifa, &dst_addr[0], &sendbuf[0], sendlen);
-        count += 1;
-        ifa = ifa->next;
+
+    if (ifindex == 0) {
+        while (ifa) {
+            send_internal_l2(ifa, &dst_addr[0], &sendbuf[0], sendlen);
+            count += 1;
+            ifa = ifa->next;
+        }
+
+    } else {
+        while (ifa) {
+            if (ifa->ifindex == ifindex) {
+                send_internal_l2(ifa, &dst_addr[0], &sendbuf[0], sendlen);
+                count += 1;
+                break;
+            }
+            ifa = ifa->next;
+        }
     }
 
-    log_trace("send_raws: %zu bytes on %u interfaces", data_len, count);
+    log_trace("send_bcast_l2() %zu bytes on %u interfaces", data_len, count);
 }
 
 bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
@@ -426,7 +446,7 @@ bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     struct interface *ifa;
 
     if (addr->family != AF_MAC) {
-        log_error("send_ucast_l2: used wrong address type");
+        log_error("send_ucast_l2() used wrong address type");
         return false;
     }
 
@@ -437,12 +457,12 @@ bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
     if (ifindex == 0) {
-        log_error("send_ucast_l2(): invalid ifindex");
+        log_error("send_ucast_l2() invalid ifindex");
         return false;
     }
 
     if (sendlen > sizeof(sendbuf)) {
-        log_error("send_ucast_l2(): too much data (%zu > %zu)", sendlen, sizeof(sendbuf));
+        log_error("send_ucast_l2() too much data (%zu > %zu)", sendlen, sizeof(sendbuf));
         return false;
     }
 
@@ -459,7 +479,7 @@ bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     }
 
     if (!found) {
-        log_error("send_raws(): ifindex not found: %u", ifindex);
+        log_error("send_ucast_l2() ifindex not found: %u", ifindex);
         return false;
     }
 
@@ -486,7 +506,6 @@ static void read_internal_l3(int events, int fd)
         return;
     }
 
-
     traffic_add_bytes_read(&src_addr, readlen);
 
     assert(src_addr.family == AF_INET6 || src_addr.family == AF_INET);
@@ -496,14 +515,17 @@ static void read_internal_l3(int events, int fd)
 void send_ucast_l3(const Address *addr, const void *data, size_t data_len)
 {
     if (!(addr->family == AF_INET || addr->family == AF_INET6)) {
-        log_error("send_ucast_l3: used wrong address type");
+        log_error("send_ucast_l3() used wrong address type");
         return;
     }
 
     socklen_t slen = sizeof(struct sockaddr_storage);
     if (sendto(gstate.sock_udp, data, data_len, 0, (struct sockaddr*) addr, slen) == -1) {
         log_error("failed send packet to %s: %s", str_addr(addr), strerror(errno));
+        return;
     }
+
+    traffic_add_bytes_write(addr, data_len);
 }
 
 #ifdef MULTICAST
@@ -663,7 +685,7 @@ static void find_and_add_interfaces()
             continue;
         }
 
-        interface_add_internal(ifa->ifa_name, 1);
+        interface_add_internal(ifa->ifa_name, true);
     }
 
     freeifaddrs(ifaddr);
@@ -713,7 +735,7 @@ static void periodic_interfaces_handler(int _events, int _fd)
     }
 }
 
-int interfaces_debug(FILE *fd)
+bool interfaces_debug(FILE *fd)
 {
     int count = 0;
     struct interface *ifa;
@@ -722,7 +744,7 @@ int interfaces_debug(FILE *fd)
 
     ifa = g_interfaces;
     while (ifa) {
-        fprintf(fd, "%-12s %-6s %-18s %-7s %-8u %-8u\n",
+        fprintf(fd, "%-12s %-6s %-18s %-7s %-8d %-8u\n",
             ifa->ifname,
             is_valid_ifa(ifa) ? "up" : "down",
             str_mac(&ifa->ifmac),
@@ -735,14 +757,14 @@ int interfaces_debug(FILE *fd)
     }
     fprintf(fd, " %d interfaces\n", count);
 
-    return 0;
+    return true;
 }
 
-int interfaces_init()
+bool interfaces_init()
 {
     if (g_interfaces == NULL && gstate.find_interfaces == FIND_INTERFACES_OFF) {
         log_error("No mesh interfaces given.");
-        return 1;
+        return false;
     }
 
     if (gstate.sock_udp > 0) {
@@ -757,5 +779,5 @@ int interfaces_init()
 
     net_add_handler(-1, &periodic_interfaces_handler);
 
-    return 0;
+    return true;
 }

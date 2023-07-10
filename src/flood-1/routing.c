@@ -83,7 +83,7 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
                 log_debug("DATA: new packet => forward");
                 p->prev_sender = p->sender;
                 p->sender = gstate.own_id;
-                send_bcast_l2(p, length);
+                send_bcast_l2(0, p, length);
             }
         } else {
             // packet already seen
@@ -106,7 +106,7 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
         } else {
             if (g_is_critical) {
                 log_debug("DATA: is critical => rebroadcast");
-                send_bcast_l2(p, length);
+                send_bcast_l2(0, p, length);
             } else {
                 log_debug("DATA: not critical => drop");
             }
@@ -133,7 +133,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
     log_debug("send DATA packet as broadcast (is_full_flood: %s)", str_enabled(is_full_flood));
 
-    send_bcast_l2(p, get_data_size(p));
+    send_bcast_l2(0, p, get_data_size(p));
 }
 
 static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
@@ -155,16 +155,16 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE* fp, const char *argv[])
+static bool console_handler(FILE* fp, const char *argv[])
 {
     if (match(argv, "i")) {
         fprintf(fp, "critical:   %s (%s ago)\n",
             str_enabled(g_is_critical), str_ago(g_is_critical_time));
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 static void periodic_handler()
@@ -196,7 +196,7 @@ void flood_1_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);

@@ -8,7 +8,7 @@
 void packet_cache_init(uint32_t timeout);
 void packet_cache_clear();
 
-void packet_cache_add(uint32_t dst_id, uint8_t *data, size_t data_length);
-void packet_cache_get_and_remove(uint8_t *data_ret, size_t *data_length_ret, uint32_t dst_id);
+void packet_cache_add(uint32_t dst_id, void *data, size_t data_length);
+void packet_cache_get_and_remove(void *data_ret, size_t *data_length_ret, uint32_t dst_id);
 
 #endif // _PACKET_CACHE_H_

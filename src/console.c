@@ -39,9 +39,9 @@ void console_log_message(const char *message)
     }
 }
 
-static int tokenizer(const char *argv[], size_t argv_length, char *input)
+static void tokenizer(const char *argv[], size_t argv_length, char *input)
 {
-    int argc = 0;
+    size_t argc = 0;
 
     char *p = NULL;
     const int len = strlen(input);
@@ -50,7 +50,8 @@ static int tokenizer(const char *argv[], size_t argv_length, char *input)
             if (p) {
                 if ((argc + 1) == argv_length) {
                     log_warning("tokenizer: too many tokens");
-                    return 0;
+                    argv[0] = NULL;
+                    return;
                 }
                 argv[argc++] = p;
                 p = NULL;
@@ -64,15 +65,13 @@ static int tokenizer(const char *argv[], size_t argv_length, char *input)
     if (p) {
         if ((argc + 1) == argv_length) {
             log_warning("tokenizer: too many tokens");
-            return 0;
+            argv[0] = NULL;
+            return;
         }
         argv[argc++] = p;
     }
 
-    // NULL terminate
-    argv[argc + 1] = NULL;
-
-    return argc;
+    argv[argc] = NULL;
 }
 
 static int console_exec(int clientsock, FILE *fp, const char *argv[])
@@ -82,10 +81,12 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
     if (match(argv, "t")) {
         traffic_debug(fp, argv);
     } else if (match(argv, "peer-add")) {
-        if (gstate.protocol->add_peer) {
-            gstate.protocol->add_peer(fp, argv[1]);
+        if (gstate.protocol->peer_handler) {
+            if (!gstate.protocol->peer_handler(argv[1], true)) {
+                fprintf(fp, "Failed to add peer.\n");
+            }
         } else {
-            fprintf(fp, "not supported by protocol %s\n", gstate.protocol->name);
+            fprintf(fp, "Not supported by protocol %s\n", gstate.protocol->name);
         }
     } else if (match(argv, "q")) {
         // close console
@@ -134,8 +135,8 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
                 str_bytes(tun_read_bytes()), tun_read_count(),
                 str_bytes(tun_write_bytes()), tun_write_count());
         }
-        if (gstate.protocol->console) {
-            gstate.protocol->console(fp, argv);
+        if (gstate.protocol->console_handler) {
+            gstate.protocol->console_handler(fp, argv);
         }
     } else if (match(argv, "h")) {
         fprintf(fp,
@@ -150,15 +151,15 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
             "h                       Show this help.\n"
         );
 
-        if (gstate.protocol->console) {
-            gstate.protocol->console(fp, argv);
+        if (gstate.protocol->console_handler) {
+            gstate.protocol->console_handler(fp, argv);
         }
     } else {
         int rc = 1;
 
         // call protocol specific console handler
-        if (gstate.protocol->console) {
-            rc = gstate.protocol->console(fp, argv);
+        if (gstate.protocol->console_handler) {
+            rc = gstate.protocol->console_handler(fp, argv);
         }
 
         if (rc != 0) {

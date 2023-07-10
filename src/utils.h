@@ -33,6 +33,7 @@ struct macaddr {
     uint32_t ifindex;
 };
 
+// wrapper for MAC and IP addresses
 typedef union {
     sa_family_t family;
     struct macaddr mac;
@@ -45,7 +46,7 @@ bool match(const char *argv[], const char *pattern);
 uint32_t adler32(const void *buf, size_t buflen); // a hash method
 void hex_dump(const char *desc, const void *buf, size_t buflen);
 ssize_t bytes_random(void *buffer, size_t size); // get random bytes
-uint32_t get_ip_connection_fingerprint(const uint8_t *packet, size_t length); // get unique id for IP connection pair
+uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen); // get unique id for IP connection pair
 
 bool address_is_unicast(const Address *addr);
 bool address_is_multicast(const Address *addr);
@@ -57,6 +58,7 @@ const char *str_enabled(uint8_t enabled);
 const char *str_bool(bool enabled);
 const char *str_mac(const struct mac *addr);
 const char *str_bytes(uint64_t bytes);
+const char *str_time(time_t seconds);
 const char *str_duration(time_t from, time_t to);
 const char *str_since(time_t time);
 const char *str_ago(time_t time);

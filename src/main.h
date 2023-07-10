@@ -26,8 +26,9 @@ typedef struct {
     void (*tun_handler)(uint32_t dst_id, uint8_t *packet, size_t length); // receive IP frames from tun0
     void (*ext_handler_l2)(const Address *rvc, const Address *src, const Address *dst, uint8_t *packet, size_t length); // receive Ethernet frames
     void (*ext_handler_l3)(const Address *src_addr, uint8_t *packet, size_t length); // receive IP frames
-    int (*add_peer)(FILE* fp, const char *str);
-    int (*console)(FILE* file, const char *argv[]);
+    bool (*peer_handler)(const char *address, bool add);
+    bool (*interface_handler)(uint32_t ifindex, bool add);
+    bool (*console_handler)(FILE* file, const char *argv[]);
 } Protocol;
 
 void protocols_register(const Protocol *p);

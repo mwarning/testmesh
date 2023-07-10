@@ -162,13 +162,13 @@ static uint32_t in4_addr_id(const struct in_addr *addr)
     return id;
 }
 
-int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
+bool parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
 {
     uint32_t src_id = 0;
     uint32_t dst_id = 0;
 
     if (buf == NULL || read_len == 0) {
-        return 1;
+        return false;
     }
 
     int ip_version = (buf[0] >> 4) & 0x0f;
@@ -182,7 +182,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (IN_MULTICAST(&daddr->s_addr)) {
             // no support for multicast traffic
             log_trace("parse_ip_packet: IPv4 multicast => drop");
-            return 1;
+            return false;
         }
 
         // map destination IP address to mesh id
@@ -193,7 +193,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         } else {
             // invalid id
             log_trace("parse_ip_packet: no mesh destination for IPv4 packet => drop");
-            return 1;
+            return false;
         }
 
         // map source IP address to mesh id
@@ -202,7 +202,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         } else {
             log_warning("read packet with non-mesh IPv4 source address (%s) on %s => drop",
                 str_in4(saddr), gstate.tun_name);
-            return 1;
+            return false;
         }
 
         log_debug("got 0x%08x => 0x%08x", src_id, dst_id);
@@ -210,7 +210,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (read_len < length) {
             log_warning("parse_ip_packet: Partial IPv4 packet (%zu < %zu). Consider to set an MTU. => drop",
                 read_len, length);
-            return 1;
+            return false;
         }
 
         *dst_id_ret = dst_id;
@@ -226,7 +226,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (IN6_IS_ADDR_MULTICAST(daddr)) {
             log_trace("parse_ip_packet: IPv6 multicast => drop");
             // no support for multicast traffic
-            return 1;
+            return false;
         }
 
         // map destination IP destination to mesh id
@@ -237,7 +237,7 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         } else {
             // invalid id
             log_trace("parse_ip_packet: no mesh destination for IPv6 packet => drop");
-            return 1;
+            return false;
         }
 
         // map source IP address to mesh id
@@ -246,23 +246,23 @@ int parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         } else {
             log_warning("read packet with non-mesh IPv6 source address (%s) on %s => drop",
                 str_in6(saddr), gstate.tun_name);
-            return 1;
+            return false;
         }
 
         if (read_len < length) {
             log_warning("parse_ip_packet: IPv6 packet bigger than received data (%zu < %zu). => drop",
                 read_len, length);
-            return 1;
+            return false;
         }
 
         *dst_id_ret = dst_id;
-        return 0;
+        return true;
     }
 
-    log_trace("parse_ip_packet: invalid ip packet => drop");
+    log_trace("parse_ip_packet: invalid IP packet => drop");
 
     // invalid IP packet
-    return 1;
+    return false;
 }
 
 static int ip_enabled(const uint8_t *bytes)
@@ -332,7 +332,7 @@ static void tun_read_internal(int events, int fd)
         g_tun_read_bytes += read_len;
         g_tun_bytes_updated = gstate.time_now;
 
-        if (parse_ip_packet(&dst_id, buf, read_len)) {
+        if (!parse_ip_packet(&dst_id, buf, read_len)) {
             continue;
         }
 
@@ -354,7 +354,7 @@ ssize_t tun_read(uint32_t *dst_id, uint8_t *buf, ssize_t buflen)
 
     log_trace("tun_read: %zd bytes, %s", read_len, debug_payload(buf, read_len));
 
-    if (parse_ip_packet(dst_id, buf, read_len)) {
+    if (!parse_ip_packet(dst_id, buf, read_len)) {
         return -1;
     }
 

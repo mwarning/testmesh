@@ -10,6 +10,7 @@
 #include "../ext/utlist.h"
 #include "../ext/seqnum_cache.h"
 #include "../ext/packet_cache.h"
+#include "../ext/packet_trace.h"
 #include "../log.h"
 #include "../utils.h"
 #include "../net.h"
@@ -85,6 +86,7 @@ typedef struct __attribute__((__packed__)) {
     uint8_t hop_count; // used to get the entry from path
     uint32_t src_id;
     uint32_t dst_id;
+    uint16_t seq_num;
     uint8_t path_count;
     uint16_t payload_length; // length in bytes
     // invisible fields, because they have variable length
@@ -279,6 +281,7 @@ static void send_cached_packet(uint32_t dst_id, const Addr *path, uint32_t path_
     data->hop_count = 0,
     data->src_id = gstate.own_id;
     data->dst_id = dst_id;
+    data->seq_num = g_sequence_number++;
     data->path_count = path_count;
     data->payload_length = data_payload_length;
 
@@ -287,8 +290,10 @@ static void send_cached_packet(uint32_t dst_id, const Addr *path, uint32_t path_
 
     const Address *addr = addr2address(&path[0]);
 
-    log_debug("send DATA (0x%08x => 0x%08x) to %s via [%s]",
-        data->src_id, data->dst_id, str_addr(addr), format_path(path, path_count));
+    packet_trace_set("SEND", data_payload, data_payload_length);
+
+    log_debug("send DATA (0x%08x => 0x%08x, seq_num: %zu) to %s via [%s]",
+        data->src_id, data->dst_id, data->seq_num, str_addr(addr), format_path(path, path_count));
 
     send_ucast_l2(addr, data, get_data_size(data));
 }
@@ -409,7 +414,7 @@ static void handle_RREQ(const Address *addr, RREQ *p, size_t recv_len)
         log_debug("RREQ: resend as broadcast => forward", format_path(path, p->path_count));
 
         // forward as broadcast
-        send_bcast_l2(p, get_rreq_size(p));
+        send_bcast_l2(0, p, get_rreq_size(p));
     }
 }
 
@@ -420,6 +425,11 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
             || p->path_count > MAX_PATH_COUNT
             || p->hop_count >= p->path_count) {
         log_debug("DATA: invalid packet size => drop");
+        return;
+    }
+
+    if (!seqnum_cache_update(p->src_id, p->seq_num)) {
+        log_debug("DATA: packet already received => drop");
         return;
     }
 
@@ -435,6 +445,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
         str_addr(addr), p->src_id, p->dst_id, p->hop_count, format_path(path, p->path_count));
 
     if (p->dst_id == gstate.own_id) {
+        packet_trace_set("ACCEPT", payload, p->payload_length);
         // destination is the local tun0 interface => write packet to tun0
         tun_write(payload, p->payload_length);
     } else {
@@ -446,6 +457,7 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
             &get_data_path(p)[p->hop_count + 1]
         );
 
+        packet_trace_set("FORWARD", payload, p->payload_length);
         log_debug("DATA: send to next hop %s => forward", str_addr(next_hop_addr));
 
         p->hop_count += 1;
@@ -466,6 +478,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         data->hop_count = 0;
         data->src_id = gstate.own_id;
         data->dst_id = dst_id;
+        data->seq_num = g_sequence_number++;
         data->path_count = e->path_count;
         data->payload_length = packet_length;
 
@@ -473,6 +486,11 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
         log_debug("send new DATA 0x%08x => 0x%08x [%s]",
             data->src_id, data->dst_id, format_path(get_data_path(data), data->path_count));
+
+        // avoid processing of this packet again
+        seqnum_cache_update(data->src_id, data->seq_num);
+
+        packet_trace_set("SEND", packet, packet_length);
 
         send_ucast_l2(addr2address(&e->path[0]), data, get_data_size(data));
     } else {
@@ -493,7 +511,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         log_debug("send new RREQ (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
         // we drop data until the path is discovered?
-        send_bcast_l2(&rreq, get_rreq_size(&rreq));
+        send_bcast_l2(0, &rreq, get_rreq_size(&rreq));
     }
 }
 
@@ -519,7 +537,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static int console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, const char *argv[])
 {
     if (match(argv, "h")) {
         fprintf(fp, "n: print routing table\n");
@@ -538,11 +556,17 @@ static int console_handler(FILE *fp, const char *argv[])
             counter += 1;
         }
         fprintf(fp, "%u entries\n", counter);
+    } else if (match(argv, "json")) {
+        fprintf(fp, "{");
+        fprintf(fp, "\"own_id\": \"0x%08x\",", gstate.own_id);
+        fprintf(fp, "\"packet_trace\": ");
+        packet_trace_json(fp);
+        fprintf(fp, "}\n");
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 static void init()
@@ -559,7 +583,7 @@ void dsr_0_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);

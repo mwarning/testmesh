@@ -12,7 +12,7 @@
 typedef struct PacketCacheEntry {
     uint32_t id; // destination id
     time_t updated;
-    uint8_t* data;
+    void* data;
     size_t data_length;
     UT_hash_handle hh;
 } PacketCacheEntry;
@@ -41,7 +41,7 @@ static void packet_cache_timeout()
     }
 }
 
-void packet_cache_get_and_remove(uint8_t *data_ret, size_t *data_length_ret, uint32_t id)
+void packet_cache_get_and_remove(void *data_ret, size_t *data_length_ret, uint32_t id)
 {
     PacketCacheEntry *cur;
 
@@ -57,28 +57,30 @@ void packet_cache_get_and_remove(uint8_t *data_ret, size_t *data_length_ret, uin
     }
 }
 
-void packet_cache_add(uint32_t id, uint8_t *data, size_t data_length)
+void packet_cache_add(uint32_t id, void *data, size_t data_length)
 {
     PacketCacheEntry *e;
+    bool is_new;
 
     // find existing entry
     HASH_FIND(hh, g_packet_cache, &id, sizeof(uint32_t), e);
 
-    int reuse = (e != NULL);
 
-    if (reuse) {
+    if (e) {
         free(e->data);
+        is_new = false;
+    } else {
+        e = (PacketCacheEntry*) calloc(1, sizeof(PacketCacheEntry));
+        is_new = true;
     }
 
-    e = (PacketCacheEntry*) calloc(1, sizeof(PacketCacheEntry));
-
     e->id = id;
-    e->data = (uint8_t*) malloc(data_length);
+    e->data = malloc(data_length);
     memcpy(e->data, data, data_length);
     e->data_length = data_length;
     e->updated = gstate.time_now;
 
-    if (!reuse) {
+    if (is_new) {
         HASH_ADD(hh, g_packet_cache, id, sizeof(uint32_t), e);
     }
 }

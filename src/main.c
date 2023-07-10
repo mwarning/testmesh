@@ -35,6 +35,7 @@ struct state gstate = {
 #endif
     .sock_console = -1,
     .ether_type = 0x88b5, // "Local Experiment Ethertype 1"
+    .find_interfaces = FIND_INTERFACES_AUTO,
 
     .gateway_id = 0,
     .gateway_id_set = 0,
@@ -247,6 +248,7 @@ int main(int argc, char *argv[])
     }
 
     log_info("Protocol:       %s", gstate.protocol->name);
+
     if (gstate.own_id) {
         log_info("Own ID:         0x%08x", gstate.own_id);
     }
@@ -260,6 +262,7 @@ int main(int argc, char *argv[])
     if (gstate.tun_name) {
         log_info("Tunnel Device:  %s", gstate.tun_name);
     }
+
     log_info("Log Level:      %u", gstate.log_level);
     log_info("IPv4/IPv6:      %s/%s", str_enabled(gstate.enable_ipv4), str_enabled(gstate.enable_ipv6));
 
@@ -289,16 +292,16 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (gstate.protocol->init) {
-        gstate.protocol->init();
-    }
-
     if (gstate.control_socket_path) {
         log_info("Control socket: %s", gstate.control_socket_path);
     }
 
     if (gstate.protocol->ext_handler_l2) {
         log_info("Ether-type:     0x%04x", gstate.ether_type);
+    }
+
+    if (gstate.protocol->init) {
+        gstate.protocol->init();
     }
 
     if (gstate.protocol->ext_handler_l3) {
@@ -311,7 +314,9 @@ int main(int argc, char *argv[])
         log_info("Listen on unicast:   %s", str_addr6(&gstate.ucast_addr));
     }
 
-    interfaces_init();
+    if (!interfaces_init()) {
+        return EXIT_FAILURE;
+    }
 
     if (gstate.control_socket_path) {
         unix_create_unix_socket(gstate.control_socket_path, &gstate.sock_console);
@@ -336,7 +341,7 @@ int main(int argc, char *argv[])
         unix_fork();
     } else {
         if (gstate.disable_stdin == 0) {
-            printf("Press Enter for help.\n");
+            printf("Press Enter for help.\n\n");
             net_add_handler(STDIN_FILENO, &console_client_handler);
         }
     }

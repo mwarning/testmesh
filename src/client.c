@@ -26,6 +26,7 @@
 /*
  * A separate program part to control the routing daemon.
  */
+#define CLIENT_DEFAULT_SOCKET "/tmp/testmesh.sock"
 
 int g_client_sock = -1;
 int g_shutdown_after_reply = 0;
@@ -34,9 +35,9 @@ void client_usage(const char *pname)
 {
     fprintf(stderr,
         "Usage:\n"
-        "  %s -c /tmp/geomesh.sock [<commands-to-send>]\n"
+        "  %s [-c <control-socket-path>] [<commands-to-send>] [<command>]\n"
         "\n"
-        "-c <path>       Path to control socket.\n"
+        "-c <path>       Path to control socket (Default: "CLIENT_DEFAULT_SOCKET").\n"
         "-h              Prints this help text.\n"
         "\n"
         "If no command is given as argument, then an interactive shell will be started.\n",
@@ -103,7 +104,7 @@ void client_handler_in(int rc, int fd)
 
 int client_main(int argc, char *argv[])
 {
-    const char *socket_path = NULL;
+    const char *socket_path = CLIENT_DEFAULT_SOCKET;
     char *command = NULL; // command from console
 
     int option;

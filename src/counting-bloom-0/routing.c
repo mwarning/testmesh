@@ -297,7 +297,7 @@ static void send_COMMs()
 
     memcpy(&data.bloom[0], &g_own_bloom[0], sizeof(data.bloom));
 
-    send_bcast_l2(&data, sizeof(data));
+    send_bcast_l2(0, &data, sizeof(data));
 }
 
 static void periodic_handler(int _events, int _fd)
@@ -327,7 +327,7 @@ static char *str_bloom(char *buf, const uint8_t *bloom)
     return buf;
 }
 
-static int console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, const char *argv[])
 {
     char buf_bloom[BLOOM_M * 6];
 
@@ -354,10 +354,10 @@ static int console_handler(FILE *fp, const char *argv[])
         }
         fprintf(fp, "%zu entries\n", counter);
     } else {
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 static void init()
@@ -378,7 +378,7 @@ void counting_bloom_0_register()
         .init = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
-        .console = &console_handler,
+        .console_handler = &console_handler,
     };
 
     protocols_register(&p);
