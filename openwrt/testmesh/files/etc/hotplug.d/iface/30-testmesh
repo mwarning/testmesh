@@ -3,16 +3,16 @@
 . /lib/functions.sh
 
 handle_ifname_list() {
-	local ifname="$1" cfg="$2" control="/tmp/testmesh-ctl"
+	local ifname="$1" cfg="$2" control="/tmp/testmesh.ctl"
 
 	config_get control $cfg "control"
 
-	if [ "$ifname" = "$INTERFACE" ]; then
+	if [ "$ifname" = "$INTERFACE" -a -f "$control" ]; then
 		if [ "$ACTION" = "ifup" ]; then
-			testmesh-ctl -s $control interface-add "$DEVICE"
+			testmesh-ctl -c $control interface-add "$DEVICE"
 		fi
 		if [ "$ACTION" = "ifdown" ]; then
-			testmesh-ctl -s $control interface-del "$DEVICE"
+			testmesh-ctl -c $control interface-del "$DEVICE"
 		fi
 	fi
 }

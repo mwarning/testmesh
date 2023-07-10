@@ -9,12 +9,16 @@ PKG_BUILD_DIR:=$(BUILD_DIR)/testmesh-firmware
 include $(INCLUDE_DIR)/package.mk
 
 define Package/testmesh-firmware
-	TITLE:= Testmesh Example Firmware
+	TITLE:= Firmware for Testmesh
 	SECTION:=base
 	CATEGORY:=Testmesh
 	MENU:=1
 	DEFAULT:=y
 	DEPENDS:=+testmesh +tcpdump-mini
+endef
+
+define Package/testmesh-firmware/description
+	Environment setup for Testmesh
 endef
 
 define Package/testmesh-firmware/config
@@ -32,8 +36,8 @@ PKG_CONFIG_DEPENDS:= \
 
 define Package/testmesh-firmware/install
 	$(CP) ./files/* $(1)/
-	$(SED) "s/protocol=.*/protocol=$(CONFIG_TESTMESH_FIRMWARE_ALGORITHM)/" $(1)/etc/uci-defaults/zzz_testmesh-setup
-	$(SED) "s/is_gateway=.*/is_gateway=$(if $(CONFIG_TESTMESH_FIRMWARE_GATEWAY),y,n)/" $(1)/etc/uci-defaults/zzz_testmesh-setup
+	$(SED) "s/^protocol=.*/protocol=$(CONFIG_TESTMESH_FIRMWARE_ALGORITHM)/" $(1)/etc/uci-defaults/zzz_testmesh-setup
+	$(SED) "s/^is_gateway=.*/is_gateway=$(if $(CONFIG_TESTMESH_FIRMWARE_GATEWAY),y,n)/" $(1)/etc/uci-defaults/zzz_testmesh-setup
 endef
 
 $(eval $(call BuildPackage,testmesh-firmware))

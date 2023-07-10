@@ -2,7 +2,7 @@
 config testmesh
 	option enabled 1
 	option protocol 'flood-1'
-	option control '/var/testmesh.ctl'
+	option control '/tmp/testmesh.sock'
 	#option own_id '0x02'
 	list interface 'wlan0'
 	#option tun_setup 'on'

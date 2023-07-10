@@ -1,5 +1,6 @@
 #!/bin/sh
 
+# will be set during build time
 is_gateway=n
 protocol=flood-0
 
@@ -11,7 +12,7 @@ echo "(I) Start Testmesh Firmware Setup"
 
 mac=$(cat /sys/class/ieee80211/phy0/macaddress)
 
-if [ $is_gateway = 'y' ]; then
+if [ "$is_gateway" = 'y' ]; then
 	id="00000001"
 else
 	# set id based on mac - hopefully with a good uniqueness
@@ -51,11 +52,11 @@ config_wifi() {
 	uci set wireless.$ds.disabled='0'
 
 	# Mesh interface
-	h="wireless.${wifi_device}_testmesh"
+	h="wireless.${wifi_device}_mesh"
 	uci set $h="wifi-iface"
 	uci set $h.device="$wifi_device"
 	uci set $h.mode="mesh"
-	uci set $h.network="${wifi_device}_testmesh"
+	uci set $h.network="${wifi_device}_mesh"
 	uci set $h.mesh_id="mesh-id"
 	uci set $h.mesh_fwding="0" # Disabled! Because we use our own routing protocol.
 
@@ -65,10 +66,10 @@ config_wifi() {
 	uci set $p.device="$wifi_device"
 	uci set $p.mode="ap"
 	uci set $p.network="lan"
-	if [ $is_gateway = 'y' ]; then
-		uci set $p.ssid="testmesh-gateway-${mac:15}"
+	if [ "$is_gateway" = 'y' ]; then
+		uci set $p.ssid="mesh-gateway-${mac:15}"
 	else
-		uci set $p.ssid="testmesh-client-${mac:15}"
+		uci set $p.ssid="mesh-client-${mac:15}"
 	fi
 	uci set $p.encryption="psk2" #none
 	uci set $p.key="openwrt123"
@@ -85,9 +86,9 @@ uci set $n.protocol="${protocol}"
 uci set $n.tun_name="tun0"
 uci set $n.own_id="0x${id}"
 uci set $n.log_level="2"
-uci set $n.enable_ipv4="1"
-uci set $n.enable_ipv6="1"
-uci set $n.setup_tun="0"
+uci set $n.enable_ipv4="on"
+uci set $n.enable_ipv6="on"
+uci set $n.setup_tun="off"
 if [ $is_gateway = 'n' ]; then
 	uci set $n.gateway_id="0x00000001"
 fi
@@ -95,11 +96,11 @@ fi
 n="network.lan"
 uci add_list $n.ip6addr="${addr6_lan}/64"
 uci set $n.mtu=1400
-if [ $is_gateway = 'y' ]; then
+if [ "$is_gateway" = 'y' ]; then
 	uci set $n.dns="${addr6_mesh_dns} ${addr4_mesh_dns}"
 fi
 
-if [ $is_gateway = 'n' ]; then
+if [ "$is_gateway" = 'n' ]; then
 	# route Internet traffic to the gateway
 	n="network.mesh_route6"
 	uci set $n="route6"
@@ -138,7 +139,7 @@ uci set $n.mtu_fix="1"
 
 n="firewall.mesh_forwarding"
 uci set $n="forwarding"
-if [ $is_gateway = 'y' ]; then
+if [ "$is_gateway" = 'y' ]; then
 	uci set $n.src="mesh"
 	uci set $n.dest="wan"
 else
