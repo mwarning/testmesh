@@ -12,8 +12,9 @@
 #include "utils.h"
 #include "interfaces.h"
 
-#define MAIN_SRVNAME "testmesh"
-#define PROGRAMM_VERSION "1.0.0"
+#define PROGRAM_NAME "testmesh"
+#define PROGRAM_VERSION "1.0.0"
+#define CLIENT_DEFAULT_SOCKET "/tmp/"PROGRAM_NAME".sock"
 
 #define MULTICAST_ADDR "ff12::114"
 #define MULTICAST_PORT 4321

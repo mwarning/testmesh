@@ -150,7 +150,7 @@ static int conf_set(const char *opt, const char *val)
         protocols_print(stdout);
         exit(0);
     case oVersion:
-        printf(PROGRAMM_VERSION "\n");
+        printf(PROGRAM_NAME " " PROGRAM_VERSION "\n");
         exit(0);
     case oPeer:
         if (gstate.protocol == NULL) {

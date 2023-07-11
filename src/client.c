@@ -26,22 +26,21 @@
 /*
  * A separate program part to control the routing daemon.
  */
-#define CLIENT_DEFAULT_SOCKET "/tmp/testmesh.sock"
 
 int g_client_sock = -1;
 int g_shutdown_after_reply = 0;
 
-void client_usage(const char *pname)
+void client_usage(const char *program_name)
 {
     fprintf(stderr,
         "Usage:\n"
-        "  %s [-c <control-socket-path>] [<commands-to-send>] [<command>]\n"
+        "  %s [-c <control-socket-path>] [<command-to-send>]\n"
         "\n"
         "-c <path>       Path to control socket (Default: "CLIENT_DEFAULT_SOCKET").\n"
         "-h              Prints this help text.\n"
         "\n"
         "If no command is given as argument, then an interactive shell will be started.\n",
-        pname
+        program_name
     );
 }
 
