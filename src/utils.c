@@ -608,22 +608,29 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
 
 bool match(const char *argv[], const char *pattern)
 {
-    const char *beg = &pattern[0];
+    const char *p_beg = &pattern[0];
     size_t j = 0;
 
     for (size_t i = 0; ; i += 1) {
         const char c = pattern[i];
         if (c == ',' || c == '\0') {
-            const char *end = &pattern[i];
+            const char *p_end = &pattern[i];
+            const size_t p_len = p_end - p_beg;
             const char *v = argv[j];
 
-            if (v && (0 == strncmp(v, beg, end - beg) || 0 == strncmp("*", beg, end - beg))) {
+            if (v == NULL) {
+                return false;
+            }
+
+            const size_t v_len = strlen(v);
+            if (((p_len == v_len) && !memcmp(v, p_beg, p_len))
+                    || ((p_len == 1) && !memcmp("*", p_beg, p_len))) {
                 j += 1;
             } else {
                 return false;
             }
 
-            beg = end + 1;
+            p_beg = p_end + 1;
             if (c == '\0') {
                 break;
             }
