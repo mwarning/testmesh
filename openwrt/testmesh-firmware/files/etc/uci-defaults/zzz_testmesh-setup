@@ -11,6 +11,7 @@ exec >/root/setup.log 2>&1
 echo "(I) Start Testmesh Firmware Setup"
 
 mac=$(cat /sys/class/ieee80211/phy0/macaddress)
+mtu=1400
 
 if [ "$is_gateway" = 'y' ]; then
 	id="00000001"
@@ -60,6 +61,12 @@ config_wifi() {
 	uci set $h.mesh_id="mesh-id"
 	uci set $h.mesh_fwding="0" # Disabled! Because we use our own routing protocol.
 
+	n="network.${wifi_device}_mesh"
+	uci set $n="interface"
+	uci set $n.mtu="$mtu"
+	uci set $n.proto="testmesh"
+	uci set $n.master="tun0"
+
 	# AP interface
 	p="wireless.${wifi_device}_ap"
 	uci set $p="wifi-iface"
@@ -80,7 +87,7 @@ config_foreach config_wifi wifi-device
 
 uci delete network.globals
 
-n=testmesh.@testmesh[-1]
+n="testmesh.tun0"
 uci set $n.enabled=1
 uci set $n.protocol="${protocol}"
 uci set $n.tun_name="tun0"
@@ -95,13 +102,14 @@ fi
 
 n="network.lan"
 uci add_list $n.ip6addr="${addr6_lan}/64"
-uci set $n.mtu=1400
+uci set $n.mtu="$mtu"
 if [ "$is_gateway" = 'y' ]; then
 	uci set $n.dns="${addr6_mesh_dns} ${addr4_mesh_dns}"
 fi
 
 if [ "$is_gateway" = 'n' ]; then
-	# route Internet traffic to the gateway
+	# Extended configuration for tunnel interface.
+	# Route Internet traffic to the gateway.
 	n="network.mesh_route6"
 	uci set $n="route6"
 	uci set $n.interface="mesh"
