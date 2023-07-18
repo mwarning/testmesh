@@ -767,11 +767,6 @@ bool interfaces_debug(FILE *fd)
 
 bool interfaces_init()
 {
-    if (g_interfaces == NULL && gstate.find_interfaces == FIND_INTERFACES_OFF) {
-        log_error("No mesh interfaces given.");
-        return false;
-    }
-
     if (gstate.sock_udp > 0) {
         net_add_handler(gstate.sock_udp, &read_internal_l3);
     }

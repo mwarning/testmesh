@@ -35,7 +35,7 @@ struct state gstate = {
 #endif
     .sock_console = -1,
     .ether_type = 0x88b5, // "Local Experiment Ethertype 1"
-    .find_interfaces = FIND_INTERFACES_AUTO,
+    .find_interfaces = FIND_INTERFACES_OFF,
 
     .gateway_id = 0,
     .gateway_id_set = 0,

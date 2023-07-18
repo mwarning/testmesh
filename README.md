@@ -84,8 +84,7 @@ Usage: testmesh -i eth0 -i wlan0
   --protocol,-p <protocol>        Select routing protocol
   --daemon,-d                     Run as daemon
   --interface,-i <interface>      Limit to given interfaces
-  --find-interfaces [on/off/auto] Find and add interfaces automatically (default: auto)
-  --find-interfaces               Find and add interfaces automatically
+  --find-interfaces [on/off/auto] Find and add interfaces automatically (default: off)
   --own-id <id>                   Identifier of this node (default: <random>)
   --gateway-id <id>               Identifier of the gateway node (default: <none>)
   --peer <address>                Add a peer manually by address

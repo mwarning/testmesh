@@ -78,7 +78,7 @@ static const char *usage_str =
     "  --protocol,-p <protocol>        Select routing protocol\n"
     "  --daemon,-d                     Run as daemon in background\n"
     "  --interface,-i <interface>      Limit to given interfaces\n"
-    "  --find-interfaces [on/off/auto] Find and add interfaces automatically (default: auto)\n"
+    "  --find-interfaces [on/off/auto] Find and add interfaces automatically (default: off)\n"
     "  --own-id <id>                   Identifier of this node (default: <random>)\n"
     "  --gateway-id <id>               Identifier of the gateway node (default: <none>)\n"
     "  --peer <address>                Add a peer manually by address\n"
