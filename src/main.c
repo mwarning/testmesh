@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
 
     register_all_protocols();
 
-    if (conf_setup(argc, argv) == EXIT_FAILURE) {
+    if (!conf_setup(argc, argv)) {
         return EXIT_FAILURE;
     }
 

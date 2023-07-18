@@ -122,7 +122,7 @@ static const struct option_t *find_option(const char *name)
     return NULL;
 }
 
-static int conf_set(const char *opt, const char *val)
+static bool conf_set(const char *opt, const char *val)
 {
     const struct option_t *option;
     uint64_t n;
@@ -131,17 +131,17 @@ static int conf_set(const char *opt, const char *val)
 
     if (option == NULL) {
         log_error("Unknown parameter: %s", opt);
-        return EXIT_FAILURE;
+        return false;
     }
 
     if (option->num_args == 1 && val == NULL) {
         log_error("Argument expected for option: %s", opt);
-        return EXIT_FAILURE;
+        return false;
     }
 
     if (option->num_args == 0 && val != NULL) {
         log_error("No argument expected for option: %s", opt);
-        return EXIT_FAILURE;
+        return false;
     }
 
     switch (option->code) {
@@ -155,11 +155,11 @@ static int conf_set(const char *opt, const char *val)
     case oPeer:
         if (gstate.protocol == NULL) {
             log_error("%s needs to be used after a protocol", option->name);
-            return EXIT_FAILURE;
+            return false;
         }
         if (gstate.protocol->peer_handler == NULL) {
             log_error("Protocol %s does not support peers", gstate.protocol->name);
-            return EXIT_FAILURE;
+            return false;
         }
         if (!gstate.protocol->peer_handler(val, true)) {
             log_error("Failed to add peer: %s", val);
@@ -170,7 +170,7 @@ static int conf_set(const char *opt, const char *val)
         gstate.protocol = protocols_find(val);
         if (gstate.protocol == NULL) {
             log_error("Unknown protocol: %s", val);
-            return EXIT_FAILURE;
+            return false;
         }
         break;
     case oDaemon:
@@ -185,13 +185,13 @@ static int conf_set(const char *opt, const char *val)
             gstate.find_interfaces = FIND_INTERFACES_AUTO;
         } else {
             log_error("Unknown value for %s %s", opt, val);
-            return EXIT_FAILURE;
+            return false;
         }
         break;
     case oInterface:
         if (gstate.protocol == NULL) {
             log_error("%s needs to be used after a protocol", option->name);
-            return EXIT_FAILURE;
+            return false;
         }
 
         interface_add(val);
@@ -200,7 +200,7 @@ static int conf_set(const char *opt, const char *val)
         gstate.log_to_file = fopen(val, "w");
         if (gstate.log_to_file == NULL) {
             log_error("Failed to open file to log: %s (%s)", val, strerror(errno));
-            return EXIT_FAILURE;
+            return false;
         }
         break;
     case oLogTime:
@@ -220,7 +220,7 @@ static int conf_set(const char *opt, const char *val)
             gstate.tun_setup = false;
         } else {
             log_error("Unknown value for %s %s", opt, val);
-            return EXIT_FAILURE;
+            return false;
         }
         break;
     case oControlSocket:
@@ -229,11 +229,11 @@ static int conf_set(const char *opt, const char *val)
     case oGatewayIdentifier:
         if (parse_hex(&n, val, sizeof(gstate.gateway_id))) {
             log_error("Invalid hex value for %s: %s", opt, val);
-            return EXIT_FAILURE;
+            return false;
         }
         if (gstate.own_id_set && gstate.own_id == n) {
             log_error("Own and gateway id are the same: %08x", n);
-            return EXIT_FAILURE;
+            return false;
         }
         gstate.gateway_id = n;
         gstate.gateway_id_set = true;
@@ -241,11 +241,11 @@ static int conf_set(const char *opt, const char *val)
     case oOwnIdentifier:
         if (parse_hex(&n, val, sizeof(gstate.own_id))) {
             log_error("Invalid hex value for %s: %s", opt, val);
-            return EXIT_FAILURE;
+            return false;
         }
         if (gstate.gateway_id_set && gstate.gateway_id == n) {
             log_error("Gateway and own id are the same: %08x", n);
-            return EXIT_FAILURE;
+            return false;
         }
         gstate.own_id = n;
         gstate.own_id_set = true;
@@ -260,7 +260,7 @@ static int conf_set(const char *opt, const char *val)
             gstate.enable_ipv4 = false;
         } else {
             log_error("Unknown value for %s %s", opt, val);
-            return EXIT_FAILURE;
+            return false;
         }
         break;
     case oEnableIPv6:
@@ -270,13 +270,13 @@ static int conf_set(const char *opt, const char *val)
             gstate.enable_ipv6 = false;
         } else {
             log_error("Unknown value for %s %s", opt, val);
-            return EXIT_FAILURE;
+            return false;
         }
         break;
     case oEtherType:
         if (parse_hex(&n, val, sizeof(gstate.ether_type)) || n == 0) {
             log_error("Invalid hex value for %s: %s", opt, val);
-            return EXIT_FAILURE;
+            return false;
         }
         gstate.ether_type = n;
         break;
@@ -286,24 +286,23 @@ static int conf_set(const char *opt, const char *val)
         uint32_t log_level = strtoul(val, &ptr, 10);
         if (ptr != end || log_level > MAX_LOG_LEVEL) {
             log_error("Invalid log level: %s", val);
-            return EXIT_FAILURE;
+            return false;
         }
         gstate.log_level = log_level;
         break;
     }
     default:
         log_error("Unhandled option: %s", opt);
-        return EXIT_FAILURE;
+        return false;
     }
 
-    return EXIT_SUCCESS;
+    return true;
 }
 
-int conf_setup(int argc, char **argv)
+bool conf_setup(int argc, char **argv)
 {
     const char *opt;
     const char *val;
-    int rc;
     size_t i;
 
     for (i = 1; i < argc; ++i) {
@@ -312,17 +311,17 @@ int conf_setup(int argc, char **argv)
 
         if (val && val[0] != '-') {
             // -x abc
-            rc = conf_set(opt, val);
+            if (!conf_set(opt, val)) {
+                return false;
+            }
             i += 1;
         } else {
             // -x
-            rc = conf_set(opt, NULL);
-        }
-
-        if (rc == EXIT_FAILURE) {
-            return EXIT_FAILURE;
+            if (!conf_set(opt, NULL)) {
+                return false;
+            }
         }
     }
 
-    return EXIT_SUCCESS;
+    return true;
 }
