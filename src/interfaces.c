@@ -23,12 +23,12 @@
 
 
 struct interface {
-    uint32_t ifindex;
-    struct mac ifmac;
-    int ifsock_l2;
-    bool is_dynamic;    // added dynamically
-    char *ifname;       // persistent
     struct interface *next;
+    uint32_t ifindex;
+    char ifname[16];
+    struct mac ifmac;
+    int ifsock_l2; // ifsock_i3?
+    bool is_dynamic;    // interface was added automatically
 };
 
 static struct interface *g_interfaces = NULL;
@@ -71,7 +71,7 @@ static struct interface *get_interface_by_name(const char *ifname)
 
     ifa = g_interfaces;
     while (ifa) {
-        if (0 == strcmp(ifa->ifname, ifname)) {
+        if (0 == strcmp(&ifa->ifname[0], ifname)) {
             return ifa;
         }
         ifa = ifa->next;
@@ -91,7 +91,7 @@ const char *str_ifindex(uint32_t ifindex)
     ifa = g_interfaces;
     while (ifa) {
         if (ifa->ifindex == ifindex) {
-            return ifa->ifname;
+            return &ifa->ifname[0];
         }
         ifa = ifa->next;
     }
@@ -170,7 +170,7 @@ static bool setup_raw_socket(int *sock_ret, const char *ifname, uint32_t ifindex
 
 static bool interface_setup(struct interface *ifa)
 {
-    const char *ifname = ifa->ifname;
+    const char *ifname = &ifa->ifname[0];
     bool quiet = ifa->is_dynamic;
 
     ifa->ifindex = if_nametoindex(ifname);
@@ -195,12 +195,12 @@ static bool interface_setup(struct interface *ifa)
             return false;
         }
 
-        if (!setup_raw_socket(&ifa->ifsock_l2, ifa->ifname, ifa->ifindex)) {
+        if (!setup_raw_socket(&ifa->ifsock_l2, ifname, ifa->ifindex)) {
             return false;
         }
     }
 
-    log_info("interface added: %s (%s)", ifa->ifname, ifa->is_dynamic ? "dynamic" : "static");
+    log_info("interface added: %s (%s)", ifname, ifa->is_dynamic ? "dynamic" : "static");
 
     return true;
 }
@@ -236,7 +236,6 @@ static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
         ifa_prev->next = ifa->next;
     }
 
-    free(ifa->ifname);
     free(ifa);
 }
 
@@ -252,13 +251,19 @@ static bool interface_add_internal(const char *ifname, bool is_dynamic)
         return false;
     }
 
+    if (strlen(ifname) >= 16) {
+        log_error("Interface name too long: %s", ifname);
+        return false;
+    }
+
     struct interface *ifa = (struct interface*) calloc(1, sizeof(struct interface));
     *ifa = (struct interface) {
-        .ifname = strdup(ifname),
+        .ifname = {0},
         .ifmac = g_nullmac,
         .ifsock_l2 = -1,
         .is_dynamic = is_dynamic,
     };
+    strcpy(&ifa->ifname[0], ifname);
 
     interface_setup(ifa);
 
