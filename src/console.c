@@ -92,9 +92,17 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
         // close console
         ret = 1;
     } else if (match(argv, "interface-add,*")) {
-        interface_add(argv[1]);
+        if (interface_add(argv[1])) {
+            fprintf(fp, "done\n");
+        } else {
+            fprintf(fp, "failed\n");
+        }
     } else if (match(argv, "interface-del,*")) {
-        interface_del(argv[1]);
+        if (interface_del(argv[1])) {
+            fprintf(fp, "done\n");
+        } else {
+            fprintf(fp, "failed\n");
+        }
     } else if (match(argv, "interfaces")) {
         interfaces_debug(fp);
     } else if (match(argv, "v")) {
