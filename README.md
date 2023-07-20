@@ -46,6 +46,11 @@ Implemented Protocols:
   - degrade filter on every hop
   - send routing information as one hop bradcast to neighbors
   - send payload as unicast along gradient
+- [ratelimit-0](src/ratelimit-0/)
+  - reactive
+  - distance vector
+  - rate limit broadcast/discovery packet by other traffic
+  - dynamic node timeout
 - [star-0](src/star-0/)
   - incomplete!
   - reactive
