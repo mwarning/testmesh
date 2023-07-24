@@ -1,13 +1,15 @@
 # Ratelimit 0
 
-Main idea: Hard limit amount of broadcast traffic.
+Main idea: Limit amount of broadcast traffic
 
 Packets:
 - Route Request (RREQ)
 - Route Response (RREP)
 - Data Packet (DATA)
 
+Nodes:
 - reactive
+- intermediate nodes do _not_ send route replies
 - only broadcast packets are for Route Request
 - only send/forward broadcasts as
   - maximum of x percent of the total traffic rate

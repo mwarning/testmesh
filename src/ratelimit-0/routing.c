@@ -22,11 +22,9 @@
 enum {
     TYPE_DATA,
     TYPE_RREQ,
-    TYPE_RREP,
-    TYPE_BROKEN
+    TYPE_RREP
 };
 
-// minimal time a node times out
 #define HOP_TIMEOUT_MIN_SECONDS (10)
 #define HOP_TIMEOUT_MAX_SECONDS (60 * 60 * 24)
 #define TRAFFIC_TIMEOUT_MAX_SECONDS (60 * 60 * 24)
@@ -211,21 +209,23 @@ static void send_bcast_l2_wrapper(const void* data, size_t data_len)
         HASH_ITER(hh, g_traffic, cur, tmp) {
             uint32_t bpackets = cur->received_broadcast_packets;
             uint32_t upackets = cur->received_unicast_packets;
-            log_debug("send_bcast_l2_wrapper() bpackets: %zu, upackets: %zu", bpackets, upackets);
-            uint32_t pc = (100 * (1 + bpackets)) / (1 + bpackets + upackets);
 
+            size_t pc = (100 * (1 + bpackets)) / (1 + bpackets + upackets);
             time_t last_broadcast = (gstate.time_now - cur->time_broadcast_send);
 
             if (pc <= MIN_BROADCAST_PACKETS_PERCENT
                     || last_broadcast > MIN_BROADCAST_PACKETS_PER_SECONDS) {
-                log_debug("on %zu, %zu%% of packets are broadcast, last_broadcast: %s => send", cur->ifindex, pc, str_ago(last_broadcast));
+                log_debug("send_bcast_l2_wrapper() ifname: %s, bpackets: %zu (%zu%%), upackets: %zu, last_broadcast: %s ago => send",
+                        str_ifindex(cur->ifindex), (size_t) bpackets, pc, (size_t) upackets, str_time(last_broadcast));
+
                 send_bcast_l2(cur->ifindex, data, data_len);
                 count_broadcast_traffic(cur, data_len, 0);
 
                 // for statistics only
                 g_broadcast_send_counter += 1;
             } else {
-                log_debug("on %zu, %zu%% of packets are broadcast, last_broadcast: %s => drop", cur->ifindex, pc, str_ago(last_broadcast));
+                log_debug("send_bcast_l2_wrapper() ifname: %s, bpackets: %zu (%zu%%), upackets: %zu, last_broadcast: %s ago => drop",
+                        str_ifindex(cur->ifindex), (size_t) bpackets, pc, (size_t) upackets, str_time(last_broadcast));
 
                 // for statistics only
                 g_broadcast_dropped_counter += 1;
@@ -279,7 +279,7 @@ static void nodes_update(uint32_t id, const Address *addr, uint16_t hop_count, u
     // ignore own id
     if (id == gstate.own_id) {
         // should not happen (atm. it can)
-        log_error("got own id");
+        log_error("nodes_update() got own id => ignore");
         return;
     }
 
@@ -298,6 +298,7 @@ static void nodes_update(uint32_t id, const Address *addr, uint16_t hop_count, u
 
     HASH_FIND(hh, node->hops, addr, sizeof(Address), hop);
     if (hop == NULL) {
+        // add new entry
         hop = (Hop*) malloc(sizeof(Hop));
         hop->time_created = gstate.time_now;
         hop->next_hop_addr = *addr;
@@ -326,7 +327,7 @@ static void nodes_timeout()
             const uint32_t age2 = time_now - hcur->time_updated;
             if (age2 > HOP_TIMEOUT_MIN_SECONDS
                 && ((age2 > HOP_TIMEOUT_MAX_SECONDS) || (age1 < age2))) {
-                log_debug("timeout hop %s (age: %s, timeout: %s)",
+                log_debug("timeout hop %s (age1: %s, age2: %s)",
                     str_addr(&hcur->next_hop_addr), str_time(age1), str_time(age2));
                 HASH_DEL(ncur->hops, hcur);
 
@@ -336,7 +337,7 @@ static void nodes_timeout()
 
         // no hops left => remove node
         if (ncur->hops == NULL) {
-            log_debug("timeout node 0x%08x", ncur->id);
+            log_debug("remove node 0x%08x", ncur->id);
             HASH_DEL(g_nodes, ncur);
             free(ncur);
         }
@@ -451,7 +452,7 @@ static void send_cached_packet(uint32_t dst_id, const Address *next_hop_addr)
     // avoid processing of this packet again
     seqnum_check(data->src_id, data->seq_num);
 
-    log_debug("send DATA (0x%08x => 0x%08x) to %s via next hop %s",
+    log_debug("send DATA (0x%08x => 0x%08x) via next hop %s",
         data->src_id, data->dst_id, str_addr(next_hop_addr));
 
     send_ucast_l2_wrapper(next_hop_addr, data, get_data_size(data));
@@ -475,8 +476,8 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
         return;
     }
 
-    log_debug("RREQ: got packet: %s / 0x%08x => 0x%08x / hop_count: %u, seq_num: %u",
-        str_addr(dst), p->src_id, p->dst_id, p->hop_count, p->seq_num);
+    log_debug("RREQ: got packet: %s / 0x%08x => 0x%08x / hop_count: %zu, seq_num: %zu",
+        str_addr(dst), p->src_id, p->dst_id, (size_t) p->hop_count, (size_t) p->seq_num);
 
     nodes_update(p->src_id, src, p->hop_count, p->seq_num);
 
@@ -518,8 +519,8 @@ static void handle_RREP(const Address *rcv, const Address *src, const Address *d
         return;
     }
 
-    log_debug("RREP: got packet: %s / 0x%08x => 0x%08x / hop_count: %u, seq_num: %u",
-        str_addr(src), p->src_id, p->dst_id, p->hop_count, p->seq_num);
+    log_debug("RREP: got packet: %s / 0x%08x => 0x%08x / hop_count: %zu, seq_num: %zu",
+        str_addr(src), p->src_id, p->dst_id, (size_t) p->hop_count, (size_t) p->seq_num);
 
     nodes_update(p->src_id, src, p->hop_count, p->seq_num);
 
@@ -565,8 +566,8 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
 
     packet_trace_set("FORWARD", payload, p->payload_length);
 
-    log_debug("DATA: got packet from %s / 0x%08x => 0x%08x / hop_count: %u",
-        str_addr(src), p->src_id, p->dst_id, p->hop_count);
+    log_debug("DATA: got packet from %s / 0x%08x => 0x%08x / hop_count: %zu",
+        str_addr(src), p->src_id, p->dst_id, (size_t) p->hop_count);
 
     nodes_update(p->src_id, src, p->hop_count, p->seq_num);
 
@@ -680,7 +681,7 @@ static bool console_handler(FILE* fp, const char *argv[])
     if (match(argv, "h")) {
         fprintf(fp, "r                       print routing table\n");
     } else if (match(argv, "i")) {
-        fprintf(fp, "broadcasts:      %u (send)/ %u (dropped)\n", g_broadcast_send_counter, g_broadcast_dropped_counter);
+        fprintf(fp, "broadcasts:      %zu (send)/ %zu (dropped)\n", (size_t) g_broadcast_send_counter, (size_t) g_broadcast_dropped_counter);
         fprintf(fp, "HOP_TIMEOUT_MIN: %s\n", str_time(HOP_TIMEOUT_MIN_SECONDS));
         fprintf(fp, "HOP_TIMEOUT_MAX: %s\n", str_time(HOP_TIMEOUT_MAX_SECONDS));
         fprintf(fp, "TRAFFIC_TIMEOUT_MAX: %s\n", str_time(TRAFFIC_TIMEOUT_MAX_SECONDS));
@@ -716,8 +717,8 @@ static bool console_handler(FILE* fp, const char *argv[])
     } else if (match(argv, "json")) {
         fprintf(fp, "{");
         fprintf(fp, "\"own_id\": \"0x%08x\",", gstate.own_id);
-        fprintf(fp, "\"broadcasts_send_counter\": %u,", g_broadcast_send_counter);
-        fprintf(fp, "\"broadcasts_dropped_counter\": %u,", g_broadcast_dropped_counter);
+        fprintf(fp, "\"broadcasts_send_counter\": %zu,", (size_t) g_broadcast_send_counter);
+        fprintf(fp, "\"broadcasts_dropped_counter\": %zu,", (size_t) g_broadcast_dropped_counter);
         fprintf(fp, "\"packet_trace\": ");
         packet_trace_json(fp);
         fprintf(fp, "}\n");
