@@ -659,7 +659,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 
     // count incoming traffic
-    uint32_t ifindex = address_ifindex(src); // TODO: check if we get the ifindex or just 0!
+    uint32_t ifindex = address_ifindex(src);
     TrafficByIfindex *traffic = traffic_get(ifindex);
     if (is_broadcast) {
         count_broadcast_traffic(traffic, 0, packet_length);
