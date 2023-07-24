@@ -428,34 +428,40 @@ static void periodic_handler()
     traffic_timeout();
 }
 
-static void send_cached_packet(uint32_t dst_id, const Address *next_hop_addr)
+static void send_cached_packet(uint32_t dst_id)
 {
     uint8_t buffer[ETH_FRAME_LEN - sizeof(DATA)];
-    DATA *data = (DATA*) &buffer[0];
 
-    uint8_t* data_payload = get_data_payload(data);
-    size_t data_payload_length = 0;
-    packet_cache_get_and_remove(data_payload, &data_payload_length, dst_id);
+    Node *node = next_node_by_id(dst_id);
+    Hop *hop = next_hop_by_node(node);
+    if (node && hop) {
+        DATA *data = (DATA*) &buffer[0];
+        uint8_t* data_payload = get_data_payload(data);
+        size_t data_payload_length = 0;
+        packet_cache_get_and_remove(data_payload, &data_payload_length, dst_id);
 
-    if (data_payload_length == 0) {
-        // no cached packet found
-        return;
+        if (data_payload_length > 0) {
+            data->type = TYPE_DATA;
+            data->hop_count = 0,
+            data->seq_num = g_sequence_number++;
+            data->src_id = gstate.own_id;
+            data->dst_id = dst_id;
+            data->payload_length = data_payload_length;
+
+            // avoid processing of this packet again
+            seqnum_check(data->src_id, data->seq_num);
+
+            log_debug("send_cached_packet() send DATA (0x%08x => 0x%08x) via next hop %s, hop_count: %zu",
+                data->src_id, data->dst_id, str_addr(&hop->next_hop_addr), (size_t) hop->hop_count);
+
+            send_ucast_l2_wrapper(&hop->next_hop_addr, data, get_data_size(data));
+        } else {
+            // no cached packet found
+            log_debug("send_cached_packet() no cached packet found for destiantion 0x%08x => ignore", dst_id);
+        }
+    } else {
+        log_warning("send_cached_packet() no next hop found for destination 0x%08x => ignore", dst_id);
     }
-
-    data->type = TYPE_DATA;
-    data->hop_count = 0,
-    data->seq_num = g_sequence_number++;
-    data->src_id = gstate.own_id;
-    data->dst_id = dst_id;
-    data->payload_length = data_payload_length;
-
-    // avoid processing of this packet again
-    seqnum_check(data->src_id, data->seq_num);
-
-    log_debug("send DATA (0x%08x => 0x%08x) via next hop %s",
-        data->src_id, data->dst_id, str_addr(next_hop_addr));
-
-    send_ucast_l2_wrapper(next_hop_addr, data, get_data_size(data));
 }
 
 static void handle_RREQ(const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
@@ -479,7 +485,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
     log_debug("RREQ: got packet: %s / 0x%08x => 0x%08x / hop_count: %zu, seq_num: %zu",
         str_addr(dst), p->src_id, p->dst_id, (size_t) p->hop_count, (size_t) p->seq_num);
 
-    nodes_update(p->src_id, src, p->hop_count, p->seq_num);
+    nodes_update(p->src_id, src, p->hop_count + 1, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("RREQ: destination reached => send RREP");
@@ -522,10 +528,10 @@ static void handle_RREP(const Address *rcv, const Address *src, const Address *d
     log_debug("RREP: got packet: %s / 0x%08x => 0x%08x / hop_count: %zu, seq_num: %zu",
         str_addr(src), p->src_id, p->dst_id, (size_t) p->hop_count, (size_t) p->seq_num);
 
-    nodes_update(p->src_id, src, p->hop_count, p->seq_num);
+    nodes_update(p->src_id, src, p->hop_count + 1, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
-        send_cached_packet(p->src_id, src);
+        send_cached_packet(p->src_id);
     } else {
         Node *node = next_node_by_id(p->dst_id);
         Hop *hop = next_hop_by_node(node);
@@ -569,7 +575,7 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
     log_debug("DATA: got packet from %s / 0x%08x => 0x%08x / hop_count: %zu",
         str_addr(src), p->src_id, p->dst_id, (size_t) p->hop_count);
 
-    nodes_update(p->src_id, src, p->hop_count, p->seq_num);
+    nodes_update(p->src_id, src, p->hop_count + 1, p->seq_num);
 
     if (p->dst_id == gstate.own_id) {
         log_debug("DATA: reached destination => accept");
@@ -609,8 +615,8 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         // avoid processing of this packet again (stores sequence number)
         seqnum_check(data->src_id, data->seq_num);
 
-        log_debug("tun_handler: send DATA packet (0x%08x => 0x%08x) to %s",
-            data->src_id, data->dst_id, str_addr(&hop->next_hop_addr));
+        log_debug("tun_handler: send DATA packet (0x%08x => 0x%08x) to %s, hop_count: %zu",
+            data->src_id, data->dst_id, str_addr(&hop->next_hop_addr), (size_t) hop->hop_count);
 
         send_ucast_l2_wrapper(&hop->next_hop_addr, data, get_data_size(data));
     } else {
