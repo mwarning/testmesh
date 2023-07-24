@@ -94,5 +94,5 @@ static const char *str(const char *s)
 void packet_trace_json(FILE* fp)
 {
     fprintf(fp, "{\"marker\": \"%s\", \"message\": \"%s\", \"time\": %zu}",
-        str(g_debug_data.marker), str(g_debug_data.message), g_debug_data.time);
+        str(g_debug_data.marker), str(g_debug_data.message), (size_t) g_debug_data.time);
 }
