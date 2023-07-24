@@ -51,6 +51,9 @@ Implemented Protocols:
   - distance vector
   - rate limit broadcast/discovery packet by other traffic
   - dynamic node timeout
+- [ratelimit-1](src/ratelimit-1/)
+  - like ratelimit-0
+  - other nodes can reply to route request
 - [star-0](src/star-0/)
   - incomplete!
   - reactive
