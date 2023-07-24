@@ -200,7 +200,7 @@ bool parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (addr4_is_mesh(saddr)) {
             src_id = in4_addr_id(saddr);
         } else {
-            log_warning("read packet with non-mesh IPv4 source address (%s) on %s => drop",
+            log_warning("parse_ip_packet: read packet with non-mesh IPv4 source address (%s) on %s => drop",
                 str_in4(saddr), gstate.tun_name);
             return false;
         }
@@ -244,7 +244,7 @@ bool parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
         if (addr6_is_mesh(saddr)) {
             src_id = in6_addr_id(saddr);
         } else {
-            log_warning("read packet with non-mesh IPv6 source address (%s) on %s => drop",
+            log_warning("parse_ip_packet: read packet with non-mesh IPv6 source address (%s) on %s => drop",
                 str_in6(saddr), gstate.tun_name);
             return false;
         }
