@@ -54,7 +54,7 @@ void client_handler_out(int rc, int fd)
         return;
     }
 
-    while (1) {
+    while (true) {
         int read_len = read(fd, request, sizeof(request));
         //printf("read_len: %d\n", read_len);
         if (read_len == 0) {
@@ -149,7 +149,7 @@ int client_main(int argc, char *argv[])
     strncpy(sa_un.sun_path, socket_path, (sizeof(sa_un.sun_path) - 1));
 
     if (connect(g_client_sock, (struct sockaddr *)&sa_un, strlen(sa_un.sun_path) + sizeof(sa_un.sun_family))) {
-        fprintf(stderr, "connect(): %s (%s)\n", strerror(errno), socket_path);
+        fprintf(stderr, "Failed to connect: %s (%s)\n", strerror(errno), socket_path);
         return EXIT_FAILURE;
     }
 
@@ -161,7 +161,7 @@ int client_main(int argc, char *argv[])
     	// write to socket
         ssize_t write_len = write(g_client_sock, command, strlen(command));
         if (write_len < 0) {
-            fprintf(stderr, "write(): %s\n", strerror(errno));
+            fprintf(stderr, "Failed to write: %s\n", strerror(errno));
         }
         g_shutdown_after_reply = 1;
     } else {
