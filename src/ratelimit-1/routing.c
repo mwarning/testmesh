@@ -268,35 +268,38 @@ static int is_newer_seqnum(uint16_t cur, uint16_t new)
     }
 }
 
-static bool seqnum_check(uint32_t id, uint16_t seq_num)
+static bool packet_seen(uint32_t id, uint16_t seq_num)
 {
     Node *node;
+
+    if (id == gstate.own_id) {
+        return true;
+    }
 
     HASH_FIND(hh, g_nodes, &id, sizeof(uint32_t), node);
 
     if (node) {
         if (is_newer_seqnum(node->seq_num, seq_num)) {
             node->seq_num = seq_num;
-            return true; // new sequence number
+            return false; // new sequence number
         } else {
-            return false; // old sequence number, packet is a duplicate
+            return true; // old sequence number, packet is a duplicate
         }
     } else {
-        return true;
+        return false;
     }
 }
 
 // add uint16_t age bias
 static void nodes_update(uint32_t id, const Address *addr, uint16_t hop_count, uint16_t seq_num, uint16_t req_age)
 {
-    log_debug("nodes_update() id: 0x%08x, addr: %s, hop_count: %zu, seq_num: %zu, req_age: %zu",
-        id, str_addr(addr), (size_t) hop_count, (size_t) seq_num, (size_t) req_age);
-
-    // ignore own id
     if (id == gstate.own_id) {
         // should not happen (atm. it can)
         log_error("nodes_update() got own id => ignore");
         return;
+    } else {
+        log_debug("nodes_update() id: 0x%08x, addr: %s, hop_count: %zu, seq_num: %zu, req_age: %zu",
+            id, str_addr(addr), (size_t) hop_count, (size_t) seq_num, (size_t) req_age);
     }
 
     Node *node;
@@ -464,9 +467,6 @@ static void send_cached_packet(uint32_t dst_id)
             data->dst_id = dst_id;
             data->payload_length = data_payload_length;
 
-            // avoid processing of this packet again
-            seqnum_check(data->src_id, data->seq_num);
-
             log_debug("send_cached_packet() send DATA (0x%08x => 0x%08x) via next hop %s, hop_count: %zu",
                 data->src_id, data->dst_id, str_addr(&hop->next_hop_addr), (size_t) hop->hop_count);
 
@@ -493,7 +493,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
         return;
     }
 
-    if (!seqnum_check(p->src_id, p->seq_num)) {
+    if (packet_seen(p->src_id, p->seq_num)) {
         log_debug("RREQ: packet already seen => drop");
         return;
     }
@@ -513,8 +513,6 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
             .dst_id = p->src_id,
         };
 
-        seqnum_check(rrep.src_id, rrep.seq_num);
-
         // send back unicast
         send_ucast_l2_wrapper(src, &rrep, sizeof(rrep));
     } else {
@@ -528,14 +526,15 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
                 .type = TYPE_RREP2,
                 .hop_count = 0,
                 .seq_num = g_sequence_number++,
-                .src_id = gstate.own_id, // not strictly needed?
+                .src_id = gstate.own_id,
                 .dst_id = p->src_id,
                 .req_id = p->dst_id,
                 .req_seq_num = node->seq_num,
                 .req_hops = hop->hop_count,
                 .req_age = age,
             };
-            send_ucast_l2_wrapper(src, &rrep2, sizeof(rrep2));
+
+            send_ucast_l2_wrapper(src, &rrep2, sizeof(RREP2));
         } else {
             send_bcast_l2_wrapper(p, length);
         }
@@ -555,7 +554,7 @@ static void handle_RREP(const Address *rcv, const Address *src, const Address *d
         return;
     }
 
-    if (!seqnum_check(p->src_id, p->seq_num)) {
+    if (packet_seen(p->src_id, p->seq_num)) {
         log_debug("RREP: packet already seen => drop");
         return;
     }
@@ -593,7 +592,7 @@ static void handle_RREP2(const Address *rcv, const Address *src, const Address *
         return;
     }
 
-    if (!seqnum_check(p->src_id, p->seq_num)) {
+    if (packet_seen(p->src_id, p->seq_num)) {
         log_debug("RREP2: packet already seen => drop");
         return;
     }
@@ -616,7 +615,7 @@ static void handle_RREP2(const Address *rcv, const Address *src, const Address *
         if (node && hop) {
             log_debug("RREP2: send to %s => forward", str_addr(&hop->next_hop_addr));
             p->hop_count += 1;
-            send_ucast_l2_wrapper(&hop->next_hop_addr, p, sizeof(RREP));
+            send_ucast_l2_wrapper(&hop->next_hop_addr, p, sizeof(RREP2));
         } else {
             log_debug("RREP2: no next hop found => drop");
         }
@@ -636,13 +635,8 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
         return;
     }
 
-    if (!seqnum_check(p->src_id, p->seq_num)) {
+    if (packet_seen(p->src_id, p->seq_num)) {
         log_debug("DATA: packet already seen => drop");
-        return;
-    }
-
-    if (p->src_id == gstate.own_id) {
-        log_debug("DATA: got packet from own source id => drop");
         return;
     }
 
@@ -690,9 +684,6 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
         data->dst_id = dst_id;
         data->payload_length = packet_length;
 
-        // avoid processing of this packet again (stores sequence number)
-        seqnum_check(data->src_id, data->seq_num);
-
         log_debug("tun_handler: send DATA packet (0x%08x => 0x%08x) to %s, hop_count: %zu",
             data->src_id, data->dst_id, str_addr(&hop->next_hop_addr), (size_t) hop->hop_count);
 
@@ -705,9 +696,6 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
             .src_id = gstate.own_id,
             .dst_id = dst_id,
         };
-
-        // avoid processing of this packet again
-        seqnum_check(rreq.src_id, rreq.seq_num);
 
         packet_cache_add(dst_id, packet, packet_length);
 
