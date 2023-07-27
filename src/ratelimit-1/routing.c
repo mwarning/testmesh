@@ -484,7 +484,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
 {
     // we expect broadcasts or packets for us
     if (!(address_is_broadcast(dst) || address_equal(rcv, dst))) {
-        log_trace("RREP: unexpected destination (%s) => drop", str_addr(dst));
+        log_trace("RREQ: unexpected destination (%s) => drop", str_addr(dst));
         return;
     }
 
