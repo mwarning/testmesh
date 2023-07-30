@@ -54,6 +54,9 @@ Implemented Protocols:
 - [ratelimit-1](src/ratelimit-1/)
   - like ratelimit-0
   - other nodes can reply to route request
+- [ratelimit-2](src/ratelimit-2/)
+  - like ratelimit-2
+  - utilize full fload and partial flood RREQ
 - [star-0](src/star-0/)
   - incomplete!
   - reactive
