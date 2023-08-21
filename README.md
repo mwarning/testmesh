@@ -154,3 +154,17 @@ Interesting projects for low bandwidth networks:
 * [Meshtastic](https://meshtastic.org/)
 * [Reticulum](https://unsigned.io/projects/reticulum/)
 * [Hyperspace](https://github.com/kurthildebrand/hyperspace)
+
+When Ad-Hoc mode or 802.11s is not stable or available:
+
+* [WiFi meshing via Android](https://github.com/UstadMobile/Meshrabiya)
+* [AP mode WiFi mesh on OpenWrt](https://radio.freifunk.net/2023/06/13/mesh-in-ap-mode/)
+
+## Other Related Links
+
+A diverse collection of interesting posts/articles/papers/videos.
+
+* [The world in which IPv6 was a good design](https://apenwarr.ca/log/20170810)
+* [Scalability of Mobile Ad Hoc Networks: Theory vs Practice](http://dx.doi.org/10.1109/MILCOM.2010.5680385)
+* The Scalability of Mesh Networks [Part I](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/) [Part II](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/)
+* [B.A.T.M.A.N. - Better Approach to Mobile Ad-Hoc Networking](https://media.ccc.de/v/cccamp07-en-2039-BATMAN_-_Better_Approach_to_Mobile_Ad-Hoc_Networking)
