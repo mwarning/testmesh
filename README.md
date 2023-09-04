@@ -72,10 +72,13 @@ Implemented Protocols:
 
 Notes:
  - 32Bit node identifiers are mapped to and from IP addresses
- - the hop count metric is used in all examples (so far)
+ - the hop count metric is used in all examples (yet)
+ - all protocols here use Ethernet packets / layer-2 to communicate
+ - the implementations assume no bad behaving participants or threat actors
+ - the protocol code is not endianess safe (yet)
  - `DSR` stands for `Dynamic Source Routing`
  - `AODV` stands for `Ad-hoc On-demand Distance Vector`
- - the number after a routing protocol names variants
+ - the number after a routing protocol name is for variants
 
 ## Usage
 
@@ -157,14 +160,15 @@ Interesting projects for low bandwidth networks:
 
 When Ad-Hoc mode or 802.11s is not stable or available:
 
-* [WiFi meshing via Android](https://github.com/UstadMobile/Meshrabiya)
+* [WiFi meshing on Android](https://github.com/UstadMobile/Meshrabiya)
 * [AP mode WiFi mesh on OpenWrt](https://radio.freifunk.net/2023/06/13/mesh-in-ap-mode/)
 
 ## Other Related Links
 
 A diverse collection of interesting posts/articles/papers/videos.
 
+* "Understanding Mesh Networking", [Part I](https://inthemesh.com/archive/understanding-mesh-networking-part-i/) [Part II](https://inthemesh.com/archive/understanding-mesh-networking-part-ii/)
 * [The world in which IPv6 was a good design](https://apenwarr.ca/log/20170810)
 * [Scalability of Mobile Ad Hoc Networks: Theory vs Practice](http://dx.doi.org/10.1109/MILCOM.2010.5680385)
-* The Scalability of Mesh Networks [Part I](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/) [Part II](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/)
+* "The Scalability of Mesh Networks" [Part I](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/) [Part II](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/)
 * [B.A.T.M.A.N. - Better Approach to Mobile Ad-Hoc Networking](https://media.ccc.de/v/cccamp07-en-2039-BATMAN_-_Better_Approach_to_Mobile_Ad-Hoc_Networking)
