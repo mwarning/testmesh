@@ -226,7 +226,7 @@ static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_sto
     return addrbuf;
 }
 
-const char *str_enabled(uint8_t enabled)
+const char *str_enabled(bool enabled)
 {
     return enabled ? "yes" : "no";
 }
