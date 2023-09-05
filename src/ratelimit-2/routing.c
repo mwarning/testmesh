@@ -19,7 +19,7 @@
 
 #include "routing.h"
 
-enum {
+enum Type {
     TYPE_DATA,
     TYPE_RREQ_FF, // full flood
     TYPE_RREQ_PF, // partial flood
@@ -29,11 +29,11 @@ enum {
 
 #define HOP_TIMEOUT_MIN_SECONDS (10)
 #define HOP_TIMEOUT_MAX_SECONDS (60 * 60 * 24)
-#define TRAFFIC_TIMEOUT_MAX_SECONDS (60 * 60 * 24)
+#define TRAFFIC_DEGRADE_MAX_SECONDS (60 * 60 * 24)
 #define TRAFFIC_DEGRADE_SECONDS (10)
 #define MIN_BROADCAST_PACKETS_PER_SECONDS (1)
 #define MIN_BROADCAST_PACKETS_PERCENT (5)
-#define FULL_FLOOD_SEND_INTERVAL 30
+#define FULL_FLOOD_SEND_INTERVAL_SECONDS 3
 
 typedef struct {
     Address next_hop_addr; // use neighbor object with id and address?
@@ -51,9 +51,16 @@ typedef struct {
     UT_hash_handle hh;
 } Node;
 
-// per interface
+/*
+ * Per interface state.
+ * Not removed by any timeout, but interface callback.
+*/
 typedef struct {
     uint32_t ifindex;
+
+    time_t full_flood_time; // last behavior change
+    bool full_flood; // current behavior
+
     uint16_t received_broadcast_packets;
     uint16_t received_unicast_packets;
     uint16_t send_broadcast_packets;
@@ -61,7 +68,7 @@ typedef struct {
     time_t time_broadcast_send;
     time_t time_updated;
     UT_hash_handle hh;
-} TrafficByIfindex;
+} InterfaceState;
 
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
@@ -69,6 +76,7 @@ typedef struct __attribute__((__packed__)) {
     uint16_t seq_num;
     uint32_t src_id;
     uint32_t dst_id;
+    uint32_t sender;
     uint32_t prev_sender;
 } RREQ;
 
@@ -107,150 +115,167 @@ typedef struct __attribute__((__packed__)) {
 static uint16_t g_sequence_number = 0;
 static uint32_t g_broadcast_send_counter = 0; // for debugging only
 static uint32_t g_broadcast_dropped_counter = 0; // for debugging only
-static TrafficByIfindex *g_traffic = NULL;
+static InterfaceState *g_ifstates = NULL;
 static Node *g_nodes = NULL;
-static bool g_is_critical = false;
-static time_t g_last_full_flood_time = 0;
 
-// called once per seond
-static void traffic_timeout()
+// called once per second
+static void traffic_degrade()
 {
-    static time_t g_traffic_last_degraded = 0;
+    static time_t g_ifstate_last_degraded = 0;
     const time_t time_now = gstate.time_now;
 
-    bool degrade = ((time_now - g_traffic_last_degraded) > TRAFFIC_DEGRADE_SECONDS);
-
-    TrafficByIfindex *cur;
-    TrafficByIfindex *tmp;
-    HASH_ITER(hh, g_traffic, cur, tmp) {
-        if ((time_now - cur->time_updated) > TRAFFIC_TIMEOUT_MAX_SECONDS) {
-            HASH_DEL(g_traffic, cur);
-            free(cur);
-        } else if (degrade) {
-            cur->received_broadcast_packets /= 2;
-            cur->received_unicast_packets /= 2;
-            cur->send_broadcast_packets /= 2;
-            cur->send_unicast_packets /= 2;
+    if ((time_now - g_ifstate_last_degraded) > TRAFFIC_DEGRADE_SECONDS) {
+        InterfaceState *cur;
+        InterfaceState *tmp;
+        HASH_ITER(hh, g_ifstates, cur, tmp) {
+            /*if ((time_now - cur->time_updated) > TRAFFIC_DEGRADE_MAX_SECONDS) {
+                HASH_DEL(g_ifstates, cur);
+                free(cur);
+            } else if (degrade) { */
+                cur->received_broadcast_packets /= 2;
+                cur->received_unicast_packets /= 2;
+                cur->send_broadcast_packets /= 2;
+                cur->send_unicast_packets /= 2;
+            //}
         }
-    }
 
-    if (degrade) {
-        g_traffic_last_degraded = time_now;
+        g_ifstate_last_degraded = time_now;
     }
 }
 
-static TrafficByIfindex *traffic_find(const uint32_t ifindex)
+static InterfaceState *ifstate_find(const uint32_t ifindex)
 {
-    TrafficByIfindex *traffic = NULL;
-    HASH_FIND(hh, g_traffic, &ifindex, sizeof(uint32_t), traffic);
-    return traffic;
+    InterfaceState *ifstate = NULL;
+    HASH_FIND(hh, g_ifstates, &ifindex, sizeof(uint32_t), ifstate);
+    return ifstate;
 }
 
-static void traffic_remove(const uint32_t ifindex)
+static void ifstate_remove(const uint32_t ifindex)
 {
-    TrafficByIfindex *traffic = traffic_find(ifindex);
-    if (traffic != NULL) {
+    InterfaceState *ifstate = ifstate_find(ifindex);
+    if (ifstate != NULL) {
         // remove entry
-        HASH_DEL(g_traffic, traffic);
-        free(traffic);
+        HASH_DEL(g_ifstates, ifstate);
+        free(ifstate);
     }
 }
 
-static TrafficByIfindex *traffic_create(const uint32_t ifindex)
+static InterfaceState *ifstate_create(const uint32_t ifindex)
 {
-    TrafficByIfindex *traffic = traffic_find(ifindex);
-    if (traffic == NULL) {
+    InterfaceState *ifstate = ifstate_find(ifindex);
+    if (ifstate == NULL) {
         // add new entry
-        traffic = (TrafficByIfindex*) calloc(1, sizeof(TrafficByIfindex));
-        traffic->ifindex = ifindex;
-        traffic->time_updated = gstate.time_now;
-        HASH_ADD(hh, g_traffic, ifindex, sizeof(uint32_t), traffic);
+        ifstate = (InterfaceState*) calloc(1, sizeof(InterfaceState));
+        ifstate->ifindex = ifindex;
+        ifstate->time_updated = gstate.time_now;
+        ifstate->full_flood = true;
+        HASH_ADD(hh, g_ifstates, ifindex, sizeof(uint32_t), ifstate);
+    } else {
+        log_warning("ifstate_create() ifindex %zu entry already exists", ifindex);
     }
-    return traffic;
+    return ifstate;
 }
 
 // create non-existing entries
-static TrafficByIfindex *traffic_get(const uint32_t ifindex)
+static InterfaceState *ifstate_get(const uint32_t ifindex)
 {
-    TrafficByIfindex *traffic = traffic_find(ifindex);
-    return traffic ? traffic : traffic_create(ifindex);
+    InterfaceState *ifstate = ifstate_find(ifindex);
+    return ifstate ? ifstate : ifstate_create(ifindex);
 }
 
-static void count_broadcast_traffic(TrafficByIfindex *traffic, uint32_t send_bytes, uint32_t received_bytes)
+static void count_broadcast_traffic(InterfaceState *ifstate, uint32_t send_bytes, uint32_t received_bytes)
 {
     // send bytes
     if (send_bytes > 0) {
         const uint32_t n = 1 + send_bytes / 512;
-        traffic->send_broadcast_packets += n;
-        traffic->time_updated = gstate.time_now;
-        traffic->time_broadcast_send = gstate.time_now;
+        ifstate->send_broadcast_packets += n;
+        ifstate->time_updated = gstate.time_now;
+        ifstate->time_broadcast_send = gstate.time_now;
     }
 
     // received bytes
     if (received_bytes > 0) {
         const uint32_t n = 1 + received_bytes / 512;
-        traffic->received_broadcast_packets += n;
-        traffic->time_updated = gstate.time_now;
+        ifstate->received_broadcast_packets += n;
+        ifstate->time_updated = gstate.time_now;
     }
 }
 
-static void count_unicast_traffic(TrafficByIfindex *traffic, uint32_t send_bytes, uint32_t received_bytes)
+static void count_unicast_traffic(InterfaceState *ifstate, uint32_t send_bytes, uint32_t received_bytes)
 {
     // send bytes
     if (send_bytes > 0) {
         const uint32_t n = 1 + send_bytes / 512;
-        traffic->send_unicast_packets += n;
+        ifstate->send_unicast_packets += n;
     }
 
     // received bytes
     if (received_bytes > 0) {
         const uint32_t n = 1 + received_bytes / 512;
-        traffic->received_unicast_packets += n;
+        ifstate->received_unicast_packets += n;
     }
 
     if (send_bytes > 0 || received_bytes > 0) {
-        traffic->time_updated = gstate.time_now;
+        ifstate->time_updated = gstate.time_now;
     }
 }
 
-// send and count outgoing broadcast traffic
-static void send_bcast_l2_wrapper(const void* data, size_t data_len)
+static const char *str_type(enum Type type)
 {
-    if (g_traffic == NULL) {
-        // we create entries only on received broadcast
-        // TODO: add interfaces via callback?
-        send_bcast_l2(0, data, data_len);
-        // we do not count this one as we already add 1 in the other branch
-        // for statistics only
-        g_broadcast_send_counter += 1;
-    } else {
-        TrafficByIfindex *cur;
-        TrafficByIfindex *tmp;
-        HASH_ITER(hh, g_traffic, cur, tmp) {
-            uint32_t bpackets = cur->received_broadcast_packets;
-            uint32_t upackets = cur->received_unicast_packets;
+    switch (type) {
+        case TYPE_DATA: return "DATA";
+        case TYPE_RREQ_FF: return "RREQ_FF";
+        case TYPE_RREQ_PF: return "RREQ_PF";
+        case TYPE_RREP: return "RREP";
+        case TYPE_RREP2: return "RREP2";
+        default:
+            log_warning("str_type() invalid type %zu", type);
+            return "<invalid>";
+    }
+}
 
-            size_t pc = (100 * (1 + bpackets)) / (1 + bpackets + upackets);
-            time_t last_broadcast = (gstate.time_now - cur->time_broadcast_send);
+// send a RREQ as broadcast
+static void send_rreq(RREQ* rreq)
+{
+    enum Type orig_type = rreq->type;
 
-            if (pc <= MIN_BROADCAST_PACKETS_PERCENT
-                    || last_broadcast > MIN_BROADCAST_PACKETS_PER_SECONDS) {
-                log_debug("send_bcast_l2_wrapper() ifname: %s, bpackets: %zu (%zu%%), upackets: %zu, last_broadcast: %s ago => send",
-                        str_ifindex(cur->ifindex), (size_t) bpackets, pc, (size_t) upackets, str_time(last_broadcast));
+    InterfaceState *cur;
+    InterfaceState *tmp;
+    HASH_ITER(hh, g_ifstates, cur, tmp) {
+        uint32_t bpackets = cur->received_broadcast_packets;
+        uint32_t upackets = cur->received_unicast_packets;
 
-                send_bcast_l2(cur->ifindex, data, data_len);
-                count_broadcast_traffic(cur, data_len, 0);
+        size_t pc = (100 * (1 + bpackets)) / (1 + bpackets + upackets);
+        time_t last_broadcast = (gstate.time_now - cur->time_broadcast_send);
 
-                // for statistics only
-                g_broadcast_send_counter += 1;
-            } else {
-                log_debug("send_bcast_l2_wrapper() ifname: %s, bpackets: %zu (%zu%%), upackets: %zu, last_broadcast: %s ago => drop",
-                        str_ifindex(cur->ifindex), (size_t) bpackets, pc, (size_t) upackets, str_time(last_broadcast));
-
-                // for statistics only
-                g_broadcast_dropped_counter += 1;
-            }
+        // determine per interface if send as full or partial flood
+        if (cur->full_flood) {
+            rreq->type = TYPE_RREQ_FF;
+        } else {
+            rreq->type = orig_type;
         }
+
+        if (pc <= MIN_BROADCAST_PACKETS_PERCENT
+                || last_broadcast >= MIN_BROADCAST_PACKETS_PER_SECONDS) {
+            log_debug("send_rreq() %s ifname: %s, bpackets: %zu (%zu%%), upackets: %zu, full_flood: %s, last_broadcast: %s ago => send",
+                    str_type(rreq->type), str_ifindex(cur->ifindex), (size_t) bpackets, pc, (size_t) upackets, str_bool(cur->full_flood), str_time(last_broadcast));
+
+            send_bcast_l2(cur->ifindex, rreq, sizeof(RREQ));
+            count_broadcast_traffic(cur, sizeof(RREQ), 0);
+
+            // for statistics only
+            g_broadcast_send_counter += 1;
+        } else {
+            log_debug("send_rreq() %s ifname: %s, bpackets: %zu (%zu%%), upackets: %zu, full_flood: %s, last_broadcast: %s ago => drop",
+                    str_type(rreq->type), str_ifindex(cur->ifindex), (size_t) bpackets, pc, (size_t) upackets, str_bool(cur->full_flood), str_time(last_broadcast));
+
+            // for statistics only
+            g_broadcast_dropped_counter += 1;
+        }
+
+        // broadcast done
+        cur->full_flood_time = gstate.time_now;
+        cur->full_flood = false;
     }
 }
 
@@ -260,8 +285,8 @@ static void send_ucast_l2_wrapper(const Address *next_hop_addr, const void* data
     send_ucast_l2(next_hop_addr, data, data_len);
 
     uint32_t ifindex = address_ifindex(next_hop_addr);
-    TrafficByIfindex *traffic = traffic_get(ifindex);
-    count_unicast_traffic(traffic, data_len, 0);
+    InterfaceState *ifstate = ifstate_get(ifindex);
+    count_unicast_traffic(ifstate, data_len, 0);
 }
 
 static int is_newer_seqnum(uint16_t cur, uint16_t new)
@@ -271,6 +296,19 @@ static int is_newer_seqnum(uint16_t cur, uint16_t new)
     } else {
         return (new - cur) < 0x7fff;
     }
+}
+
+static bool is_new_neighbor(uint32_t id, uint16_t hop_count)
+{
+    Node *node;
+
+    if (id == gstate.own_id || hop_count != 0) {
+        return false;
+    }
+
+    HASH_FIND(hh, g_nodes, &id, sizeof(uint32_t), node);
+
+    return (node == NULL);
 }
 
 static bool packet_seen(uint32_t id, uint16_t seq_num)
@@ -341,7 +379,7 @@ static void nodes_timeout()
     const time_t time_now = gstate.time_now;
 
     HASH_ITER(hh, g_nodes, ncur, ntmp) {
-        // timeout hops
+        // timeout next hops
         HASH_ITER(hh, ncur->hops, hcur, htmp) {
             /*
              * Dynamic Timeout - The longer a hop is used, the longer the timeout.
@@ -353,6 +391,17 @@ static void nodes_timeout()
                 log_debug("timeout node 0x%08x, hop %s (age1: %s, age2: %s)",
                     ncur->id, str_addr(&hcur->next_hop_addr), str_time(age1), str_time(age2));
                 HASH_DEL(ncur->hops, hcur);
+
+                if (hcur->hop_count == 1) {
+                    // get interface?
+                    uint32_t ifindex = address_ifindex(&hcur->next_hop_addr);
+                    InterfaceState *ifstate = ifstate_find(ifindex);
+                    if (ifstate) {
+                        ifstate->full_flood = true;
+                    } else {
+                        log_error("nodes_timeout() failed to find ifindex %zu", ifindex);
+                    }
+                }
 
                 free(hcur);
             }
@@ -382,6 +431,7 @@ static bool is_better_hop(const Hop *cur, const Hop *new)
         // prefer new one
         return true;
     }
+
     // choose
     if (new->time_updated > (cur->time_updated + 4)) {
         return true;
@@ -448,12 +498,15 @@ static Node *find_node_by_address(const Address *addr)
 static void periodic_handler()
 {
     nodes_timeout();
-    traffic_timeout();
+    traffic_degrade();
 
-    // timeout critical state
-    if (g_is_critical && ((g_last_full_flood_time + FULL_FLOOD_SEND_INTERVAL) < gstate.time_now)) {
-        log_debug("timeout for critical");
-        g_is_critical = false;
+    InterfaceState *cur;
+    InterfaceState *tmp;
+    HASH_ITER(hh, g_ifstates, cur, tmp) {
+        // fall back to full flood after FULL_FLOOD_SEND_INTERVAL seconds
+        if (gstate.time_now >= (cur->full_flood_time + FULL_FLOOD_SEND_INTERVAL_SECONDS))  {
+            cur->full_flood = true;
+        }
     }
 }
 
@@ -493,6 +546,7 @@ static void send_cached_packet(uint32_t dst_id)
 // Common behavior for Full and Partial Flood RREQ. May seend RREP and RREP2.
 static bool try_reply_RREQ(const char* context, const Address *src, RREQ *p)
 {
+    // we are the destination
     if (p->dst_id == gstate.own_id) {
         log_debug("%s: destination reached => send RREP", context);
         RREP rrep = {
@@ -522,7 +576,7 @@ static bool try_reply_RREQ(const char* context, const Address *src, RREQ *p)
             .dst_id = p->src_id,
             .req_id = p->dst_id,
             .req_seq_num = node->seq_num,
-            .req_hops = hop->hop_count, // or use hop_count from RREQ?
+            .req_hops = hop->hop_count + 1, // or use hop_count from RREQ?
             .req_age = age,
         };
 
@@ -533,7 +587,7 @@ static bool try_reply_RREQ(const char* context, const Address *src, RREQ *p)
     return false;
 }
 
-static void handle_RREQ_PF(const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
+static void handle_RREQ_PF(InterfaceState *ifstate, const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
 {
     // we expect broadcasts or packets for us
     if (!(address_is_broadcast(dst) || address_equal(rcv, dst))) {
@@ -546,30 +600,37 @@ static void handle_RREQ_PF(const Address *rcv, const Address *src, const Address
         return;
     }
 
+    // new neighbor node appeared
+    if (is_new_neighbor(p->src_id, p->hop_count)) {
+        ifstate->full_flood = true;
+    }
+
     if (packet_seen(p->src_id, p->seq_num)) {
         log_debug("RREQ_PF: duplicate packet => drop");
         return;
     }
 
-    log_debug("RREQ_PF: got packet: %s / 0x%08x => 0x%08x / hop_count: %u, seq_num: %u",
-        str_addr(dst), p->src_id, p->dst_id, p->hop_count, p->seq_num);
+    log_debug("RREQ_PF: got packet: %s / 0x%08x => 0x%08x / sender: %08x, prev_sender: %08x, hop_count: %u, seq_num: %u",
+        str_addr(dst), p->src_id, p->dst_id, p->sender, p->prev_sender, p->hop_count, p->seq_num);
 
     nodes_update(p->src_id, src, p->hop_count + 1, p->seq_num, 0);
-    //nodes_update(p->prev_sender, src, 1, p->seq_num, 0); // needed? What if we are the previous sender?
+    //nodes_update(p->sender, src, 1, p->seq_num, 0);
+    //nodes_update(p->prev_sender, src, 2, p->seq_num, 0); // needed? What if we are the previous sender?
 
     if (!try_reply_RREQ("RREQ_PF", src, p)) {
-        if (g_is_critical) {
-            log_debug("RREQ_PF: is critical => rebroadcast");
+        if (ifstate->full_flood) { // TODO: this must be the sending interface?
+            log_debug("RREQ_PF: is needed => rebroadcast");
             p->hop_count += 1;
-            p->prev_sender = gstate.own_id; 
-            send_bcast_l2_wrapper(p, length);
+            p->prev_sender = p->sender;
+            p->sender = gstate.own_id;
+            send_rreq(p);
         } else {
-            log_debug("RREQ_PF: not critical => drop");
+            log_debug("RREQ_PF: not needed => drop");
         }
     }
 }
 
-static void handle_RREQ_FF(const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
+static void handle_RREQ_FF(InterfaceState *ifstate, const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
 {
     // we expect broadcasts or packets for us
     if (!(address_is_broadcast(dst) || address_equal(rcv, dst))) {
@@ -584,8 +645,8 @@ static void handle_RREQ_FF(const Address *rcv, const Address *src, const Address
 
     bool seen = packet_seen(p->src_id, p->seq_num);
 
-    log_debug("RREQ_FF: got packet: %s / 0x%08x => 0x%08x / hop_count: %u, seq_num: %u, seen: %s",
-        str_addr(dst), p->src_id, p->dst_id, p->hop_count, p->seq_num, str_bool(seen));
+    log_debug("RREQ_FF: got packet: %s / 0x%08x => 0x%08x / sender: %08x, prev_sender: %08x, hop_count: %u, seq_num: %u, seen: %s",
+        str_addr(dst), p->src_id, p->dst_id, p->sender, p->prev_sender, p->hop_count, p->seq_num, str_bool(seen));
 
     if (!seen) {
         nodes_update(p->src_id, src, p->hop_count + 1, p->seq_num, 0);
@@ -593,20 +654,16 @@ static void handle_RREQ_FF(const Address *rcv, const Address *src, const Address
 
         // packet seen the first time
         if (!try_reply_RREQ("RREQ_FF", src, p)) {
-            log_debug("RREQ_FF: is critical => rebroadcast");
+            log_debug("RREQ_FF: is needed => rebroadcast");
             p->hop_count += 1;
-            p->prev_sender = gstate.own_id; // do we need to 
-            send_bcast_l2_wrapper(p, length);
+            p->prev_sender = p->sender;
+            p->sender = gstate.own_id;
+            send_rreq(p);
         }
     } else {
-        // prevent us from starting a full flood
-        g_last_full_flood_time = gstate.time_now;
-
         // packet already seen
-        if (p->prev_sender == gstate.own_id) {
-            // echo received
-            g_is_critical = true;
-            log_debug("RREQ_FF: duplicate packet (echo) => drop+critical");
+        if (p->prev_sender == gstate.own_id && p->src_id == gstate.own_id) {
+            log_debug("RREQ_FF: duplicate packet (echo) => drop");
         } else {
             log_debug("RREQ_FF: duplicate packet (no echo) => drop");
         }
@@ -761,32 +818,32 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
         send_ucast_l2_wrapper(&hop->next_hop_addr, data, get_data_size(data));
     } else {
-        bool do_full_flood = ((g_last_full_flood_time + FULL_FLOOD_SEND_INTERVAL) < gstate.time_now);
-
         RREQ rreq = {
-            .type = do_full_flood ? TYPE_RREQ_FF : TYPE_RREQ_PF,
+            .type = TYPE_RREQ_PF, // conservative?
             .hop_count = 0,
             .seq_num = g_sequence_number++,
             .src_id = gstate.own_id,
             .dst_id = dst_id,
+            .sender = gstate.own_id,
             .prev_sender = gstate.own_id,
         };
 
         packet_cache_add(dst_id, packet, packet_length);
 
-        log_debug("tun_handler: send RREQ packet (0x%08x => 0x%08x)",
-            do_full_flood ? "RREQ_FF" : "RREQ_PF", rreq.src_id, rreq.dst_id);
+        log_debug("tun_handler: send packet (0x%08x => 0x%08x)", rreq.src_id, rreq.dst_id);
 
-        send_bcast_l2_wrapper(&rreq, sizeof(RREQ));
+        send_rreq(&rreq);
     }
 }
 
-static bool interface_handler(uint32_t ifindex, bool added)
+static bool interface_handler(uint32_t ifindex, const char *ifname, bool added)
 {
+    //log_info("interface_handler: %s ifname %s", added ? "add" : "remove", ifname);
+
     if (added) {
-        traffic_create(ifindex);
+        ifstate_create(ifindex);
     } else {
-        traffic_remove(ifindex);
+        ifstate_remove(ifindex);
     }
 
     return true;
@@ -802,11 +859,11 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
 
     // count incoming traffic
     uint32_t ifindex = address_ifindex(src);
-    TrafficByIfindex *traffic = traffic_get(ifindex);
+    InterfaceState *ifstate = ifstate_get(ifindex);
     if (is_broadcast) {
-        count_broadcast_traffic(traffic, 0, packet_length);
+        count_broadcast_traffic(ifstate, 0, packet_length);
     } else {
-        count_unicast_traffic(traffic, 0, packet_length);
+        count_unicast_traffic(ifstate, 0, packet_length);
     }
 
     switch (packet[0]) {
@@ -814,10 +871,10 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
         handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     case TYPE_RREQ_FF:
-        handle_RREQ_FF(rcv, src, dst, (RREQ*) packet, packet_length);
+        handle_RREQ_FF(ifstate, rcv, src, dst, (RREQ*) packet, packet_length);
         break;
     case TYPE_RREQ_PF:
-        handle_RREQ_PF(rcv, src, dst, (RREQ*) packet, packet_length);
+        handle_RREQ_PF(ifstate, rcv, src, dst, (RREQ*) packet, packet_length);
         break;
     case TYPE_RREP:
         handle_RREP(rcv, src, dst, (RREP*) packet, packet_length);
@@ -838,15 +895,30 @@ static bool console_handler(FILE* fp, const char *argv[])
         fprintf(fp, "broadcasts:      %zu (send)/ %zu (dropped)\n", (size_t) g_broadcast_send_counter, (size_t) g_broadcast_dropped_counter);
         fprintf(fp, "HOP_TIMEOUT_MIN: %s\n", str_time(HOP_TIMEOUT_MIN_SECONDS));
         fprintf(fp, "HOP_TIMEOUT_MAX: %s\n", str_time(HOP_TIMEOUT_MAX_SECONDS));
-        fprintf(fp, "TRAFFIC_TIMEOUT_MAX: %s\n", str_time(TRAFFIC_TIMEOUT_MAX_SECONDS));
+        fprintf(fp, "TRAFFIC_DEGRADE_MAX: %s\n", str_time(TRAFFIC_DEGRADE_MAX_SECONDS));
         fprintf(fp, "TRAFFIC_DEGRADE:  %s\n", str_time(TRAFFIC_DEGRADE_SECONDS));
+
+        size_t interface_count = 0;
+        InterfaceState *icur;
+        InterfaceState *itmp;
+        fprintf(fp, "   interface   full_flood_time  full_flood time_updated\n");
+        HASH_ITER(hh, g_ifstates, icur, itmp) {
+            fprintf(fp, "%s [%zu] %s %s %s\n",
+                str_ifindex(icur->ifindex),
+                (size_t) icur->ifindex,
+                str_ago(icur->full_flood_time),
+                str_bool(icur->full_flood),
+                str_ago(icur->time_updated)
+            );
+            interface_count += 1;
+        }
+        fprintf(fp, "%zu interfaces\n", interface_count);
     } else if (match(argv, "r")) {
         Node *ncur;
         Node *ntmp;
         Hop *hcur;
         Hop *htmp;
         size_t node_count = 0;
-        size_t hop_count = 0;
         size_t neighbor_count = 0;
 
         fprintf(fp, "hop-nodes:\n");
@@ -854,24 +926,28 @@ static bool console_handler(FILE* fp, const char *argv[])
         HASH_ITER(hh, g_nodes, ncur, ntmp) {
             node_count += 1;
             fprintf(fp, " 0x%08x\n", ncur->id);
+            bool is_neighbor = false;
             HASH_ITER(hh, ncur->hops, hcur, htmp) {
-                hop_count += 1;
-                neighbor_count += (hcur->hop_count == 1);
+                if (hcur->hop_count == 1) {
+                    is_neighbor = true;
+                }
                 Node *node = find_node_by_address(&hcur->next_hop_addr);
                 fprintf(fp, "             %-9zu  0x%08x    %-18s %-8s ago\n",
                     (size_t) hcur->hop_count,
-                    node ? node->id : 0,
+                    (node ? node->id : 0),
                     str_addr(&hcur->next_hop_addr),
                     str_ago(hcur->time_updated)
                 );
             }
+
+            if (is_neighbor) {
+                neighbor_count += 1;
+            }
         }
-        fprintf(fp, "nodes: %zu, hops: %zu, neighbors: %zu\n",
-            node_count, hop_count, neighbor_count);
+        fprintf(fp, "nodes: %zu, neighbors: %zu\n", node_count, neighbor_count);
     } else if (match(argv, "json")) {
         fprintf(fp, "{");
         fprintf(fp, "\"own_id\": \"0x%08x\",", gstate.own_id);
-        fprintf(fp, "\"is_critical\": %s,", str_bool(g_is_critical));
         fprintf(fp, "\"broadcasts_send_counter\": %zu,", (size_t) g_broadcast_send_counter);
         fprintf(fp, "\"broadcasts_dropped_counter\": %zu,", (size_t) g_broadcast_dropped_counter);
         fprintf(fp, "\"packet_trace\": ");
