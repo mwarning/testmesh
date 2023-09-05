@@ -54,4 +54,6 @@
 // Print a log message
 void log_print(int priority, const char format[], ...);
 
+uint8_t log_level_parse(const char *level);
+
 #endif // _LOG_H_

@@ -87,7 +87,7 @@ static const char *usage_str =
     "  --tun-setup <on/off>            Auto configure entry interface with IP address (default: on)\n"
     "  --ether-type <hex>              Ethernet type for layer-2 packets (default: 88B5)\n"
     "  --log-file,-lf <path>           Write log output to file\n"
-    "  --log-level,-ll <level>         Logging level. From 0 to " STR(MAX_LOG_LEVEL) " (default: 3)\n"
+    "  --log-level,-ll <level>         Logging level. From 0 to " STR(MAX_LOG_LEVEL) " or by name (default: 3)\n"
     "  --log-time,-lt                  Add timestamps to logging output\n"
     "  --disable-stdin                 Disable interactive console on startup\n"
     "  --enable-ipv4,-4 <on/off>       Enable IPv4 (default: off)\n"
@@ -281,10 +281,8 @@ static bool conf_set(const char *opt, const char *val)
         gstate.ether_type = n;
         break;
     case oLogLevel: {
-        char *ptr = NULL;
-        const char *end = val + strlen(val);
-        uint32_t log_level = strtoul(val, &ptr, 10);
-        if (ptr != end || log_level > MAX_LOG_LEVEL) {
+        uint8_t log_level = log_level_parse(val);
+        if (log_level > MAX_LOG_LEVEL) {
             log_error("Invalid log level: %s", val);
             return false;
         }

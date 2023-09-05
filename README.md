@@ -107,7 +107,7 @@ Usage: testmesh -i eth0 -i wlan0
   --tun-setup <on/off>            Auto configure entry interface with IP address (default: on)
   --ether-type <hex>              Ethernet type (default: 88B5)
   --log-file,-lf <path>           Write log output to file
-  --log-level,-ll <level>         Log level. From 0 to 6 (Default: 3).
+  --log-level,-ll <level>         Log level. From 0 to 6 or by name (Default: 3).
   --log-time,-lt                  Add time stamps to log output.
   --disable-stdin                 Disable interactive console on startup
   --enable-ipv4,-4 <on/off>       Enable IPv4 (default: off)
