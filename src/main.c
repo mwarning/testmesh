@@ -220,7 +220,8 @@ int main(int argc, char *argv[])
     }
 
     if (!gstate.own_id_set) {
-        if (!bytes_random(&gstate.own_id, sizeof(gstate.own_id))) {
+        // not set by configuration setting
+        if (bytes_random(&gstate.own_id, sizeof(gstate.own_id)) != sizeof(gstate.own_id)) {
             log_error("Cannot create random identifier.");
             return EXIT_FAILURE;
         }
