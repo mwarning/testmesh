@@ -275,6 +275,18 @@ int main(int argc, char *argv[])
     log_info("Log Level:      %s", log_level_str(gstate.log_level));
     log_info("IPv4/IPv6:      %s/%s", str_onoff(gstate.enable_ipv4), str_onoff(gstate.enable_ipv6));
 
+    {
+        // initialize random number generator for future rand() calls
+        unsigned init = 0;
+        if (bytes_random(&init, sizeof(init)) != sizeof(init)) {
+            log_debug("failed to initialize random number generator");
+            return EXIT_FAILURE;
+        } else {
+            log_debug("srand(%u)", init);
+            srand(init);
+        }
+    }
+
     gstate.sock_help = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (gstate.sock_help < 0) {
         log_error("socket() %s", strerror(errno));
