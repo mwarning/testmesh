@@ -263,8 +263,17 @@ int main(int argc, char *argv[])
         log_info("Tunnel Device:  %s", gstate.tun_name);
     }
 
-    log_info("Log Level:      %u", gstate.log_level);
-    log_info("IPv4/IPv6:      %s/%s", str_enabled(gstate.enable_ipv4), str_enabled(gstate.enable_ipv6));
+    {
+        // print current time
+        time_t rawtime;
+        char time_buf[32];
+        time(&rawtime);
+        strftime(time_buf, 26, "%Y:%m:%d %H:%M:%S", localtime(&rawtime));
+        log_info("Started:        %s", time_buf);
+    }
+
+    log_info("Log Level:      %s", log_level_str(gstate.log_level));
+    log_info("IPv4/IPv6:      %s/%s", str_onoff(gstate.enable_ipv4), str_onoff(gstate.enable_ipv6));
 
     gstate.sock_help = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (gstate.sock_help < 0) {
