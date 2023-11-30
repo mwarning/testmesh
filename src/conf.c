@@ -282,7 +282,7 @@ static bool conf_set(const char *opt, const char *val)
         break;
     case oLogLevel: {
         uint8_t log_level = log_level_parse(val);
-        if (log_level > MAX_LOG_LEVEL) {
+        if (log_level >= MAX_LOG_LEVEL) {
             log_error("Invalid log level: %s", val);
             return false;
         }

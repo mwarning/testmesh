@@ -116,14 +116,12 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
             fprintf(fp, "log goes to different remote console already\n");
         }
     } else if (match(argv, "v,*")) {
-        char *ptr = NULL;
-        const char *end = argv[1] + strlen(argv[1]);
-        uint32_t log_level = strtoul(argv[1], &ptr, 10);
-        if (ptr != end || log_level > MAX_LOG_LEVEL) {
+        uint8_t log_level = log_level_parse(argv[1]);
+        if (log_level_str(log_level) == NULL) {
             fprintf(fp, "invalid log level\n");
         } else {
             gstate.log_level = log_level;
-            fprintf(fp, "log level is now %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
+            fprintf(fp, "log level is now %s\n", log_level_str(gstate.log_level));
         }
     } else if (match(argv, "i")) {
         fprintf(fp, "protocol:        %s\n", gstate.protocol->name);

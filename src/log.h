@@ -5,7 +5,7 @@
 #include <syslog.h>
 #include "main.h"
 
-#define MAX_LOG_LEVEL 6
+#define MAX_LOG_LEVEL 7
 
 #define log_error(...)                             \
   do {                                             \
@@ -55,5 +55,6 @@
 void log_print(int priority, const char format[], ...);
 
 uint8_t log_level_parse(const char *level);
+const char *log_level_str(uint8_t level);
 
 #endif // _LOG_H_

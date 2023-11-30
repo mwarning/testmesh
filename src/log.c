@@ -14,27 +14,36 @@
 // program start time
 static struct timespec log_start = { 0, 0 };
 
-const char *g_log_levels[MAX_LOG_LEVEL + 1] = {"quiet", "error", "warning", "info", "verbose", "debug", "trace"};
+const char *g_log_levels[MAX_LOG_LEVEL] = {"mute", "error", "warning", "info", "verbose", "debug", "trace"};
+
+const char *log_level_str(uint8_t level)
+{
+	if (level < MAX_LOG_LEVEL) {
+		return g_log_levels[level];
+	}
+
+	return NULL;
+}
 
 uint8_t log_level_parse(const char *level)
 {
-	// try to parse as number
-	char *ptr = NULL;
-	const char *end = level + strlen(level);
-	uint32_t log_level = strtoul(level, &ptr, 10);
-	if (ptr == end && log_level <= MAX_LOG_LEVEL) {
-		return log_level;
-	}
-
 	// try to parse as mnemonic
-	for (size_t i = 0; i < ARRAY_NELEMS(g_log_levels); ++i) {
+	for (size_t i = 0; i < MAX_LOG_LEVEL; ++i) {
 		if (0 == strcmp(level, g_log_levels[i])) {
 			return i;
 		}
 	}
 
-	// not a valid log level
-	return 255;
+	// try to parse as number - fallback
+	char *ptr = NULL;
+	const char *end = level + strlen(level);
+	uint32_t log_level = strtoul(level, &ptr, 10);
+	if (ptr == end && log_level < MAX_LOG_LEVEL) {
+		return log_level;
+	}
+
+	// return invalid log level
+	return MAX_LOG_LEVEL;
 }
 
 const char *log_get_time()
