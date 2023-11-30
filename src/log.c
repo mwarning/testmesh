@@ -12,7 +12,7 @@
 
 
 // program start time
-static struct timespec log_start = { 0, 0 };
+static struct timespec g_log_start = { 0, 0 };
 
 const char *g_log_levels[MAX_LOG_LEVEL] = {"mute", "error", "warning", "info", "verbose", "debug", "trace"};
 
@@ -46,20 +46,19 @@ uint8_t log_level_parse(const char *level)
 	return MAX_LOG_LEVEL;
 }
 
-const char *log_get_time()
+static const char *log_get_time(char* buf)
 {
-	static char buf[16];
 	struct timespec now = { 0, 0 };
 
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
 	// Initialize clock
-	if (log_start.tv_sec == 0 && log_start.tv_nsec == 0) {
-		clock_gettime(CLOCK_MONOTONIC, &log_start);
+	if (g_log_start.tv_sec == 0 && g_log_start.tv_nsec == 0) {
+		clock_gettime(CLOCK_MONOTONIC, &g_log_start);
 	}
 
 	uint64_t ms = (1000UL * now.tv_sec + now.tv_nsec / 1000000UL)
-		- (1000UL * log_start.tv_sec + log_start.tv_nsec / 1000000UL);
+		- (1000UL * g_log_start.tv_sec + g_log_start.tv_nsec / 1000000UL);
 	sprintf(buf, "[%4u.%03u] ", (unsigned) (ms / 1000UL), (unsigned) (ms % 1000UL));
 
 	return buf;
@@ -69,6 +68,7 @@ void log_print(int priority, const char format[], ...)
 {
 	char buf[500];
 	char buf2[524];
+	char time_buf[16];
 	const char *time;
 	va_list vlist;
 
@@ -77,7 +77,7 @@ void log_print(int priority, const char format[], ...)
 	va_end(vlist);
 
 	if (gstate.log_time) {
-		time = log_get_time();
+		time = log_get_time(time_buf);
 	} else {
 		time = "";
 	}
