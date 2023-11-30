@@ -54,8 +54,9 @@ bool address_is_broadcast(const Address *addr);
 bool address_equal(const Address *a, const Address *b);
 uint32_t address_ifindex(const Address *addr);
 
-const char *str_enabled(bool enabled);
-const char *str_bool(bool enabled);
+const char *str_onoff(bool value);
+const char *str_yesno(bool value);
+const char *str_bool(bool value);
 const char *str_mac(const struct mac *addr);
 const char *str_bytes(uint64_t bytes);
 const char *str_time(time_t seconds);

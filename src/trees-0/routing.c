@@ -872,12 +872,12 @@ static void handle_ROOT(const Address *rcv, const Address *src, const Address *d
 
     log_debug("ROOT: got packet from %s, seq_num: %zu, path: 0x%08x:[%s], is_echo: %s",
         str_addr(src), (size_t) p->seq_num, p->root_id,
-        str_path(path, p->path_length), str_enabled(is_echo));
+        str_path(path, p->path_length), str_onoff(is_echo));
 
     Root *root = &g_root;
 
     log_debug("root_id: 0x%08x 0x%08x, seq_num: %zu (root: %zu), critical: %s",
-        p->root_id, root->root_id, (size_t) p->seq_num, (size_t) root->seq_num, str_enabled(g_is_critical));
+        p->root_id, root->root_id, (size_t) p->seq_num, (size_t) root->seq_num, str_onoff(g_is_critical));
 
     nodes_update_path(p->root_id, src, path, p->path_length);
 
@@ -1158,7 +1158,7 @@ static bool console_handler(FILE* fp, const char* argv[])
         fprintf(fp, " parent:   %s\n", str_addr(&r->parent_addr));
         fprintf(fp, " updated:  %s\n", str_ago(r->last_updated));
         fprintf(fp, " count:    %zu\n", (size_t) r->updated_count);
-        fprintf(fp, " critical: %s (%s ago)\n", str_enabled(g_is_critical), str_ago(g_is_critical_time));
+        fprintf(fp, " critical: %s (%s ago)\n", str_onoff(g_is_critical), str_ago(g_is_critical_time));
     } else if (match(argv, "n")) {
         Node *ncur;
         Node *ntmp;

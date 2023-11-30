@@ -753,7 +753,7 @@ bool interfaces_debug(FILE *fd)
             ifa->ifname,
             is_valid_ifa(ifa) ? "up" : "down",
             str_mac(&ifa->ifmac),
-            str_enabled(ifa->is_dynamic),
+            str_onoff(ifa->is_dynamic),
             ifa->ifsock_l2,
             ifa->ifindex
         );

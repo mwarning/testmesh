@@ -226,14 +226,19 @@ static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_sto
     return addrbuf;
 }
 
-const char *str_enabled(bool enabled)
+const char *str_yesno(bool value)
 {
-    return enabled ? "yes" : "no";
+    return value ? "yes" : "no";
 }
 
-const char *str_bool(bool enabled)
+const char *str_onoff(bool value)
 {
-    return enabled ? "true" : "false";
+    return value ? "on" : "off";
+}
+
+const char *str_bool(bool value)
+{
+    return value ? "true" : "false";
 }
 
 const char *str_time(time_t time)

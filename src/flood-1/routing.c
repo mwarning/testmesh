@@ -67,7 +67,7 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
     uint8_t is_new = seqnum_cache_update(p->src_id, p->seq_num);
 
     log_debug("DATA: got packet from %s / 0x%08x => 0x%08x (seq_num: %u, sender: 0x%08x, prev_sender: 0x%08x, full_flood: %s)",
-        str_addr(src), p->src_id, p->dst_id, p->seq_num, p->sender, p->prev_sender, str_enabled(is_full_flood));
+        str_addr(src), p->src_id, p->dst_id, p->seq_num, p->sender, p->prev_sender, str_yesno(is_full_flood));
 
     if (is_full_flood) {
         // prevent us from starting a full flood
@@ -131,7 +131,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 
     seqnum_cache_update(p->src_id, p->seq_num);
 
-    log_debug("send DATA packet as broadcast (is_full_flood: %s)", str_enabled(is_full_flood));
+    log_debug("send DATA packet as broadcast (do_full_flood: %s)", str_yesno(do_full_flood));
 
     send_bcast_l2(0, p, get_data_size(p));
 }
@@ -159,7 +159,7 @@ static bool console_handler(FILE* fp, const char *argv[])
 {
     if (match(argv, "i")) {
         fprintf(fp, "critical:   %s (%s ago)\n",
-            str_enabled(g_is_critical), str_ago(g_is_critical_time));
+            str_yesno(g_is_critical), str_ago(g_is_critical_time));
     } else {
         return true;
     }
