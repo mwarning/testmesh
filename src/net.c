@@ -58,14 +58,12 @@ void net_add_handler(int fd, net_callback *cb)
 
 void net_remove_handler(int fd, net_callback *cb)
 {
-	int i;
-
 	if (cb == NULL) {
-		log_error("Invalid arguments.");
+		log_error("net_remove_handler() callback is null");
 		exit(1);
 	}
 
-	for (i = 0; i < g_count; i++) {
+	for (size_t i = 0; i < g_count; i++) {
 		if (g_cbs[i] == cb && g_fds[i].fd == fd) {
 			// mark for removal in compress_entries()
 			g_cbs[i] = NULL;
@@ -92,12 +90,13 @@ static void compress_entries()
 
 void net_loop(void)
 {
-	time_t now;
-	int all;
-	int rc;
+	// call all callbacks immediately
+	for (size_t i = 0; i < g_count; i++) {
+		g_cbs[i](-1, g_fds[i].fd);
+	}
 
 	while (gstate.is_running) {
-		rc = poll(g_fds, g_count, 1000);
+		int rc = poll(g_fds, g_count, 1000);
 
 		if (rc < 0) {
 			if (gstate.is_running) {
@@ -106,8 +105,8 @@ void net_loop(void)
 			break;
 		}
 
-		now = time(NULL);
-		all = (now > gstate.time_now);
+		time_t now = time(NULL);
+		int all = (now > gstate.time_now);
 		gstate.time_now = now;
 
 		for (size_t i = 0; i < g_count; i++) {
