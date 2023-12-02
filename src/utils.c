@@ -37,16 +37,13 @@ uint32_t adler32(const void *buf, size_t buflength)
 // fill buffer with random bytes
 ssize_t bytes_random(void *buffer, size_t size)
 {
-   int fd;
-   int rc;
-
-   fd = open("/dev/urandom", O_RDONLY);
+   int fd = open("/dev/urandom", O_RDONLY);
    if (fd < 0) {
        log_error("Failed to open /dev/urandom");
        exit(1);
    }
 
-   rc = read(fd, buffer, size);
+   int rc = read(fd, buffer, size);
 
    close(fd);
 
