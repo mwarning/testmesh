@@ -19,6 +19,46 @@
 #include "utils.h"
 
 
+// separate a string into a list of arguments (int argc, char **argv)
+int setargs(char **argv, int argv_size, char *args)
+{
+    int count = 0;
+
+    // skip spaces
+    while (isspace(*args)) {
+        ++args;
+    }
+
+    while (*args) {
+        if ((count + 1) < argv_size) {
+            argv[count] = args;
+        } else {
+            log_error("CLI: too many arguments");
+            break;
+        }
+
+        // parse word
+        while (*args && !isspace(*args)) {
+            ++args;
+        }
+
+        if (*args) {
+            *args++ = '\0';
+        }
+
+        // skip spaces
+        while (isspace(*args)) {
+            ++args;
+        }
+
+        count++;
+    }
+
+    argv[MIN(count, argv_size - 1)] = NULL;
+
+    return count;
+}
+
 uint32_t adler32(const void *buf, size_t buflength)
 {
     const uint8_t *buffer = (const uint8_t*) buf;

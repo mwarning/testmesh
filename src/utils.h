@@ -47,6 +47,7 @@ uint32_t adler32(const void *buf, size_t buflen); // a hash method
 void hex_dump(const char *desc, const void *buf, size_t buflen);
 ssize_t bytes_random(void *buffer, size_t size); // get random bytes
 uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen); // get unique id for IP connection pair
+int setargs(char **argv, int argv_size, char *args);
 
 bool address_is_unicast(const Address *addr);
 bool address_is_multicast(const Address *addr);

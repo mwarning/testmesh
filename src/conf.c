@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #include "main.h"
 #include "utils.h"
@@ -10,6 +11,7 @@
 
 
 enum OPCODE {
+    oConfig,
     oProtocol,
     oInterface,
     oFindInterfaces,
@@ -50,6 +52,7 @@ static struct option_t g_options[] = {
     {"-lf", 1, oLogFile},
     {"--ether-type", 1, oEtherType},
     {"--peer", 1, oPeer},
+    {"--config", 1, oConfig},
     {"--tun-name", 1, oTunName},
     {"--tun-setup", 1, oTunSetup},
     {"--disable-stdin", 0, oDisableStdin},
@@ -81,6 +84,7 @@ static const char *usage_str =
     "  --find-interfaces [on/off/auto] Find and add interfaces automatically (default: off)\n"
     "  --own-id <id>                   Identifier of this node (default: <random>)\n"
     "  --gateway-id <id>               Identifier of the gateway node (default: <none>)\n"
+    "  --config <file>                 Configuration file (default: <none>).\n"
     "  --peer <address>                Add a peer manually by address\n"
     "  --control,-c <path>             Control socket to connect to a daemon\n"
     "  --tun-name <ifname>             Network entry interface, use none to disable (default: tun0)\n"
@@ -94,6 +98,66 @@ static const char *usage_str =
     "  --enable-ipv6,-6 <on/off>       Enable IPv6 (default: on)\n"
     "  --help,-h                       Print this help text\n"
     "  --version                       Print version";
+
+// forward declaration
+static bool conf_set(const char opt[], const char val[]);
+
+static bool conf_load_file(const char path[])
+{
+    char line[32 + 256];
+    char *argv[8];
+    struct stat s;
+
+    if (stat(path, &s) == 0 && !(s.st_mode & S_IFREG)) {
+        log_error("File expected: %s", path);
+        return false;
+    }
+
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        log_error("Cannot open file: %s (%s)", path, strerror(errno));
+        return false;
+    }
+
+    ssize_t nline = 0;
+    while (fgets(line, sizeof(line), file) != NULL) {
+        nline += 1;
+
+        // Cut off comments
+        char *last = strchr(line, '#');
+        if (last) {
+            *last = '\0';
+        }
+
+        if (line[0] == '\n' || line[0] == '\0') {
+            continue;
+        }
+
+        int argc = setargs(&argv[0], ARRAY_SIZE(argv), line);
+
+        if (argc == 1 || argc == 2) {
+            // Prevent recursive inclusion
+            if (strcmp(argv[0], "--config") == 0) {
+                fclose(file);
+                log_error("Option '--config' not allowed inside a configuration file, line %ld.", nline);
+                return false;
+            }
+
+            // parse --option value / --option
+            if (!conf_set(argv[0], (argc == 2) ? argv[1] : NULL)) {
+                fclose(file);
+                return false;
+            }
+        } else {
+            fclose(file);
+            log_error("Invalid line in config file: %s (%d)", path, nline);
+            return false;
+        }
+    }
+
+    fclose(file);
+    return true;
+}
 
 static int parse_hex(uint64_t *ret, const char *val, int bytes)
 {
@@ -127,7 +191,12 @@ static bool conf_set(const char *opt, const char *val)
     const struct option_t *option;
     uint64_t n;
 
-    option = find_option(opt);
+    // allow handling of custom arguments on command line and in config file
+    if (option == NULL && gstate.protocol && gstate.protocol->config_handler) {
+        if (gstate.protocol->config_handler(opt, val)) {
+            return true;
+        }
+    }
 
     if (option == NULL) {
         log_error("Unknown parameter: %s", opt);
@@ -172,6 +241,9 @@ static bool conf_set(const char *opt, const char *val)
             log_error("Unknown protocol: %s", val);
             return false;
         }
+        break;
+    case oConfig:
+        gstate.config_path = strdup(val);
         break;
     case oDaemon:
         gstate.do_fork = true;
@@ -318,6 +390,12 @@ bool conf_setup(int argc, char **argv)
             if (!conf_set(opt, NULL)) {
                 return false;
             }
+        }
+    }
+
+    if (gstate.config_path) {
+        if (!conf_load_file(gstate.config_path)) {
+            return false;
         }
     }
 

@@ -276,6 +276,10 @@ int main(int argc, char *argv[])
     log_info("Log Level:      %s", log_level_str(gstate.log_level));
     log_info("IPv4/IPv6:      %s/%s", str_onoff(gstate.enable_ipv4), str_onoff(gstate.enable_ipv6));
 
+    if (gstate.config_path) {
+        log_info("Config File:    %s", gstate.config_path);
+    }
+
     {
         // initialize random number generator for future rand() calls
         unsigned init = 0;

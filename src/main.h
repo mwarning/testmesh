@@ -30,6 +30,7 @@ typedef struct {
     bool (*peer_handler)(const char *address, bool add);
     bool (*interface_handler)(uint32_t ifindex, bool add);
     bool (*console_handler)(FILE* file, const char *argv[]);
+    bool (*config_handler)(const char *option, const char *value);
 } Protocol;
 
 void protocols_register(const Protocol *p);
@@ -78,6 +79,7 @@ struct state {
     uint16_t tun_setup_ipv4_mtu;
 
     const char *control_socket_path;
+    const char* config_path;
 
     // settings
     bool log_to_syslog;
