@@ -36,12 +36,12 @@ int net_set_nonblocking(int fd)
 void net_add_handler(int fd, net_callback *cb)
 {
 	if (cb == NULL) {
-		log_error("Invalid arguments.");
+		log_error("net_add_handler() Callback is null.");
 		exit(1);
 	}
 
-	if (g_count == ARRAY_NELEMS(g_cbs)) {
-		log_error("No more space for handlers.");
+	if (g_count == ARRAY_SIZE(g_cbs)) {
+		log_error("net_add_handler() No more space for handlers.");
 		exit(1);
 	}
 
@@ -72,7 +72,7 @@ void net_remove_handler(int fd, net_callback *cb)
 		}
 	}
 
-	log_error("Handler not found to remove.");
+	log_error("net_remove_handler() handler not found");
 	exit(1);
 }
 

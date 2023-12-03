@@ -94,7 +94,7 @@ const Protocol *protocols_find(const char *protocol)
 
 void protocols_register(const Protocol *p)
 {
-    if (g_protocols_len == ARRAY_NELEMS(g_protocols)) {
+    if (g_protocols_len == ARRAY_SIZE(g_protocols)) {
         log_error("Too many protocols.");
         exit(1);
     }
@@ -238,13 +238,13 @@ int main(int argc, char *argv[])
     }
 
     if (gstate.protocol == NULL) {
-        fprintf(stderr, "No protocol selected (-p)\n");
+        log_error("No protocol selected (-p)\n");
         protocols_print(stderr);
         return EXIT_FAILURE;
     }
 
     if (getuid() != 0) {
-        printf("Must run as root.\n");
+        log_error("Must run as root.\n");
         return EXIT_FAILURE;
     }
 
@@ -284,10 +284,10 @@ int main(int argc, char *argv[])
         // initialize random number generator for future rand() calls
         unsigned init = 0;
         if (bytes_random(&init, sizeof(init)) != sizeof(init)) {
-            log_debug("failed to initialize random number generator");
+            log_error("Failed to initialize random number generator");
             return EXIT_FAILURE;
         } else {
-            log_debug("srand(%u)", init);
+            log_verbose("Init RND:       srand(%u)", init);
             srand(init);
         }
     }

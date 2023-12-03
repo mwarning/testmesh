@@ -33,13 +33,7 @@ enum OPCODE {
     oVersion
 };
 
-struct option_t {
-    const char *name;
-    uint16_t num_args;
-    uint16_t code;
-};
-
-static struct option_t g_options[] = {
+static option_t g_options[] = {
     {"--protocol", 1, oProtocol},
     {"-p", 1, oProtocol},
     {"--gateway-id", 1, oGatewayIdentifier},
@@ -161,7 +155,7 @@ static bool conf_load_file(const char path[])
 
 static int parse_hex(uint64_t *ret, const char *val, int bytes)
 {
-    int len = strlen(val);
+    size_t len = strlen(val);
     if (len < 3 || len > (2 + 2 * bytes) || (len % 2) != 0 || val[0] != '0' || val[1] != 'x') {
        return 1;
     }
@@ -171,25 +165,10 @@ static int parse_hex(uint64_t *ret, const char *val, int bytes)
     return (val + len) != end;
 }
 
-static const struct option_t *find_option(const char *name)
-{
-    struct option_t *option;
-
-    option = g_options;
-    while (option->name) {
-        if (0 == strcmp(name, option->name)) {
-            return option;
-        }
-        option++;
-    }
-
-    return NULL;
-}
-
 static bool conf_set(const char *opt, const char *val)
 {
-    const struct option_t *option;
     uint64_t n;
+    const option_t *option = find_option(g_options, opt);
 
     // allow handling of custom arguments on command line and in config file
     if (option == NULL && gstate.protocol && gstate.protocol->config_handler) {
@@ -371,13 +350,9 @@ static bool conf_set(const char *opt, const char *val)
 
 bool conf_setup(int argc, char **argv)
 {
-    const char *opt;
-    const char *val;
-    size_t i;
-
-    for (i = 1; i < argc; ++i) {
-        opt = argv[i];
-        val = argv[i + 1];
+    for (size_t i = 1; i < argc; ++i) {
+        const char *opt = argv[i];
+        const char *val = argv[i + 1];
 
         if (val && val[0] != '-') {
             // -x abc

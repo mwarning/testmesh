@@ -206,7 +206,7 @@ void console_client_handler(int rc, int clientsock)
         }
 
         request[read_len] = '\0';
-        tokenizer(argv, ARRAY_NELEMS(argv), request);
+        tokenizer(argv, ARRAY_SIZE(argv), request);
         ret = console_exec(clientsock, fp, argv);
     }
 

@@ -59,6 +59,19 @@ int setargs(char **argv, int argv_size, char *args)
     return count;
 }
 
+const option_t *find_option(const option_t options[], const char name[])
+{
+    const option_t *option = options;
+    while (option->name && name) {
+        if (0 == strcmp(name, option->name)) {
+            return option;
+        }
+        option++;
+    }
+
+    return NULL;
+}
+
 uint32_t adler32(const void *buf, size_t buflength)
 {
     const uint8_t *buffer = (const uint8_t*) buf;
@@ -120,7 +133,7 @@ bool address_is_broadcast(const Address *addr)
     case AF_INET:
         return (ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr) & 0xff) == 0xff;
     default:
-        log_error("address_is_broadcast: invalid address");
+        log_error("address_is_broadcast() invalid address");
         exit(1);
     }
 }
@@ -321,7 +334,7 @@ const char *str_time(time_t time)
 const char *str_duration(time_t from, time_t to)
 {
     if (from == 0 || to == 0) {
-        return "unknown";
+        return "-";
     }
 
     return str_time(to - from);
@@ -648,6 +661,7 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
     return addr_parse_internal(addr_ret, addr_str, port_str, af);
 }
 
+// match argv with a pattern string
 bool match(const char *argv[], const char *pattern)
 {
     const char *p_beg = &pattern[0];

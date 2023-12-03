@@ -265,7 +265,7 @@ bool parse_ip_packet(uint32_t *dst_id_ret, const uint8_t *buf, ssize_t read_len)
     return false;
 }
 
-static int ip_enabled(const uint8_t *bytes)
+static bool ip_enabled(const uint8_t *bytes)
 {
     const uint8_t ip_version = (bytes[0] >> 4) & 0x0f;
     switch (ip_version) {
@@ -274,7 +274,7 @@ static int ip_enabled(const uint8_t *bytes)
         case 6:
             return gstate.enable_ipv6;
         default:
-            return 0;
+            return false;
     }
 }
 

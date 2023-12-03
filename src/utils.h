@@ -9,7 +9,10 @@
 #include <netinet/in.h>
 
 
-#define ARRAY_NELEMS(x) (sizeof(x) / sizeof((x)[0]))
+// Number of elements in an array
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+// Size of a struct element
 #define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
 
 #define MAX(x, y) ((x) >= (y) ? (x) : (y))
@@ -41,13 +44,21 @@ typedef union {
     struct sockaddr_in6 ip6;
 } Address;
 
+typedef struct {
+	const char *name;
+	uint16_t num_args;
+	uint16_t code;
+} option_t;
+
+const option_t *find_option(const option_t options[], const char name[]);
+int setargs(char **argv, int argv_size, char *args);
+
 // match e.g. ["get", "1234", "foo"] with a comma separated string "get,*,foo", the asterisk matches anything
 bool match(const char *argv[], const char *pattern);
 uint32_t adler32(const void *buf, size_t buflen); // a hash method
 void hex_dump(const char *desc, const void *buf, size_t buflen);
 ssize_t bytes_random(void *buffer, size_t size); // get random bytes
 uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen); // get unique id for IP connection pair
-int setargs(char **argv, int argv_size, char *args);
 
 bool address_is_unicast(const Address *addr);
 bool address_is_multicast(const Address *addr);
