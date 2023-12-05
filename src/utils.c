@@ -20,7 +20,7 @@
 
 
 // separate a string into a list of arguments (int argc, char **argv)
-int setargs(char **argv, int argv_size, char *args)
+int setargs(const char **argv, int argv_size, char *args)
 {
     int count = 0;
 
@@ -661,42 +661,8 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
     return addr_parse_internal(addr_ret, addr_str, port_str, af);
 }
 
-// match argv with a pattern string
+// match a single string in argv
 bool match(const char *argv[], const char *pattern)
 {
-    const char *p_beg = &pattern[0];
-    size_t j = 0;
-
-    for (size_t i = 0; ; i += 1) {
-        const char c = pattern[i];
-        if (c == ',' || c == '\0') {
-            const char *p_end = &pattern[i];
-            const size_t p_len = p_end - p_beg;
-            const char *v = argv[j];
-
-            if (v == NULL) {
-                return false;
-            }
-
-            const size_t v_len = strlen(v);
-            if (((p_len == v_len) && !memcmp(v, p_beg, p_len))
-                    || ((p_len == 1) && !memcmp("*", p_beg, p_len))) {
-                j += 1;
-            } else {
-                return false;
-            }
-
-            p_beg = p_end + 1;
-            if (c == '\0') {
-                break;
-            }
-        }
-    }
-
-    if (argv[j] != NULL) {
-        // another value without a pattern
-        return false;
-    } else {
-        return true;
-    }
+    return argv[0] && !argv[1] && 0 == strcmp(argv[0], pattern);
 }

@@ -31,6 +31,18 @@
 // forward log output over (a single) remote connection
 static int g_console_socket = -1;
 
+static const char *g_usage =
+    "i                       General information.\n"
+    "t [<show-num>]          Show traffic statistics\n"
+    "interfaces              List all used interfaces.\n"
+    "interface-add <ifname>  Add interface.\n"
+    "interface-del <ifname>  Remove interface.\n"
+    "peer-add <address>      Add peer via IP address.\n"
+    "l                       Enable/Disable log to console.\n"
+    "ll <log-level>          Toggle log to this console / change verbosity.\n"
+    "q                       Close this console.\n"
+    "h                       Show this help.\n";
+
 // output log messages to console as well
 void console_log_message(const char *message)
 {
@@ -39,48 +51,68 @@ void console_log_message(const char *message)
     }
 }
 
-static void tokenizer(const char *argv[], size_t argv_length, char *input)
-{
-    size_t argc = 0;
+//static int console_exec(int clientsock, FILE *fp, const char *line)
 
-    char *p = NULL;
-    const int len = strlen(input);
-    for (size_t i = 0; i < len; i++) {
-        if (input[i] <= ' ') {
-            if (p) {
-                if ((argc + 1) == argv_length) {
-                    log_warning("tokenizer: too many tokens");
-                    argv[0] = NULL;
-                    return;
-                }
-                argv[argc++] = p;
-                p = NULL;
-            }
-            input[i] = 0;
-        } else if (p == NULL) {
-            p = &input[i];
-        }
+enum {
+    oHelp,
+    oTraffic,
+    oQuit,
+    oPeer,
+    oInterfaceAdd,
+    oInterfaceDel,
+    oInterfaces,
+    oLogging,
+    oLogLevel,
+    oInfo,
+};
+
+static const option_t g_options[] = {
+    {"h", 1, oHelp},
+    {"t", 1, oTraffic},
+    {"q", 1, oQuit},
+    {"peer-add", 2, oPeer},
+    {"interface-add", 2, oInterfaceAdd},
+    {"interface-del", 2, oInterfaceDel},
+    {"interfaces", 1, oInterfaces},
+    {"l", 1, oLogging},
+    {"ll", 2, oLogLevel},
+    {"i", 1, oInfo},
+    {NULL, 0, 0}
+};
+
+static int console_exec(int clientsock, FILE *fp, char *line)
+{
+    const char *argv[8];
+    int argc = setargs(&argv[0], ARRAY_SIZE(argv), line);
+
+    if (argc == 0) {
+        // Print usage
+        fprintf(fp, "%s", g_usage);
+        return 0;
     }
 
-    if (p) {
-        if ((argc + 1) == argv_length) {
-            log_warning("tokenizer: too many tokens");
-            argv[0] = NULL;
-            return;
+    const option_t *option = find_option(g_options, argv[0]);
+
+    if (option == NULL) {
+        // call protocol specific console handler
+        if (gstate.protocol->console_handler) {
+            gstate.protocol->console_handler(fp, argv);
+        } else {
+            fprintf(fp, "Unknown command. Use 'h' for help.\n");
         }
-        argv[argc++] = p;
+        return 0;
     }
 
-    argv[argc] = NULL;
-}
+    if (option->num_args != argc) {
+        fprintf(fp, "Unexpected number of arguments.\n");
+        return 0;
+    }
 
-static int console_exec(int clientsock, FILE *fp, const char *argv[])
-{
-    int ret = 0;
-
-    if (match(argv, "t")) {
+    switch (option->code) {
+    case oTraffic:
         traffic_debug(fp, argv);
-    } else if (match(argv, "peer-add")) {
+        break;
+    case oPeer:
         if (gstate.protocol->peer_handler) {
             if (!gstate.protocol->peer_handler(argv[1], true)) {
                 fprintf(fp, "Failed to add peer.\n");
@@ -88,24 +120,25 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
         } else {
             fprintf(fp, "Not supported by protocol %s\n", gstate.protocol->name);
         }
-    } else if (match(argv, "q")) {
-        // close console
-        ret = 1;
-    } else if (match(argv, "interface-add,*")) {
+        break;
+    case oInterfaceAdd:
         if (interface_add(argv[1])) {
             fprintf(fp, "done\n");
         } else {
             fprintf(fp, "failed\n");
         }
-    } else if (match(argv, "interface-del,*")) {
+        break;
+    case oInterfaceDel:
         if (interface_del(argv[1])) {
             fprintf(fp, "done\n");
         } else {
             fprintf(fp, "failed\n");
         }
-    } else if (match(argv, "interfaces")) {
+        break;
+    case oInterfaces:
         interfaces_debug(fp);
-    } else if (match(argv, "v")) {
+        break;
+    case oLogging:
         if (g_console_socket == -1) {
             g_console_socket = clientsock;
             fprintf(fp, "log to console enabled\n");
@@ -115,7 +148,8 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
         } else {
             fprintf(fp, "log goes to different remote console already\n");
         }
-    } else if (match(argv, "v,*")) {
+        break;
+    case oLogLevel:
         uint8_t log_level = log_level_parse(argv[1]);
         if (log_level_str(log_level) == NULL) {
             fprintf(fp, "invalid log level\n");
@@ -123,7 +157,11 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
             gstate.log_level = log_level;
             fprintf(fp, "log level is now %s\n", log_level_str(gstate.log_level));
         }
-    } else if (match(argv, "i")) {
+        break;
+    case oQuit:
+        // close console
+        return 1;
+    case oInfo:
         fprintf(fp, "protocol:        %s\n", gstate.protocol->name);
         fprintf(fp, "own id:          0x%08x\n", gstate.own_id);
         if (gstate.gateway_id_set) {
@@ -144,44 +182,18 @@ static int console_exec(int clientsock, FILE *fp, const char *argv[])
         if (gstate.protocol->console_handler) {
             gstate.protocol->console_handler(fp, argv);
         }
-    } else if (match(argv, "h")) {
-        fprintf(fp,
-            "i                       General information.\n"
-            "t [<show-num>]          Show traffic statistics\n"
-            "interfaces              List all used interfaces.\n"
-            "interface-add <ifname>  Add interface.\n"
-            "interface-del <ifname>  Remove interface.\n"
-            "peer-add <address>      Add peer via IP address.\n"
-            "v [log-level]           Toggle log to this console / change verbosity.\n"
-            "q                       Close this console.\n"
-            "h                       Show this help.\n"
-        );
-
-        if (gstate.protocol->console_handler) {
-            gstate.protocol->console_handler(fp, argv);
-        }
-    } else {
-        int rc = 1;
-
-        // call protocol specific console handler
-        if (gstate.protocol->console_handler) {
-            rc = gstate.protocol->console_handler(fp, argv);
-        }
-
-        if (rc != 0) {
-            fprintf(fp, "Unknown command. Use 'h' for help.\n");
-        }
+        break;
+    case oHelp:
+        fprintf(fp, "%s", g_usage);
+        break;
     }
 
-    fprintf(fp, "\n");
-
-    return ret;
+    return 0;
 }
 
 void console_client_handler(int rc, int clientsock)
 {
     char request[256];
-    const char *argv[8];
 
     int ret = 0;
     FILE *fp;
@@ -206,8 +218,7 @@ void console_client_handler(int rc, int clientsock)
         }
 
         request[read_len] = '\0';
-        tokenizer(argv, ARRAY_SIZE(argv), request);
-        ret = console_exec(clientsock, fp, argv);
+        ret = console_exec(clientsock, fp, request);
     }
 
     if (fp) {
@@ -242,4 +253,21 @@ void console_server_handler(int rc, int serversock)
     }
 
     net_add_handler(clientsock, &console_client_handler);
+}
+
+bool console_setup()
+{
+    if (gstate.control_socket_path) {
+        unix_create_unix_socket(gstate.control_socket_path, &gstate.sock_console);
+        net_add_handler(gstate.sock_console, &console_server_handler);
+    }
+
+    return true;
+}
+
+void console_free()
+{
+    if (gstate.control_socket_path) {
+        unix_remove_unix_socket(gstate.control_socket_path, gstate.sock_console);
+    }
 }

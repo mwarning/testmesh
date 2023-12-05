@@ -344,9 +344,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (gstate.control_socket_path) {
-        unix_create_unix_socket(gstate.control_socket_path, &gstate.sock_console);
-        net_add_handler(gstate.sock_console, &console_server_handler);
+    if (!console_setup()) {
+        return EXIT_FAILURE;
     }
 
     if (gstate.do_fork) {
@@ -384,9 +383,7 @@ int main(int argc, char *argv[])
         fclose(gstate.log_to_file);
     }
 
-    if (gstate.control_socket_path) {
-        unix_remove_unix_socket(gstate.control_socket_path, gstate.sock_console);
-    }
+    console_free();
 
     return EXIT_SUCCESS;
 }

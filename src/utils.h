@@ -51,7 +51,7 @@ typedef struct {
 } option_t;
 
 const option_t *find_option(const option_t options[], const char name[]);
-int setargs(char **argv, int argv_size, char *args);
+int setargs(const char **argv, int argv_size, char *args);
 
 // match e.g. ["get", "1234", "foo"] with a comma separated string "get,*,foo", the asterisk matches anything
 bool match(const char *argv[], const char *pattern);
