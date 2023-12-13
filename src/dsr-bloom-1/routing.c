@@ -6,6 +6,7 @@
 #include <net/if.h>
 #include <sys/time.h>
 
+#include "../ext/bloom.h"
 #include "../ext/uthash.h"
 #include "../log.h"
 #include "../utils.h"
@@ -19,14 +20,6 @@
 #include "routing.h"
 
 #define TIMEOUT_ENTRY_SEC 60
-
-// Bloom Filter
-#define BLOOM_M      8  // size of the bloom filter (in bytes)
-#define BLOOM_K      2  // number of hash functions
-#define BLOOM_LIMIT 50  // limit for the bloom filter (in percent)
-
-#define BLOOM_BITSET(bv, idx) (bv[(idx)/8U] |= (1U << ((idx)%8U)))
-#define BLOOM_BITTEST(bv, idx) (bv[(idx)/8U] & (1U << ((idx)%8U)))
 
 enum {
     TYPE_DATA,
@@ -63,61 +56,6 @@ static uint8_t *get_data_payload(const DATA *data)
 static size_t get_data_size(const DATA *data)
 {
     return sizeof(DATA) + data->payload_length;
-}
-
-// set BLOOM_K bits based on id
-static void bloom_init(uint8_t *bloom, uint64_t id)
-{
-    memset(bloom, 0, BLOOM_M);
-
-    // linear congruential generator
-    uint64_t next = id;
-    for (size_t i = 0; i < BLOOM_K; i++) {
-        next = next * 1103515245 + 12345;
-        uint32_t r = (next / 65536) % 32768;
-        uint32_t j = r % (BLOOM_M * 8);
-        BLOOM_BITSET(bloom, j);
-    }
-}
-
-// count of bits set in bloom filter
-static uint16_t bloom_ones(const uint8_t *bloom)
-{
-    uint16_t ones = 0;
-
-    for (size_t i = 0; i < (8 * BLOOM_M); i++) {
-        ones += (0 != BLOOM_BITTEST(bloom, i));
-    }
-
-    return ones;
-}
-
-static bool bloom_test(const uint8_t *bloom, uint32_t id)
-{
-    uint8_t bloom_id[BLOOM_M]; 
-    bloom_init(&bloom_id[0], id);
-
-    for (size_t i = 0; i < BLOOM_M; i++) {
-        if ((bloom[i] & bloom_id[i]) != bloom_id[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
-{
-    for (size_t i = 0; i < BLOOM_M; i++) {
-        bloom1[i] |= bloom2[i];
-    }
-}
-
-static void bloom_add(uint8_t *bloom, uint32_t id)
-{
-    uint8_t bloom_id[BLOOM_M];
-    bloom_init(&bloom_id[0], id);
-    bloom_merge(bloom, &bloom_id[0]);
 }
 
 static const char *address_type_str(const Address *addr)
@@ -278,17 +216,6 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     default:
         log_warning("unknown packet type 0x%02x from %s (%s)", packet[0], str_addr(src));
     }
-}
-
-static char *str_bloom(const uint8_t *bloom)
-{
-    static char buf[BLOOM_M * 8 + 1];
-    char *cur = buf;
-    for (size_t i = 0; i < (8 * BLOOM_M); i++) {
-        uint32_t bit = (0 != BLOOM_BITTEST(bloom, i));
-        cur += sprintf(cur, "%u", bit);
-    }
-    return buf;
 }
 
 static bool console_handler(FILE *fp, const char *argv[])

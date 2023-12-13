@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <linux/if_ether.h>   //ETH_ALEN(6),ETH_HLEN(14),ETH_FRAME_LEN(1514),struct ethhdr
 
+#include "../ext/bloom.h"
 #include "../log.h"
 #include "../utils.h"
 #include "../net.h"
@@ -17,12 +18,6 @@
 #include "../interfaces.h"
 
 #include "routing.h"
-
-#define BLOOM_M 8   // size of the bloom filter (in bytes)
-#define BLOOM_K 1   // hash methods / bits to be set per item
-
-#define BLOOM_BITSET(bv, idx) (bv[(idx)/8U] |= (1U << ((idx)%8U)))
-#define BLOOM_BITTEST(bv, idx) (bv[(idx)/8U] & (1U << ((idx)%8U)))
 
 enum {
     TYPE_DATA
@@ -45,48 +40,6 @@ static uint8_t *get_data_payload(const DATA *data)
 static size_t get_data_size(const DATA *data)
 {
     return sizeof(DATA) + data->payload_length;
-}
-
-static void bloom_init(uint8_t *bloom, uint32_t id)
-{
-    memset(bloom, 0, BLOOM_M);
-
-    uint64_t next = id;
-    // pseudo random generator
-    for (size_t i = 0; i < BLOOM_K; i++) {
-        next = next * 1103515245 + 12345;
-        uint32_t r = (next / 65536) % 32768;
-        uint32_t j = r % (BLOOM_M * 8);
-        BLOOM_BITSET(bloom, j);
-    }
-}
-
-static bool bloom_test(const uint8_t *bloom, uint32_t id)
-{
-    uint8_t bloom_id[BLOOM_M];
-    bloom_init(&bloom_id[0], id);
-
-    for (size_t i = 0; i < BLOOM_M; i++) {
-        if ((bloom_id[i] & bloom[i]) != bloom_id[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
-{
-    for (size_t i = 0; i < BLOOM_M; i++) {
-        bloom1[i] |= bloom2[i];
-    }
-}
-
-static void bloom_add(uint8_t *bloom, uint32_t id)
-{
-    uint8_t bloom_id[BLOOM_M];
-    bloom_init(&bloom_id[0], id);
-    bloom_merge(bloom, &bloom_id[0]);
 }
 
 static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
