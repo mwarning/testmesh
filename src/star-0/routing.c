@@ -382,16 +382,6 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
     }
 }
 
-// returns |new - cur| < UINT16_MAX/2
-static int is_newer_seqnum(uint16_t cur, uint16_t new)
-{
-    if (cur >= new) {
-        return (cur - new) > 0x7fff;
-    } else {
-        return (new - cur) < 0x7fff;
-    }
-}
-
 static void handle_ROOT(const Address *rcv, const Address *src, const Address *dst, ROOT *p, size_t length)
 {
     // we expect broadcasts only

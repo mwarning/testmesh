@@ -244,15 +244,6 @@ static void send_ucast_l2_wrapper(const Address *next_hop_addr, const void* data
     count_unicast_traffic(traffic, data_len, 0);
 }
 
-static int is_newer_seqnum(uint16_t cur, uint16_t new)
-{
-    if (cur >= new) {
-        return (cur - new) > 0x7fff;
-    } else {
-        return (new - cur) < 0x7fff;
-    }
-}
-
 static bool packet_seen(uint32_t id, uint16_t seq_num)
 {
     Node *node;

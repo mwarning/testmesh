@@ -19,6 +19,15 @@
 #include "utils.h"
 
 
+bool is_newer_seqnum(uint16_t cur, uint16_t new)
+{
+    if (cur >= new) {
+        return (cur - new) > 0x7fff;
+    } else {
+        return (new - cur) < 0x7fff;
+    }
+}
+
 // separate a string into a list of arguments (int argc, char **argv)
 int setargs(const char **argv, int argv_size, char *args)
 {

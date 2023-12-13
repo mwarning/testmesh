@@ -33,16 +33,6 @@ static void seqnum_cache_timeout()
     }
 }
 
-// returns |new - cur| < UINT16_MAX/2
-static int is_newer_seqnum(uint16_t cur, uint16_t new)
-{
-    if (cur >= new) {
-        return (cur - new) > 0x7fff;
-    } else {
-        return (new - cur) < 0x7fff;
-    }
-}
-
 int seqnum_cache_update(uint32_t src_id, uint16_t seq_num)
 {
     SeqNumCacheEntry *cur;
