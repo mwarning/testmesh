@@ -56,7 +56,10 @@ Implemented Protocols:
   - other nodes can reply to route request
 - [ratelimit-2](src/ratelimit-2/)
   - like ratelimit-2
-  - utilize full fload and partial flood RREQ
+  - utilize full/partial flood RREQ
+ [ratelimit-3](src/ratelimit-3/)
+  - like ratelimit-3
+  - add dead node detection and accumulate RREQ
 - [star-0](src/star-0/)
   - incomplete!
   - reactive
