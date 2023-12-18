@@ -30,7 +30,7 @@ typedef struct {
     Address addr;
     uint8_t bloom[BLOOM_M];
     uint8_t hop_cnt;
-    time_t last_updated;
+    uint64_t last_updated;
     UT_hash_handle hh;
 } Entry;
 
@@ -75,7 +75,7 @@ static void entry_timeout()
     Entry *cur;
 
     HASH_ITER(hh, g_neighbors, cur, tmp) {
-        if ((cur->last_updated + TIMEOUT_ENTRY_SEC) <= gstate.time_now) {
+        if ((cur->last_updated + TIMEOUT_ENTRY_SEC * 1000) <= gstate.time_now) {
             log_debug("timeout entry 0x%08x", cur->sender_id);
             HASH_DEL(g_neighbors, cur);
             free(cur);
@@ -239,7 +239,7 @@ static bool console_handler(FILE *fp, const char *argv[])
             fprintf(fp, "0x%08x %s %s %s %u\n",
                 cur->sender_id,
                 str_addr(&cur->addr),
-                str_ago(cur->last_updated),
+                str_since(cur->last_updated),
                 str_bloom(&cur->bloom[0]),
                 (unsigned) cur->hop_cnt
             );

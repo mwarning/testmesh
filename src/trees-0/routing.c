@@ -39,7 +39,7 @@ enum {
 
 typedef struct {
     Address next_hop_addr;      // use neighbor object with id and address?
-    time_t last_updated;
+    uint64_t last_updated;
     uint16_t hop_count;
     UT_hash_handle hh;
 } Hop;
@@ -202,7 +202,7 @@ static size_t is_path_response_valid(const PATH_RESPONSE *p, size_t length)
 
 static uint16_t g_sequence_number = 0;
 static bool g_is_critical = true; // rename to relay_broadcasts?
-static time_t g_is_critical_time = 0; // for timeout
+static uint64_t g_is_critical_time = 0; // for timeout
 static Node *g_nodes = NULL;
 static Root g_root = {0};
 
@@ -211,30 +211,30 @@ static void dht_del(uint32_t id);
 
 static void nodes_timeout()
 {
-    Node *ncur;
+    Node *node;
     Node *ntmp;
-    Hop *hcur;
+    Hop *hop;
     Hop *htmp;
 
-    HASH_ITER(hh, g_nodes, ncur, ntmp) {
-        HASH_ITER(hh, ncur->hops, hcur, htmp) {
-            if ((hcur->last_updated + NODE_TIMEOUT) < gstate.time_now) {
-                log_debug("timeout hop %s", str_addr(&hcur->next_hop_addr));
-                HASH_DEL(ncur->hops, hcur);
+    HASH_ITER(hh, g_nodes, node, ntmp) {
+        HASH_ITER(hh, node->hops, hop, htmp) {
+            if ((hop->last_updated + NODE_TIMEOUT) < gstate.time_now) {
+                log_debug("timeout hop %s", str_addr(&hop->next_hop_addr));
+                HASH_DEL(node->hops, hop);
 
-                free(hcur);
+                free(hop);
             }
         }
 
         // not paths left, remove entry
-        if (ncur->hops == NULL) {
-            log_debug("timeout node 0x%08x", ncur->id);
-            HASH_DEL(g_nodes, ncur);
+        if (node->hops == NULL) {
+            log_debug("timeout node 0x%08x", node->id);
+            HASH_DEL(g_nodes, node);
 
             // remove from DHT
-            dht_del(ncur->id);
+            dht_del(node->id);
 
-            free(ncur);
+            free(node);
         }
     }
 }
@@ -254,12 +254,12 @@ static Hop *next_hop_by_node(Node *node)
         return NULL;
     }
 
-    Hop *hcur;
+    Hop *hop;
     Hop *htmp;
     Hop *hbest = NULL;
-    HASH_ITER(hh, node->hops, hcur, htmp) {
-        if (hbest == NULL || (hcur->hop_count < hbest->hop_count)) {
-            hbest = hcur;
+    HASH_ITER(hh, node->hops, hop, htmp) {
+        if (hbest == NULL || (hop->hop_count < hbest->hop_count)) {
+            hbest = hop;
         }
     }
     return hbest;
@@ -1071,17 +1071,17 @@ static bool g_initial_root_send = false;
 
 // return node behind an address
 // slow - only for debugging
-static Node *find_node_by_address(const Address *addr)
+static Node *find_neighbor_by_address(const Address *addr)
 {
-    Node *ncur;
+    Node *node;
     Node *ntmp;
-    Hop *hcur;
+    Hop *hop;
     Hop *htmp;
 
-    HASH_ITER(hh, g_nodes, ncur, ntmp) {
-        HASH_ITER(hh, ncur->hops, hcur, htmp) {
-            if (hcur->hop_count == 1 && 0 == memcmp(&hcur->next_hop_addr, addr, sizeof(Address))) {
-                return ncur;
+    HASH_ITER(hh, g_nodes, node, ntmp) {
+        HASH_ITER(hh, node->hops, hop, htmp) {
+            if (hop->hop_count == 1 && 0 == memcmp(&hop->next_hop_addr, addr, sizeof(Address))) {
+                return node;
             }
         }
     }
@@ -1096,7 +1096,7 @@ static void periodic_handler()
     nodes_timeout();
     dht_maintenance();
 
-    if (gstate.time_now % ROOT_SEND_INTERVAL_SECONDS == 0 || !g_initial_root_send) {
+    if ((gstate.time_now / 1000) % ROOT_SEND_INTERVAL_SECONDS == 0 || !g_initial_root_send) {
         g_initial_root_send = true;
 
         if (g_root.root_id == gstate.own_id) {
@@ -1156,13 +1156,13 @@ static bool console_handler(FILE* fp, const char* argv[])
         fprintf(fp, "tree root\n");
         fprintf(fp, " path:     0x%08x:[%s]\n", r->root_id, str_path(&r->path, r->path_length));
         fprintf(fp, " parent:   %s\n", str_addr(&r->parent_addr));
-        fprintf(fp, " updated:  %s\n", str_ago(r->last_updated));
+        fprintf(fp, " updated:  %s\n", str_since(r->last_updated));
         fprintf(fp, " count:    %zu\n", (size_t) r->updated_count);
-        fprintf(fp, " critical: %s (%s ago)\n", str_onoff(g_is_critical), str_ago(g_is_critical_time));
+        fprintf(fp, " critical: %s (%s ago)\n", str_onoff(g_is_critical), str_since(g_is_critical_time));
     } else if (match(argv, "n")) {
-        Node *ncur;
+        Node *node;
         Node *ntmp;
-        Hop *hcur;
+        Hop *hop;
         Hop *htmp;
         size_t node_count = 0;
         size_t hop_count = 0;
@@ -1170,18 +1170,18 @@ static bool console_handler(FILE* fp, const char* argv[])
 
         fprintf(fp, "hop-nodes:\n");
         fprintf(fp, " id          hop-count  next-hop-id   next-hop-address   last-updated\n");
-        HASH_ITER(hh, g_nodes, ncur, ntmp) {
+        HASH_ITER(hh, g_nodes, node, ntmp) {
             node_count += 1;
-            fprintf(fp, " 0x%08x\n", ncur->id);
-            HASH_ITER(hh, ncur->hops, hcur, htmp) {
+            fprintf(fp, " 0x%08x\n", node->id);
+            HASH_ITER(hh, node->hops, hop, htmp) {
                 hop_count += 1;
-                neighbor_count += (hcur->hop_count == 1);
-                Node *node = find_node_by_address(&hcur->next_hop_addr);
+                neighbor_count += (hop->hop_count == 1);
+                Node *neighbor = find_neighbor_by_address(&hop->next_hop_addr);
                 fprintf(fp, "             %-9zu  0x%08x    %-18s %-8s ago\n",
-                    (size_t) hcur->hop_count,
-                    node ? node->id : 0,
-                    str_addr(&hcur->next_hop_addr),
-                    str_ago(hcur->last_updated)
+                    (size_t) hop->hop_count,
+                    neighbor ? neighbor->id : 0,
+                    str_addr(&hop->next_hop_addr),
+                    str_since(hop->last_updated)
                 );
             }
         }
@@ -1214,10 +1214,10 @@ static bool console_handler(FILE* fp, const char* argv[])
         fprintf(fp, "\"root_id\": \"0x%08x\", ", r->root_id);
         fprintf(fp, "\"path\": \"%zu\", ", (size_t) r->path_length);
         fprintf(fp, "\"parent\": \"%s\", ", str_addr(&r->parent_addr));
-        fprintf(fp, "\"updated\": \"%s\", ", str_ago(r->last_updated));
+        fprintf(fp, "\"updated\": \"%s\", ", str_since(r->last_updated));
         fprintf(fp, "\"count\": %zu, ", (size_t) r->updated_count);
         fprintf(fp, "\"is_critical\": %s, ", str_bool(g_is_critical));
-        fprintf(fp, "\"critical_ago\": \"%s\"", str_ago(g_is_critical_time));
+        fprintf(fp, "\"critical_ago\": \"%s\"", str_since(g_is_critical_time));
         fprintf(fp, "},\n");
 
         fprintf(fp, "\"packet_trace\": ");

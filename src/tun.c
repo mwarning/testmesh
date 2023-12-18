@@ -21,7 +21,7 @@ static uint64_t g_tun_read_count = 0;
 static uint64_t g_tun_write_count = 0;
 static uint64_t g_tun_read_bytes = 0;
 static uint64_t g_tun_write_bytes = 0;
-static time_t g_tun_bytes_updated = 0;
+static uint64_t g_tun_bytes_updated = 0;
 
 uint64_t tun_read_bytes()
 {

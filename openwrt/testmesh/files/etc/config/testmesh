@@ -9,4 +9,4 @@ config testmesh
 	#list peer 'some-peer-example.com'
 	#option enable_ipv4 'on'
 	#option enable_ipv6 'on'
-	option log_level 5
+	option log_level 'trace'

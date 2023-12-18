@@ -20,15 +20,16 @@
 #define MULTICAST_PORT 4321
 #define UNICAST_PORT 654
 
+
 typedef struct {
     const char *name;
     void (*init)();
     void (*exit)();
     void (*tun_handler)(uint32_t dst_id, uint8_t *packet, size_t length); // receive IP frames from tun0
     void (*ext_handler_l2)(const Address *rvc, const Address *src, const Address *dst, uint8_t *packet, size_t length); // receive Ethernet frames
-    void (*ext_handler_l3)(const Address *src_addr, uint8_t *packet, size_t length); // receive IP frames
+    void (*ext_handler_l3)(const Address *src, uint8_t *packet, size_t length); // receive IP frames
     bool (*peer_handler)(const char *address, bool add);
-    bool (*interface_handler)(uint32_t ifindex, bool add);
+    bool (*interface_handler)(uint32_t ifindex, const char *ifname, bool add);
     bool (*console_handler)(FILE* file, const char *argv[]);
     bool (*config_handler)(const char *option, const char *value);
 } Protocol;
@@ -52,6 +53,7 @@ struct state {
 
     uint32_t gateway_id;
     bool gateway_id_set;
+
     uint32_t own_id;
     bool own_id_set;
 
@@ -59,8 +61,8 @@ struct state {
     // state
     bool is_running;
     bool disable_stdin;
-    time_t time_now;
-    time_t time_started;
+    uint64_t time_now;
+    uint64_t time_started;
 #ifdef MULTICAST
     // local network discovery address
     struct sockaddr_in6 mcast_addr;

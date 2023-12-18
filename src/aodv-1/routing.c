@@ -26,14 +26,14 @@ enum {
     TYPE_RREP
 };
 
-#define TIMEOUT_ROUTING_ENTRY 20
+#define TIMEOUT_ROUTING_ENTRY_SEC 20
 
 typedef struct {
     uint32_t dst_id;
     Address next_hop_addr;
     uint16_t hop_count;
     uint16_t seq_num;
-    time_t last_updated;
+    uint64_t last_updated;
     UT_hash_handle hh;
 } RoutingEntry;
 
@@ -77,15 +77,13 @@ static uint8_t* get_data_payload(DATA *p)
     return ((uint8_t*) p) + sizeof(DATA);
 }
 
-#define FULL_FLOOD_SEND_INTERVAL 30
-
 static void routing_entry_timeout()
 {
     RoutingEntry *tmp;
     RoutingEntry *cur;
 
     HASH_ITER(hh, g_routing_entries, cur, tmp) {
-        if ((cur->last_updated + TIMEOUT_ROUTING_ENTRY) < gstate.time_now) {
+        if ((cur->last_updated + TIMEOUT_ROUTING_ENTRY_SEC * 1000) < gstate.time_now) {
             log_debug("timeout routing entry for id 0x%08x", cur->dst_id);
             HASH_DEL(g_routing_entries, cur);
             free(cur);
@@ -198,7 +196,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
     } else {
         RoutingEntry *e = routing_entry_find(p->dst_id);
         if (e) {
-            if (e->last_updated == gstate.time_now) {
+            if (e->last_updated / 1000 == gstate.time_now / 1000) {
                 log_debug("RREQ: just heard from destination => send RREP");
                 RREP rrep = {
                     .type = TYPE_RREP,
@@ -373,7 +371,7 @@ static bool console_handler(FILE* fp, const char *argv[])
     if (match(argv, "h")) {
         fprintf(fp, "r                       print routing table\n");
     } else if (match(argv, "i")) {
-        fprintf(fp, "routing entry timeout: %us\n", TIMEOUT_ROUTING_ENTRY);
+        fprintf(fp, "routing entry timeout: %us\n", TIMEOUT_ROUTING_ENTRY_SEC);
     } else if (match(argv, "r")) {
         RoutingEntry *cur;
         RoutingEntry *tmp;
@@ -385,7 +383,7 @@ static bool console_handler(FILE* fp, const char *argv[])
                 cur->dst_id,
                 cur->seq_num,
                 str_addr(&cur->next_hop_addr),
-                str_ago(cur->last_updated)
+                str_since(cur->last_updated)
             );
             count += 1;
         }

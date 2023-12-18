@@ -34,8 +34,8 @@ enum {
 
 typedef struct {
     Address next_hop_addr; // use neighbor object with id and address?
-    time_t time_updated;
-    time_t time_created; // by default time_updated + MAX_TIMEOUT
+    uint64_t time_updated;
+    uint64_t time_created; // by default time_updated + MAX_TIMEOUT
     uint16_t hop_count;
     UT_hash_handle hh;
 } Hop;
@@ -55,8 +55,8 @@ typedef struct {
     uint16_t received_unicast_packets;
     uint16_t send_broadcast_packets;
     uint16_t send_unicast_packets;
-    time_t time_broadcast_send;
-    time_t time_updated;
+    uint64_t time_broadcast_send;
+    uint64_t time_updated;
     UT_hash_handle hh;
 } TrafficByIfindex;
 
@@ -95,15 +95,15 @@ static Node *g_nodes = NULL;
 // called once per seond
 static void traffic_timeout()
 {
-    static time_t g_traffic_last_degraded = 0;
-    const time_t time_now = gstate.time_now;
+    static uint64_t g_traffic_last_degraded = 0;
+    const uint64_t time_now = gstate.time_now;
 
-    bool degrade = ((time_now - g_traffic_last_degraded) > TRAFFIC_DEGRADE_SECONDS);
+    bool degrade = ((time_now - g_traffic_last_degraded) > (1000 * TRAFFIC_DEGRADE_SECONDS));
 
     TrafficByIfindex *cur;
     TrafficByIfindex *tmp;
     HASH_ITER(hh, g_traffic, cur, tmp) {
-        if ((time_now - cur->time_updated) > TRAFFIC_TIMEOUT_MAX_SECONDS) {
+        if ((time_now - cur->time_updated) > (1000 * TRAFFIC_TIMEOUT_MAX_SECONDS)) {
             HASH_DEL(g_traffic, cur);
             free(cur);
         } else if (degrade) {
@@ -211,10 +211,10 @@ static void send_bcast_l2_wrapper(const void* data, size_t data_len)
             uint32_t upackets = cur->received_unicast_packets;
 
             size_t pc = (100 * (1 + bpackets)) / (1 + bpackets + upackets);
-            time_t last_broadcast = (gstate.time_now - cur->time_broadcast_send);
+            uint64_t last_broadcast = (gstate.time_now - cur->time_broadcast_send);
 
             if (pc <= MIN_BROADCAST_PACKETS_PERCENT
-                    || last_broadcast > MIN_BROADCAST_PACKETS_PER_SECONDS) {
+                    || last_broadcast >= (1000 * MIN_BROADCAST_PACKETS_PER_SECONDS)) {
                 log_debug("send_bcast_l2_wrapper() ifname: %s, bpackets: %zu (%zu%%), upackets: %zu, last_broadcast: %s ago => send",
                         str_ifindex(cur->ifindex), (size_t) bpackets, pc, (size_t) upackets, str_time(last_broadcast));
 
@@ -306,35 +306,35 @@ static void nodes_update(uint32_t id, const Address *addr, uint16_t hop_count, u
 
 static void nodes_timeout()
 {
-    Node *ncur;
+    Node *node;
     Node *ntmp;
-    Hop *hcur;
+    Hop *hop;
     Hop *htmp;
-    const time_t time_now = gstate.time_now;
+    const uint64_t time_now = gstate.time_now;
 
-    HASH_ITER(hh, g_nodes, ncur, ntmp) {
+    HASH_ITER(hh, g_nodes, node, ntmp) {
         // timeout hops
-        HASH_ITER(hh, ncur->hops, hcur, htmp) {
+        HASH_ITER(hh, node->hops, hop, htmp) {
             /*
              * Dynamic Timeout - The longer a hop is used, the longer the timeout.
             */
-            const uint32_t age1 = hcur->time_updated - hcur->time_created;
-            const uint32_t age2 = time_now - hcur->time_updated;
-            if (age2 > HOP_TIMEOUT_MIN_SECONDS
-                && ((age2 > HOP_TIMEOUT_MAX_SECONDS) || (age1 < age2))) {
+            const uint32_t age1 = hop->time_updated - hop->time_created;
+            const uint32_t age2 = time_now - hop->time_updated;
+            if (age2 > (1000 * HOP_TIMEOUT_MIN_SECONDS)
+                && ((age2 > (1000 * HOP_TIMEOUT_MAX_SECONDS)) || (age1 < age2))) {
                 log_debug("timeout hop %s (age1: %s, age2: %s)",
-                    str_addr(&hcur->next_hop_addr), str_time(age1), str_time(age2));
-                HASH_DEL(ncur->hops, hcur);
+                    str_addr(&hop->next_hop_addr), str_time(age1), str_time(age2));
+                HASH_DEL(node->hops, hop);
 
-                free(hcur);
+                free(hop);
             }
         }
 
         // no hops left => remove node
-        if (ncur->hops == NULL) {
-            log_debug("remove node 0x%08x", ncur->id);
-            HASH_DEL(g_nodes, ncur);
-            free(ncur);
+        if (node->hops == NULL) {
+            log_debug("remove node 0x%08x", node->id);
+            HASH_DEL(g_nodes, node);
+            free(node);
         }
     }
 }
@@ -375,12 +375,12 @@ static Hop *next_hop_by_node(Node *node)
         return NULL;
     }
 
-    Hop *hcur;
+    Hop *hop;
     Hop *htmp;
     Hop *hbest = NULL;
-    HASH_ITER(hh, node->hops, hcur, htmp) {
-        if (is_better_hop(hbest, hcur)) {
-            hbest = hcur;
+    HASH_ITER(hh, node->hops, hop, htmp) {
+        if (is_better_hop(hbest, hop)) {
+            hbest = hop;
         }
     }
 
@@ -399,17 +399,17 @@ static uint8_t* get_data_payload(DATA *p)
 
 // return node behind an address (only possible if neighbor)
 // beware: slow - only for debugging
-static Node *find_node_by_address(const Address *addr)
+static Node *find_neighbor_by_address(const Address *addr)
 {
-    Node *ncur;
+    Node *node;
     Node *ntmp;
-    Hop *hcur;
+    Hop *hop;
     Hop *htmp;
 
-    HASH_ITER(hh, g_nodes, ncur, ntmp) {
-        HASH_ITER(hh, ncur->hops, hcur, htmp) {
-            if (hcur->hop_count == 1 && 0 == memcmp(&hcur->next_hop_addr, addr, sizeof(Address))) {
-                return ncur;
+    HASH_ITER(hh, g_nodes, node, ntmp) {
+        HASH_ITER(hh, node->hops, hop, htmp) {
+            if (hop->hop_count == 1 && 0 == memcmp(&hop->next_hop_addr, addr, sizeof(Address))) {
+                return node;
             }
         }
     }
@@ -618,7 +618,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     }
 }
 
-static bool interface_handler(uint32_t ifindex, bool added)
+static bool interface_handler(uint32_t ifindex, const char *ifname, bool added)
 {
     if (added) {
         traffic_create(ifindex);
@@ -667,38 +667,43 @@ static bool console_handler(FILE* fp, const char *argv[])
         fprintf(fp, "r                       print routing table\n");
     } else if (match(argv, "i")) {
         fprintf(fp, "broadcasts:      %zu (send)/ %zu (dropped)\n", (size_t) g_broadcast_send_counter, (size_t) g_broadcast_dropped_counter);
-        fprintf(fp, "HOP_TIMEOUT_MIN: %s\n", str_time(HOP_TIMEOUT_MIN_SECONDS));
-        fprintf(fp, "HOP_TIMEOUT_MAX: %s\n", str_time(HOP_TIMEOUT_MAX_SECONDS));
-        fprintf(fp, "TRAFFIC_TIMEOUT_MAX: %s\n", str_time(TRAFFIC_TIMEOUT_MAX_SECONDS));
-        fprintf(fp, "TRAFFIC_DEGRADE:  %s\n", str_time(TRAFFIC_DEGRADE_SECONDS));
+        fprintf(fp, "HOP_TIMEOUT_MIN: %s\n", str_time(1000 * HOP_TIMEOUT_MIN_SECONDS));
+        fprintf(fp, "HOP_TIMEOUT_MAX: %s\n", str_time(1000 * HOP_TIMEOUT_MAX_SECONDS));
+        fprintf(fp, "TRAFFIC_TIMEOUT_MAX: %s\n", str_time(1000 * TRAFFIC_TIMEOUT_MAX_SECONDS));
+        fprintf(fp, "TRAFFIC_DEGRADE:  %s\n", str_time(1000 * TRAFFIC_DEGRADE_SECONDS));
     } else if (match(argv, "r")) {
-        Node *ncur;
+        Node *node;
         Node *ntmp;
-        Hop *hcur;
+        Hop *hop;
         Hop *htmp;
         size_t node_count = 0;
-        size_t hop_count = 0;
         size_t neighbor_count = 0;
 
         fprintf(fp, "hop-nodes:\n");
         fprintf(fp, " id          hop-count  next-hop-id   next-hop-address   last-updated\n");
-        HASH_ITER(hh, g_nodes, ncur, ntmp) {
+        HASH_ITER(hh, g_nodes, node, ntmp) {
             node_count += 1;
-            fprintf(fp, " 0x%08x\n", ncur->id);
-            HASH_ITER(hh, ncur->hops, hcur, htmp) {
-                hop_count += 1;
-                neighbor_count += (hcur->hop_count == 1);
-                Node *node = find_node_by_address(&hcur->next_hop_addr);
+            fprintf(fp, " 0x%08x\n", node->id);
+            bool is_neighbor = false;
+            HASH_ITER(hh, node->hops, hop, htmp) {
+                if (hop->hop_count == 1) {
+                    is_neighbor = true;
+                }
+                Node *neighbor = find_neighbor_by_address(&hop->next_hop_addr);
                 fprintf(fp, "             %-9zu  0x%08x    %-18s %-8s ago\n",
-                    (size_t) hcur->hop_count,
-                    node ? node->id : 0,
-                    str_addr(&hcur->next_hop_addr),
-                    str_ago(hcur->time_updated)
+                    (size_t) hop->hop_count,
+                    (neighbor ? neighbor->id : 0),
+                    str_addr(&hop->next_hop_addr),
+                    str_since(hop->time_updated)
                 );
             }
+
+            if (is_neighbor) {
+                neighbor_count += 1;
+            }
         }
-        fprintf(fp, "nodes: %zu, hops: %zu, neighbors: %zu\n",
-            node_count, hop_count, neighbor_count);
+        fprintf(fp, "nodes: %zu, neighbors: %zu\n",
+            node_count, neighbor_count);
     } else if (match(argv, "json")) {
         fprintf(fp, "{");
         fprintf(fp, "\"own_id\": \"0x%08x\",", gstate.own_id);

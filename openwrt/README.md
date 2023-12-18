@@ -24,7 +24,7 @@ make menuconfig
 ```
 
 At this point select the appropiate "Target System" and "Target Profile" depending on what target chipset/router you want to build for.
-Packages `testmesh` (the routing protocol) and `testmesh-firmware` (for wifi/lan configuration) are selected by default.
+Packages `testmesh` (the routing protocol) and `testmesh-firmware` (for WLAN/LAN configuration) are selected by default.
 
 Now compile/build everything:
 

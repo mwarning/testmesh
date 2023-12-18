@@ -31,7 +31,7 @@ typedef struct {
     uint32_t sender_id;
     Address addr;
     float pos[DIM];
-    time_t last_updated;
+    uint64_t last_updated;
     UT_hash_handle hh;
 } Neighbor;
 
@@ -139,7 +139,7 @@ static void neighbor_timeout()
     Neighbor *cur;
 
     HASH_ITER(hh, g_neighbors, cur, tmp) {
-        if ((cur->last_updated + TIMEOUT_NEIGHBOR_SEC) < gstate.time_now) {
+        if ((cur->last_updated + 1000 * TIMEOUT_NEIGHBOR_SEC) < gstate.time_now) {
             log_debug("timeout neighbor 0x%08x", cur->sender_id);
             HASH_DEL(g_neighbors, cur);
             free(cur);
@@ -303,9 +303,9 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
 
 static void send_COMMs()
 {
-    static time_t g_last_send = 0;
+    static uint64_t g_last_send = 0;
 
-    if (g_last_send != 0 && (g_last_send + COMM_SEND_INTERVAL_SEC) > gstate.time_now) {
+    if (g_last_send != 0 && (g_last_send + 1000 * COMM_SEND_INTERVAL_SEC) > gstate.time_now) {
         return;
     } else {
         g_last_send = gstate.time_now;
@@ -323,7 +323,7 @@ static void send_COMMs()
 
 static void periodic_handler(int _events, int _fd)
 {
-    static time_t g_every_second = 0;
+    static uint64_t g_every_second = 0;
 
     if (g_every_second == gstate.time_now) {
         return;
@@ -365,7 +365,7 @@ static bool console_handler(FILE *fp, const char *argv[])
             fprintf(fp, "  0x%08x %s %s %s\n",
                 cur->sender_id,
                 str_addr(&cur->addr),
-                str_ago(cur->last_updated),
+                str_since(cur->last_updated),
                 str_pos(buf_pos, cur->pos)
             );
             counter += 1;

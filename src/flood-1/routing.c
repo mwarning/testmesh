@@ -24,7 +24,7 @@ enum {
     TYPE_DATA_PF
 };
 
-#define FULL_FLOOD_SEND_INTERVAL 30
+#define FULL_FLOOD_SEND_INTERVAL_SEC 30
 
 // flooded data packet
 typedef struct __attribute__((__packed__)) {
@@ -38,8 +38,8 @@ typedef struct __attribute__((__packed__)) {
     //uint8_t payload[ETH_FRAME_LEN];
 } DATA;
 
-static uint8_t g_is_critical = 1;
-static time_t g_is_critical_time = 0;
+static bool g_is_critical = true;
+static uint64_t g_is_critical_time = 0;
 static uint16_t g_sequence_number = 0;
 
 static uint8_t *get_data_payload(const DATA *data)
@@ -89,27 +89,29 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
             // packet already seen
             if (p->prev_sender == gstate.own_id) {
                 // echo received
-                g_is_critical = 1;
-                log_debug("DATA: duplicate packet (echo) => critical");
+                g_is_critical = true;
+                log_debug("DATA: duplicate packet (echo) => drop+critical");
             } else {
                 log_debug("DATA: duplicate packet (no echo) => drop");
             }
         }
     } else {
-        if (!is_new) {
-            log_debug("DATA: duplicate packet => drop");
-        } else if (p->dst_id == gstate.own_id) {
-            log_debug("DATA: destination reached => accept");
+        if (is_new) {
+            if (p->dst_id == gstate.own_id) {
+                log_debug("DATA: destination reached => accept");
 
-            // destination is the local tun0 interface => write packet to tun0
-            tun_write(get_data_payload(p), p->payload_length);
-        } else {
-            if (g_is_critical) {
-                log_debug("DATA: is critical => rebroadcast");
-                send_bcast_l2(0, p, length);
+                // destination is the local tun0 interface => write packet to tun0
+                tun_write(get_data_payload(p), p->payload_length);
             } else {
-                log_debug("DATA: not critical => drop");
+                if (g_is_critical) {
+                    log_debug("DATA: is critical => rebroadcast");
+                    send_bcast_l2(0, p, length);
+                } else {
+                    log_debug("DATA: not critical => drop");
+                }
             }
+        } else {
+            log_debug("DATA: duplicate packet => drop");
         }
     }
 }
@@ -117,11 +119,10 @@ static void handle_DATA(const Address *rcv, const Address *src, const Address *d
 // receive traffic from tun0 and send to peers
 static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
 {
-    uint8_t is_full_flood = ((g_is_critical_time + FULL_FLOOD_SEND_INTERVAL) < gstate.time_now);
-
+    bool do_full_flood = ((g_is_critical_time + FULL_FLOOD_SEND_INTERVAL_SEC * 1000) < gstate.time_now);
     DATA *p = (DATA*) (packet - sizeof(DATA));
 
-    p->type = is_full_flood ? TYPE_DATA_FF : TYPE_DATA_PF;
+    p->type = do_full_flood ? TYPE_DATA_FF : TYPE_DATA_PF;
     p->seq_num = g_sequence_number++;
     p->src_id = gstate.own_id;
     p->dst_id = dst_id;
@@ -159,7 +160,7 @@ static bool console_handler(FILE* fp, const char *argv[])
 {
     if (match(argv, "i")) {
         fprintf(fp, "critical:   %s (%s ago)\n",
-            str_yesno(g_is_critical), str_ago(g_is_critical_time));
+            str_yesno(g_is_critical), str_since(g_is_critical_time));
     } else {
         return true;
     }
@@ -170,9 +171,9 @@ static bool console_handler(FILE* fp, const char *argv[])
 static void periodic_handler()
 {
     // timeout critical
-    if (g_is_critical && ((g_is_critical_time + FULL_FLOOD_SEND_INTERVAL) < gstate.time_now)) {
+    if (g_is_critical && ((g_is_critical_time + FULL_FLOOD_SEND_INTERVAL_SEC * 1000) < gstate.time_now)) {
         log_debug("timeout for critical");
-        g_is_critical = 0;
+        g_is_critical = false;
     }
 }
 
@@ -181,9 +182,9 @@ static void init()
     uint32_t r = 0;
     bytes_random(&r, sizeof(r));
 
-    g_is_critical_time = gstate.time_now + (r % 10) - FULL_FLOOD_SEND_INTERVAL;
+    g_is_critical_time = gstate.time_now + (r % 10000) - 1000 * FULL_FLOOD_SEND_INTERVAL_SEC;
 
-    seqnum_cache_init(FULL_FLOOD_SEND_INTERVAL);
+    seqnum_cache_init(FULL_FLOOD_SEND_INTERVAL_SEC);
 
     // call at least every second
     net_add_handler(-1, &periodic_handler);

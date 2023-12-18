@@ -204,7 +204,7 @@ static int is_client(const char *cmd)
 
 int main(int argc, char *argv[])
 {
-    time_t now = time(0);
+    uint64_t now = time_now_millis();
     gstate.time_started = now;
     gstate.time_now = now;
 

@@ -63,7 +63,7 @@ void net_remove_handler(int fd, net_callback *cb)
 		exit(1);
 	}
 
-	for (size_t i = 0; i < g_count; i++) {
+	for (size_t i = 0; i < g_count; ++i) {
 		if (g_cbs[i] == cb && g_fds[i].fd == fd) {
 			// mark for removal in compress_entries()
 			g_cbs[i] = NULL;
@@ -78,7 +78,7 @@ void net_remove_handler(int fd, net_callback *cb)
 
 static void compress_entries()
 {
-	for (size_t i = 0; i < g_count; i += 1) {
+	for (size_t i = 0; i < g_count; ++i) {
 		while (g_cbs[i] == NULL && i < g_count) {
 			g_count -= 1;
 			g_cbs[i] = g_cbs[g_count];
@@ -100,13 +100,13 @@ void net_loop(void)
 
 		if (rc < 0) {
 			if (gstate.is_running) {
-				log_error("poll(): %s", strerror(errno));
+				log_error("poll() %s", strerror(errno));
 			}
 			break;
 		}
 
-		time_t now = time(NULL);
-		int all = (now > gstate.time_now);
+		uint64_t now = time_now_millis();
+		bool all = (now - gstate.time_now) >= 1000;
 		gstate.time_now = now;
 
 		for (size_t i = 0; i < g_count; i++) {

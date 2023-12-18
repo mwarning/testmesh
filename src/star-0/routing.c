@@ -77,7 +77,7 @@ typedef struct Node {
     uint32_t id;
     uint16_t hop_count;
     Address next_hop_addr;
-    time_t updated;
+    uint64_t updated;
     struct Node *next;
 } Node;
 
@@ -86,7 +86,7 @@ typedef struct CurrentRoot {
     uint32_t id;
     uint16_t seq_num;
     uint16_t hop_count;
-    time_t updated;
+    uint64_t updated;
 } CurrentRoot;
 
 static CurrentRoot g_current_root = {0};
@@ -111,7 +111,7 @@ static void dht_node_timeout()
     Node *cur;
 
     LL_FOREACH_SAFE(g_dht_nodes, cur, tmp) {
-        if ((cur->updated + NODE_TIMEOUT_SECONDS) < gstate.time_now) {
+        if ((cur->updated + 1000 * NODE_TIMEOUT_SECONDS) < gstate.time_now) {
             log_debug("timeout dht entry for id 0x%08x", cur->id);
             LL_DELETE(g_dht_nodes, cur);
             free(cur);
@@ -473,6 +473,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     // cache packet
     packet_cache_add(dst_id, packet, packet_length);
 
+    // TODO: this might cause the packet to loop? no?
     node = nodes_find_by_id_space(dst_id);
     if (node) {
         // search for coordionates of destination
@@ -529,7 +530,7 @@ static bool console_handler(FILE *fp, const char *argv[])
     } else if (match(argv, "r")) {
         fprintf(fp, "root-id: 0x%08x, hop_count: %u, seq_num: %u, updated: %s\n",
             g_current_root.id, g_current_root.hop_count, g_current_root.seq_num,
-            str_ago(g_current_root.updated));
+            str_since(g_current_root.updated));
     } else if (match(argv, "n")) {
         uint32_t counter = 0;
         Node *cur;
@@ -540,7 +541,7 @@ static bool console_handler(FILE *fp, const char *argv[])
                 cur->id,
                 cur->hop_count,
                 str_addr(&cur->next_hop_addr),
-                str_ago(cur->updated)
+                str_since(cur->updated)
             );
             counter += 1;
         }
@@ -555,11 +556,11 @@ static bool console_handler(FILE *fp, const char *argv[])
 
 static void send_root()
 {
-    static time_t g_root_last_send = 0;
+    static uint64_t g_root_last_send = 0;
 
     // timeout foreign root
     if (g_current_root.id != gstate.own_id) {
-        if ((g_current_root.updated + ROOT_TIMEOUT_SECONDS) <= gstate.time_now) {
+        if ((g_current_root.updated + (1000 * ROOT_TIMEOUT_SECONDS)) <= gstate.time_now) {
             log_debug("timeout root 0x%08x", g_current_root.id);
             current_root_init();
         }
@@ -568,7 +569,7 @@ static void send_root()
     // send own root
     if (g_current_root.id == gstate.own_id) {
         // only send every TIMEOUT_ROOTS_SECONDS
-        if (g_root_last_send && gstate.time_now < (g_root_last_send + TIMEOUT_ROOTS_SECONDS)) {
+        if (g_root_last_send && gstate.time_now < (g_root_last_send + 1000 * TIMEOUT_ROOTS_SECONDS)) {
             return;
         }
         g_root_last_send = gstate.time_now;

@@ -300,30 +300,37 @@ const char *str_bool(bool value)
     return value ? "true" : "false";
 }
 
-const char *str_time(time_t time)
+uint64_t time_now_millis()
+{
+    struct timespec now;
+    // exact by probably < 10ms
+    if (-1 == clock_gettime(CLOCK_MONOTONIC_COARSE, &now)) {
+        log_error("clock_gettime() %s", strerror(errno));
+        exit(1);
+    }
+    return now.tv_sec * 1000U + now.tv_nsec / 1000000U;
+}
+
+static const char *_str_time(uint64_t ms, bool is_negative)
 {
     static char strdurationbuf[4][64];
     static size_t strdurationbuf_i = 0;
     char *buf = strdurationbuf[++strdurationbuf_i % 4];
+    const char *prefix = is_negative ? "-" : "";
 
-    size_t years, days, hours, minutes, seconds;
-    const char *prefix = "";
+    size_t years, days, hours, minutes, seconds, milliseconds;
 
-    if (time < 0) {
-        time = -time;
-        // prepend minus sign
-        prefix = "-";
-    }
-
-    years = time / (365 * 24 * 60 * 60);
-    time -= years * (365 * 24 * 60 * 60);
-    days = time / (24 * 60 * 60);
-    time -= days * (24 * 60 * 60);
-    hours = time / (60 * 60);
-    time -= hours * (60 * 60);
-    minutes = time / 60;
-    time -= minutes * 60;
-    seconds = time;
+    years = ms / (365 * 24 * 60 * 60 * 1000ULL);
+    ms -= years * (365 * 24 * 60 * 60 * 1000ULL);
+    days = ms / (24 * 60 * 60 * 1000ULL);
+    ms -= days * (24 * 60 * 60 * 1000ULL);
+    hours = ms / (60 * 60 * 1000ULL);
+    ms -= hours * (60 * 60 * 1000ULL);
+    minutes = ms / (60 * 1000ULL);
+    ms -= minutes * (60 * 1000ULL);
+    seconds = ms / (1000ULL);
+    ms -= seconds * (1000ULL);
+    milliseconds = ms;
 
     if (years > 0) {
         snprintf(buf, 64, "%s%zuy%zud", prefix, years, days);
@@ -333,30 +340,41 @@ const char *str_time(time_t time)
         snprintf(buf, 64, "%s%zuh%zum", prefix, hours, minutes);
     } else if (minutes > 0) {
         snprintf(buf, 64, "%s%zum%zus", prefix, minutes, seconds);
+    } else if (seconds > 0) {
+        snprintf(buf, 64, "%s%zus%zums", prefix, seconds, milliseconds);
     } else {
-        snprintf(buf, 64, "%s%zus", prefix, seconds);
+        snprintf(buf, 64, "%s%zums", prefix, milliseconds);
     }
 
     return buf;
 }
 
-const char *str_duration(time_t from, time_t to)
+const char *str_time(uint64_t ms)
+{
+    return _str_time(ms, false);
+}
+
+const char *str_duration(uint64_t from, uint64_t to)
 {
     if (from == 0 || to == 0) {
         return "-";
     }
 
-    return str_time(to - from);
+    if (from <= to) {
+        return _str_time(to - from, false);
+    } else {
+        return _str_time(from - to, true);
+    }
 }
 
-const char *str_since(time_t time)
+const char *str_since(uint64_t time_ms)
 {
-    return str_duration(gstate.time_started, time);
+    return str_duration(time_ms, gstate.time_now);
 }
 
-const char *str_ago(time_t time)
+const char *str_until(uint64_t time_ms)
 {
-    return str_duration(time, gstate.time_now);
+    return str_duration(gstate.time_now, time_ms);
 }
 
 const char *str_bytes(uint64_t bytes)
@@ -615,9 +633,8 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
     char *last_colon;
     const char *addr_str = NULL;
     const char *port_str = NULL;
-    size_t len;
 
-    len = strlen(full_addr_str);
+    size_t len = strlen(full_addr_str);
     if (len >= (sizeof(addr_buf) - 1)) {
         // address too long
         return -1;

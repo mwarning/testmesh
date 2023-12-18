@@ -227,7 +227,7 @@ static struct interface *get_interface_by_fd(int fd)
 static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
 {
     if (gstate.protocol->interface_handler) {
-        gstate.protocol->interface_handler(ifa->ifindex, false);
+        gstate.protocol->interface_handler(ifa->ifindex, &ifa->ifname[0], false);
     }
 
     if (ifa == g_interfaces) {
@@ -276,7 +276,7 @@ static bool interface_add_internal(const char *ifname, bool is_dynamic)
     g_interfaces = ifa;
 
     if (gstate.protocol->interface_handler) {
-        gstate.protocol->interface_handler(ifa->ifindex, true);
+        gstate.protocol->interface_handler(ifa->ifindex, &ifa->ifname[0], true);
     }
 
     return true;
@@ -548,7 +548,7 @@ static void join_mcast(int sock, int ifindex)
         }
     }
 
-    // do not reseive own packets send to a multicast group (remove if we have multiple instances on the same host)
+    // do not receive own packets send to a multicast group (remove if we have multiple instances on the same host)
     //int loop = 0;
     //if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
     //    log_warning("setsockopt(IPV6_MULTICAST_LOOP) %s\n", strerror(errno));
@@ -672,7 +672,13 @@ static void find_and_add_interfaces()
             continue;
         }
 
-        if (!(ifa->ifa_flags & IFF_RUNNING) || (ifa->ifa_flags & IFF_LOOPBACK)) {
+        // ignore loopback interfaces (e.g. "lo")
+        if (!(ifa->ifa_flags & IFF_LOOPBACK)) {
+            continue;
+        }
+
+        // ignore interfaces that are down
+        if (!(ifa->ifa_flags & IFF_RUNNING)) {
             continue;
         }
 
@@ -699,14 +705,14 @@ static void find_and_add_interfaces()
 // interfaces might have disappeared or appeared
 static void periodic_interfaces_handler(int _events, int _fd)
 {
-    static time_t check_time = 0;
+    static uint64_t check_time = 0;
     struct interface *ifa_prev;
     struct interface *ifa;
 
     if (check_time != 0 && check_time >= gstate.time_now) {
         return;
     } else {
-        check_time = gstate.time_now + 5;
+        check_time = gstate.time_now + 5000;
     }
 
     if ((gstate.find_interfaces == FIND_INTERFACES_ON)

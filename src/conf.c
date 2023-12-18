@@ -99,7 +99,7 @@ static bool conf_set(const char opt[], const char val[]);
 static bool conf_load_file(const char path[])
 {
     char line[32 + 256];
-    char *argv[8];
+    const char *argv[8];
     struct stat s;
 
     if (stat(path, &s) == 0 && !(s.st_mode & S_IFREG)) {

@@ -23,7 +23,7 @@ enum {
     TYPE_DATA
 };
 
-#define SEQNUM_TIMEOUT 30
+#define SEQNUM_TIMEOUT_SEC 30
 
 
 typedef struct __attribute__((__packed__)) {
@@ -120,7 +120,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
 
 static void init()
 {
-    seqnum_cache_init(SEQNUM_TIMEOUT);
+    seqnum_cache_init(SEQNUM_TIMEOUT_SEC);
 }
 
 void flood_0_register()

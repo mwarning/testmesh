@@ -12,7 +12,7 @@
 typedef struct {
     uint32_t src_id;
     uint16_t seq_num;
-    time_t updated;
+    uint64_t updated;
     UT_hash_handle hh;
 } SeqNumCacheEntry;
 
@@ -25,7 +25,7 @@ static void seqnum_cache_timeout()
     SeqNumCacheEntry *cur;
 
     HASH_ITER(hh, g_seqnum_cache, cur, tmp) {
-        if ((cur->updated + g_seqnum_cache_timeout_sec) < gstate.time_now) {
+        if ((cur->updated + g_seqnum_cache_timeout_sec * 1000) < gstate.time_now) {
             log_debug("timeout sequence number cache entry for id 0x%08x", cur->src_id);
             HASH_DEL(g_seqnum_cache, cur);
             free(cur);

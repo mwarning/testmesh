@@ -32,15 +32,15 @@ enum {
 
 #define HOP_TIMEOUT_MIN_SECONDS 10
 #define HOP_TIMEOUT_MAX_SECONDS (60 * 60 * 24)
-#define TRAFFIC_DEGRADE_SECONDS 10
+#define TRAFFIC_DURATION_SECONDS 10
 
 // maximum number of entries in a packet
 #define MAX_RREQ_ENTRIES 10
 
 typedef struct {
     Address next_hop_addr; // use neighbor object with id and address?
-    time_t time_updated;
-    time_t time_created; // by default time_updated + MAX_TIMEOUT
+    uint64_t time_updated;
+    uint64_t time_created; // by default time_updated + MAX_TIMEOUT
     uint16_t hop_count;
     UT_hash_handle hh;
 } Hop;
@@ -53,13 +53,24 @@ typedef struct {
     UT_hash_handle hh;
 } Node;
 
+typedef struct {
+    uint64_t updated_time;
+    uint32_t out_bytes[TRAFFIC_DURATION_SECONDS];
+    uint32_t in_bytes[TRAFFIC_DURATION_SECONDS];
+} Traffic;
+
 // for detecting connection breaks
 typedef struct {
     Address addr;
     uint8_t pinged;
-    time_t time_created;
-    time_t time_last_recv;
-    time_t time_last_send;
+    uint64_t time_created;
+    uint64_t time_last_recv;
+    uint64_t time_last_send;
+
+    uint64_t time_send_DATA;
+    uint64_t time_recv_DATA_OR_PONG;
+
+    //Traffic traffic;
     UT_hash_handle hh;
 } Neighbor;
 
@@ -68,16 +79,14 @@ typedef struct {
     uint32_t ifindex;
 
     // We need to forward a broadcast (RREQ) if a neighbor uses us a source.
-    time_t recv_own_broadcast_time;
-    time_t recv_foreign_broadcast_time;
-    time_t send_broadcast_time;
-    time_t neighbor_change_time;
+    uint64_t recv_own_broadcast_time;
+    uint64_t recv_foreign_broadcast_time;
+    uint64_t send_broadcast_time;
 
-    uint16_t received_broadcast_packets;
-    uint16_t received_unicast_packets;
-    uint16_t send_broadcast_packets;
-    uint16_t send_unicast_packets;
-    time_t time_broadcast_send;
+    // TODO: use
+    Traffic unicast_traffic;
+    Traffic broadcast_traffic;
+
     UT_hash_handle hh;
 } InterfaceState;
 
@@ -128,7 +137,7 @@ typedef struct __attribute__((__packed__)) {
     uint8_t payload_data[];
 } DATA;
 
-// used to probe id a neighbor is still alive
+// used to probe a neighbor is still alive
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
 } PING;
@@ -153,34 +162,13 @@ static InterfaceState *g_ifstates = NULL;
 static Node *g_nodes = NULL;
 static Neighbor *g_neighbors = NULL;
 
-
-static uint32_t g_items_last_prev_sender = 0;
-static RREQ_ENTRY g_items[MAX_RREQ_ENTRIES] = {0};
-static size_t g_items_count = 0;
-static time_t g_last_rreq2_send_time = 0;
+// accumulate RREQ entries
+static uint32_t g_rreq_entries_last_prev_sender = 0;
+static RREQ_ENTRY g_rreq_entries[MAX_RREQ_ENTRIES] = {0};
+static size_t g_rreq_entries_count = 0;
 
 // forward declaration
 static void send_ucast_l2_wrapper(const Address *next_hop_addr, const void* data, size_t data_len);
-
-// called once per second
-static void traffic_periodic()
-{
-    static time_t g_ifstate_last_degraded = 0;
-    const time_t time_now = gstate.time_now;
-
-    if ((time_now - g_ifstate_last_degraded) > TRAFFIC_DEGRADE_SECONDS) {
-        InterfaceState *cur;
-        InterfaceState *tmp;
-        HASH_ITER(hh, g_ifstates, cur, tmp) {
-            cur->received_broadcast_packets /= 2;
-            cur->received_unicast_packets /= 2;
-            cur->send_broadcast_packets /= 2;
-            cur->send_unicast_packets /= 2;
-        }
-
-        g_ifstate_last_degraded = time_now;
-    }
-}
 
 static InterfaceState *ifstate_find(const uint32_t ifindex)
 {
@@ -220,6 +208,12 @@ static InterfaceState *ifstate_get(const uint32_t ifindex)
     return ifstate ? ifstate : ifstate_create(ifindex);
 }
 
+static InterfaceState *ifstate_get_by_address(const Address *address)
+{
+    uint32_t ifindex = address_ifindex(address);
+    return ifstate_get(ifindex);
+}
+
 static Neighbor *neighbors_find(const Address *addr)
 {
     Neighbor *neighbor = NULL;
@@ -240,17 +234,27 @@ static Neighbor *neighbors_get(const Address *addr)
     return neighbor;
 }
 
-static void neighbors_recv_packet(const Address *addr)
+// received packet by neighbor
+static void neighbors_recv_packet(const Address *addr, uint8_t type)
 {
     Neighbor *neighbor = neighbors_get(addr);
     neighbor->time_last_recv = gstate.time_now;
+    if (type == TYPE_DATA || type == TYPE_PONG) {
+        // TODO: move to handle_PONG
+        neighbor->time_recv_DATA_OR_PONG = gstate.time_now;
+    }
     neighbor->pinged = 0;
 }
 
-static void neighbors_send_packet(const Address *addr)
+// send packet to neighbor
+static void neighbors_send_packet(const Address *addr, uint8_t type)
 {
     Neighbor *neighbor = neighbors_get(addr);
     neighbor->time_last_send = gstate.time_now;
+    if (type == TYPE_DATA) {
+        // TODO: move to handle_DATA
+        neighbor->time_send_DATA = gstate.time_now;
+    }
 }
 
 static void nodes_remove_by_addr(const Address *addr)
@@ -279,24 +283,29 @@ static void nodes_remove_by_addr(const Address *addr)
 static void neighbors_periodic()
 {
     /*
-    * Ping neighbors if we have send a packet to them and have not received a packet back.
-    * Timeout neihgbor 
+    * Make sure neighbors are still there:
+    * 1. directly after a DATA packet is send to them and no DATA reply was seen
+    * 2. after extended periods (check with exponential backoff)
     */
     Neighbor *neighbor;
     Neighbor *tmp;
     HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-        if (neighbor->time_last_send >= (1 + neighbor->time_last_recv)) { // maybe allow 2 sec difference
+        if (
+            ((neighbor->time_last_recv - neighbor->time_created) <= (gstate.time_now - neighbor->time_last_recv))
+            ||
+            ((neighbor->time_send_DATA + 1000) < gstate.time_now && neighbor->time_send_DATA >= neighbor->time_last_recv /*time_recv_DATA_OR_PONG*/)) {
+            // we have send a DATA packet and have not seen a DATA back or PONG back => send PING
             if (neighbor->pinged > 2) {
-                log_debug("remove neighbor");
+                log_debug("neighbors_periodic() remove neighbor");
                 nodes_remove_by_addr(&neighbor->addr);
                 HASH_DEL(g_neighbors, neighbor);
                 free(neighbor);
             } else {
-                // check if neighbor is still there
+                // A response PONG will update the entry in g_neighbors and g_nodes.
                 PING ping = {
                     .type = TYPE_PING,
                 };
-                log_debug("ping neighbor");
+                log_debug("neighbors_periodic() ping neighbor");
                 send_ucast_l2_wrapper(&neighbor->addr, &ping, sizeof(ping));
                 neighbor->pinged += 1;
             }
@@ -304,44 +313,29 @@ static void neighbors_periodic()
     }
 }
 
-static void count_broadcast_traffic(InterfaceState *ifstate, uint32_t send_bytes, uint32_t received_bytes)
+static void record_traffic(Traffic *traffic, uint32_t out_bytes, uint32_t in_bytes)
 {
-    // send bytes
-    if (send_bytes > 0) {
-        const uint32_t n = 1 + send_bytes / 512;
-        ifstate->send_broadcast_packets += n;
-        ifstate->time_broadcast_send = gstate.time_now;
+    size_t idx = (gstate.time_now / 1000) % TRAFFIC_DURATION_SECONDS;
+    uint32_t since = (gstate.time_now - traffic->updated_time) / 1000;
+    size_t n = MIN(since, TRAFFIC_DURATION_SECONDS);
+
+    for (size_t i = 0; i < n; ++i) {
+        size_t j = (TRAFFIC_DURATION_SECONDS + idx - i - 1) % TRAFFIC_DURATION_SECONDS;
+        traffic->out_bytes[j] = 0;
+        traffic->in_bytes[j] = 0;
     }
 
-    // received bytes
-    if (received_bytes > 0) {
-        const uint32_t n = 1 + received_bytes / 512;
-        ifstate->received_broadcast_packets += n;
-    }
-}
-
-static void count_unicast_traffic(InterfaceState *ifstate, uint32_t send_bytes, uint32_t received_bytes)
-{
-    // send bytes
-    if (send_bytes > 0) {
-        const uint32_t n = 1 + send_bytes / 512;
-        ifstate->send_unicast_packets += n;
-    }
-
-    // received bytes
-    if (received_bytes > 0) {
-        const uint32_t n = 1 + received_bytes / 512;
-        ifstate->received_unicast_packets += n;
-    }
+    traffic->updated_time = gstate.time_now;
+    traffic->out_bytes[idx] += in_bytes;
+    traffic->in_bytes[idx] += out_bytes;
 }
 
 static bool get_is_needed(const InterfaceState *ifstate)
 {
-    time_t now = gstate.time_now;
-    time_t t1 = ifstate->send_broadcast_time;
-    time_t t2 = ifstate->recv_own_broadcast_time; // must have been 
-    time_t t3 = ifstate->recv_foreign_broadcast_time;
-    //time_t t4 = ifstate->neighbor_change_time;
+    uint64_t now = gstate.time_now;
+    uint64_t t1 = ifstate->send_broadcast_time;
+    uint64_t t2 = ifstate->recv_own_broadcast_time; // must have been 
+    uint64_t t3 = ifstate->recv_foreign_broadcast_time;
 
     bool ret = true;
     int d = 0;
@@ -394,22 +388,20 @@ static void send_RREQ(const RREQ* rreq)
     HASH_ITER(hh, g_ifstates, ifstate, tmp) {
         bool is_needed = get_is_needed(ifstate);
         if (is_needed) {
-            log_debug("RREQ[%s]: is_needed: %s => send", str_ifindex(ifstate->ifindex), str_bool(is_needed));
+            log_debug("RREQ: is_needed: %s => send", str_bool(is_needed));
 
             ifstate->send_broadcast_time = gstate.time_now;
 
             size_t size = get_RREQ_size(rreq);
             send_bcast_l2(ifstate->ifindex, rreq, size);
-            count_broadcast_traffic(ifstate, size, 0);
+            record_traffic(&ifstate->broadcast_traffic, size, 0);
 
             // for statistics only
             g_broadcast_send_counter += 1;
         } else {
-            log_debug("RREQ[%s]: is not needed => drop", str_ifindex(ifstate->ifindex));
+            log_debug("RREQ: is not needed => drop");
         }
     }
-
-    g_last_rreq2_send_time = gstate.time_now;
 }
 
 // send and count outgoing unicast traffic
@@ -417,11 +409,10 @@ static void send_ucast_l2_wrapper(const Address *next_hop_addr, const void* data
 {
     send_ucast_l2(next_hop_addr, data, data_len);
 
-    uint32_t ifindex = address_ifindex(next_hop_addr);
-    InterfaceState *ifstate = ifstate_get(ifindex);
-    count_unicast_traffic(ifstate, data_len, 0);
+    InterfaceState *ifstate = ifstate_get_by_address(next_hop_addr);
+    record_traffic(&ifstate->unicast_traffic, data_len, 0);
 
-    neighbors_send_packet(next_hop_addr);
+    neighbors_send_packet(next_hop_addr, ((const uint8_t*)data)[0]);
 }
 
 static Node *next_node_by_id(uint32_t id)
@@ -500,36 +491,14 @@ static void nodes_update(uint32_t id, const Address *addr, uint16_t hop_count, u
     hop->time_updated = gstate.time_now;
 }
 
-/*
-static void delete_hop(Node* node, Hop* hop)
-{
-    HASH_DEL(node->hops, hop);
-    if (node->hops == NULL) {
-        log_debug("remove node 0x%08x", node->id);
-        HASH_DEL(g_nodes, node);
-        free(node);
-    }
-}*/
-
 static bool nodes_is_old(Node *node, Hop* hop)
 {
     const uint32_t age1 = hop->time_updated - hop->time_created;
     const uint32_t age2 = gstate.time_now - hop->time_updated;
-    if (age2 > HOP_TIMEOUT_MIN_SECONDS
-        && ((age2 > HOP_TIMEOUT_MAX_SECONDS) || (age1 < age2))) {
+    if (age2 > (1000 * HOP_TIMEOUT_MIN_SECONDS)
+        && ((age2 > (1000 * HOP_TIMEOUT_MAX_SECONDS)) || (age1 < age2))) {
         log_debug("timeout node 0x%08x, hop %s (age1: %s, age2: %s)",
             node->id, str_addr(&hop->next_hop_addr), str_time(age1), str_time(age2));
-
-        // TODO: remove? We now have g_neighbors
-        if (hop->hop_count == 1) {
-            //is_neighbor = true;
-            uint32_t ifindex = address_ifindex(&hop->next_hop_addr);
-            InterfaceState *ifstate = ifstate_find(ifindex);
-            if (ifstate) {
-                ifstate->neighbor_change_time = gstate.time_now;
-            }
-        }
-
         return true;
     } else {
         return false;
@@ -636,7 +605,7 @@ static void periodic_handler()
 {
     neighbors_periodic();
     nodes_periodic();
-    traffic_periodic();
+    //traffic_periodic();
     send_rreq2_periodic();
 }
 
@@ -673,94 +642,123 @@ static void send_cached_packet(uint32_t dst_id)
     }
 }
 
+//TODO:
+// * tie tokens per second to traffic
+// * use token buckets per interface
 static void send_rreq2_periodic()
 {
-    /*
-    TODO: speed up
-    * avoid broadcasts in the first place
-    * better timing, token bucket
-    */
-    // called once second
-    if (g_items_count > 0 && (gstate.time_now - g_last_rreq2_send_time) > 0) {
+#define MAX_TOKENS 2
+#define ADD_TOKENS_PER_SECOND 2
+
+    static uint32_t send_tokens = MAX_TOKENS;
+    static uint64_t prev_call = 0;
+
+    uint32_t add_tokens = (ADD_TOKENS_PER_SECOND * (gstate.time_now - prev_call)) / 1024;
+    if (add_tokens > 0) {
+        send_tokens = MIN(send_tokens + add_tokens, MAX_TOKENS);
+        prev_call = gstate.time_now;
+    }
+
+    if (send_tokens > 0 && g_rreq_entries_count > 0) {
+        send_tokens -= 1;
+
         // re-send immediately
         RREQ rreq2 = {
             .type = TYPE_RREQ,
             .sender = gstate.own_id,
-            .prev_sender = g_items_last_prev_sender,
-            .entries_count = g_items_count,
+            .prev_sender = g_rreq_entries_last_prev_sender,
+            .entries_count = g_rreq_entries_count,
         };
-        RREQ_ENTRY *e = &rreq2.entries[0];
 
-        for (size_t i = 0; i < g_items_count; ++i) {
-            e[i] = g_items[i];
-            e[i].hop_count += 1;
+        // add entries
+        for (size_t i = 0; i < g_rreq_entries_count; ++i) {
+            rreq2.entries[i] = g_rreq_entries[i];
+            rreq2.entries[i].hop_count += 1;
         }
 
         send_RREQ(&rreq2);
 
-        g_items_last_prev_sender = 0;
-        g_items_count = 0;
+        g_rreq_entries_last_prev_sender = 0;
+        g_rreq_entries_count = 0;
     }
 }
 
 static void store_RREQ_ENTRY(uint32_t last_sender, const RREQ_ENTRY *e1)
 {
-    // TOOD: give own requests a higher prio?
+    /*
+      Add entry for next RREQ that we can send.
+      Priorize lower hop counts.
+    */
 
     // check for duplicate entry
-    for (size_t i = 0; i < g_items_count; ++i) {
-        const RREQ_ENTRY *e2 = &g_items[i];
+    for (size_t i = 0; i < g_rreq_entries_count; ++i) {
+        const RREQ_ENTRY *e2 = &g_rreq_entries[i];
         if (e1->src_id == e2->src_id && e1->dst_id == e2->dst_id) {
-            g_items_last_prev_sender = last_sender;
-            g_items[i] = *e1;
+            g_rreq_entries_last_prev_sender = last_sender;
+            g_rreq_entries[i] = *e1;
             log_debug("store_RREQ_ENTRY() => queued");
             return;
         }
     }
 
-    if (g_items_count < ARRAY_SIZE(g_items)) {
-        // add entry
-        g_items_last_prev_sender = last_sender;
-        g_items[g_items_count] = *e1;
-        g_items_count += 1;
-    //} else if (g_items_count == ARRAY_SIZE(g_items)) {
-        // drop, or replace if this increases the diversity
-        log_debug("store_RREQ_ENTRY() => added");
+    if (g_rreq_entries_count == ARRAY_SIZE(g_rreq_entries)) {
+        // no entries left => search for lower prio entry.
+        // Drop entry with higher or equal hop count.
+        // Start search with older packets.
+        uint32_t found_hops = e1->hop_count;
+        size_t found_i = ARRAY_SIZE(g_rreq_entries);
+        for (size_t i = 0; i < g_rreq_entries_count; ++i) {
+            uint32_t hops = g_rreq_entries[i].hop_count;
+            if (hops >= found_hops) {
+                found_hops = hops;
+                found_i = i;
+            }
+        }
+        if (found_i < ARRAY_SIZE(g_rreq_entries)) {
+            g_rreq_entries_last_prev_sender = last_sender;
+            g_rreq_entries[found_i] = *e1;
+            log_debug("store_RREQ_ENTRY() replace higher hop count => drop");
+        } else {
+            log_debug("store_RREQ_ENTRY() no lower hop counts => drop");
+        }
     } else {
-        // drop
-        log_debug("store_RREQ_ENTRY() => drop");
+        // add entry
+        g_rreq_entries_last_prev_sender = last_sender;
+        g_rreq_entries[g_rreq_entries_count] = *e1;
+        g_rreq_entries_count += 1;
+        log_debug("store_RREQ_ENTRY() => added");
     }
 }
 
-static void handle_RREQ(InterfaceState *ifstate, const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
+static void handle_RREQ(const Address *rcv, const Address *src, const Address *dst, RREQ *p, size_t length)
 {
     // we expect broadcasts or packets for us
     if (!(address_is_broadcast(dst) || address_equal(rcv, dst))) {
-        log_trace("RREQ[%s]: unexpected destination (%s) => drop", str_ifindex(ifstate->ifindex), str_addr(dst));
+        log_trace("RREQ: unexpected destination (%s) => drop", str_addr(dst));
         return;
     }
 
     if (length != get_RREQ_size(p)) {
-        log_debug("RREQ[%s]: invalid packet size => drop", str_ifindex(ifstate->ifindex));
+        log_debug("RREQ: invalid packet size => drop");
         return;
     }
 
     if (p->prev_sender == gstate.own_id) {
+        InterfaceState *ifstate = ifstate_get_by_address(src);
         ifstate->recv_own_broadcast_time = gstate.time_now;
-        log_debug("RREQ[%s]: own echo => drop", str_ifindex(ifstate->ifindex));
+        log_debug("RREQ: own echo => drop");
         return;
     }
 
-    log_debug("RREQ[%s]: got packet entries_count: %u sender: 0x%08x, prev_sender: 0x%08x",
-        str_ifindex(ifstate->ifindex), (unsigned) p->entries_count, p->sender, p->prev_sender);
+    log_debug("RREQ: got packet entries_count: %u sender: 0x%08x, prev_sender: 0x%08x",
+        (unsigned) p->entries_count, p->sender, p->prev_sender);
 
     // check if sequence number is old
     for (size_t i = 0; i < p->entries_count; ++i) {
         const RREQ_ENTRY *e = &p->entries[i];
 
         if (packet_is_duplicate(e->src_id, e->seq_num)) {
-            log_debug("RREQ_ENTRY[%s]: old entry (src_id: 0x%08x / seq_num: %zu) => drop",
-                str_ifindex(ifstate->ifindex), e->src_id, (size_t) e->seq_num);
+            log_debug("RREQ_ENTRY: old entry (src_id: 0x%08x / seq_num: %zu) => drop", e->src_id, (size_t) e->seq_num);
             continue;
         }
 
@@ -769,7 +767,7 @@ static void handle_RREQ(InterfaceState *ifstate, const Address *rcv, const Addre
 
         // we are the destination
         if (e->dst_id == gstate.own_id) {
-            log_debug("RREQ_ENTRY[%s]: destination reached => send RREP", str_ifindex(ifstate->ifindex));
+            log_debug("RREQ_ENTRY: destination reached => send RREP");
             RREP rrep = {
                 .type = TYPE_RREP,
                 .hop_count = 0,
@@ -785,7 +783,7 @@ static void handle_RREQ(InterfaceState *ifstate, const Address *rcv, const Addre
             Node *node = next_node_by_id(e->dst_id);
             Hop *hop = next_hop_by_node(node);
             if (node && hop && (1UL + e->hop_count + hop->hop_count) <= UINT16_MAX) {
-                log_debug("RREQ_ENTRY[%s]: destination known => send RREP2", str_ifindex(ifstate->ifindex));
+                log_debug("RREQ_ENTRY: destination known => send RREP2");
                 uint8_t age = MIN(gstate.time_now - hop->time_updated, UINT8_MAX);
                 RREP2 rrep2 = {
                     .type = TYPE_RREP2,
@@ -998,7 +996,7 @@ static void handle_PONG(const Address *rcv, const Address *src, const Address *d
         return;
     }
 
-    log_debug("PONG: got packet from %s => send pong", str_addr(src));
+    log_debug("PONG: got packet from %s => ignore", str_addr(src));
 }
 
 static void handle_RERR(const Address *rcv, const Address *src, const Address *dst, RERR *p, size_t length)
@@ -1045,17 +1043,21 @@ static void handle_RERR(const Address *rcv, const Address *src, const Address *d
         // record the node that is sending us the report
         nodes_update(p->src_id, src, p->hop_count, p->seq_num, 0);
 
-        // forward
-        Node *node = next_node_by_id(p->dst_id);
-        hop = next_hop_by_node(node);
-        if (node && hop) {
-            log_debug("RERR: send to next hop %s => forward", str_addr(&hop->next_hop_addr));
-            // forward
-            p->hop_count += 1;
-
-            send_ucast_l2_wrapper(&hop->next_hop_addr, p, length);
+        if (p->dst_id == gstate.own_id) {
+            log_debug("RERR: destiantion reached => drop");
         } else {
-            log_debug("RERR: no next hop found => drop");
+            // forward
+            Node *node = next_node_by_id(p->dst_id);
+            hop = next_hop_by_node(node);
+            if (node && hop) {
+                log_debug("RERR: send to next hop %s => forward", str_addr(&hop->next_hop_addr));
+                // forward
+                p->hop_count += 1;
+
+                send_ucast_l2_wrapper(&hop->next_hop_addr, p, length);
+            } else {
+                log_debug("RERR: no next hop found => drop");
+            }
         }
     } else {
         log_debug("RERR: unknown unreachable node => ignore");
@@ -1119,7 +1121,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
 
     if (is_destination) {
         // packet is for us
-        neighbors_recv_packet(src);
+        neighbors_recv_packet(src, packet[0]);
     }
 
     if (!is_broadcast && !is_destination) {
@@ -1128,12 +1130,12 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 
     // count incoming traffic
-    uint32_t ifindex = address_ifindex(src);
-    InterfaceState *ifstate = ifstate_get(ifindex);
     if (is_broadcast) {
-        count_broadcast_traffic(ifstate, 0, packet_length);
+        InterfaceState *ifstate = ifstate_get_by_address(src);
+        record_traffic(&ifstate->broadcast_traffic, 0, packet_length);
     } else {
-        count_unicast_traffic(ifstate, 0, packet_length);
+        InterfaceState *ifstate = ifstate_get_by_address(src);
+        record_traffic(&ifstate->unicast_traffic, 0, packet_length);
     }
 
     switch (packet[0]) {
@@ -1141,7 +1143,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
         handle_DATA(rcv, src, dst, (DATA*) packet, packet_length);
         break;
     case TYPE_RREQ:
-        handle_RREQ(ifstate, rcv, src, dst, (RREQ*) packet, packet_length);
+        handle_RREQ(rcv, src, dst, (RREQ*) packet, packet_length);
         break;
     case TYPE_RREP:
         handle_RREP(rcv, src, dst, (RREP*) packet, packet_length);
@@ -1169,9 +1171,9 @@ static bool console_handler(FILE* fp, const char *argv[])
         fprintf(fp, "r                       print routing table\n");
     } else if (match(argv, "i")) {
         fprintf(fp, "broadcasts:      %zu (send)/ %zu (dropped)\n", (size_t) g_broadcast_send_counter, (size_t) g_broadcast_dropped_counter);
-        fprintf(fp, "HOP_TIMEOUT_MIN: %s\n", str_time(HOP_TIMEOUT_MIN_SECONDS));
-        fprintf(fp, "HOP_TIMEOUT_MAX: %s\n", str_time(HOP_TIMEOUT_MAX_SECONDS));
-        fprintf(fp, "TRAFFIC_DEGRADE:  %s\n", str_time(TRAFFIC_DEGRADE_SECONDS));
+        fprintf(fp, "HOP_TIMEOUT_MIN: %s\n", str_time(1000 * HOP_TIMEOUT_MIN_SECONDS));
+        fprintf(fp, "HOP_TIMEOUT_MAX: %s\n", str_time(1000 * HOP_TIMEOUT_MAX_SECONDS));
+        fprintf(fp, "TRAFFIC_DURATION_SECONDS:  %s\n", str_time(1000 * TRAFFIC_DURATION_SECONDS));
     } else if (match(argv, "r")) {
         Node *node;
         Node *ntmp;
@@ -1195,7 +1197,7 @@ static bool console_handler(FILE* fp, const char *argv[])
                     (size_t) hop->hop_count,
                     (neighbor ? neighbor->id : 0),
                     str_addr(&hop->next_hop_addr),
-                    str_ago(hop->time_updated)
+                    str_since(hop->time_updated)
                 );
             }
 

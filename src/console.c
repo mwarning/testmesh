@@ -171,7 +171,7 @@ static int console_exec(int clientsock, FILE *fp, char *line)
         }
         fprintf(fp, "process id:      %u\n", (unsigned) getpid());
         fprintf(fp, "log level:       %u of %u\n", gstate.log_level, MAX_LOG_LEVEL);
-        fprintf(fp, "uptime:          %s\n", str_ago(gstate.time_started));
+        fprintf(fp, "uptime:          %s\n", str_since(gstate.time_started));
         fprintf(fp, "find interfaces: %s\n", str_find_interfaces(gstate.find_interfaces));
         if (gstate.tun_name) {
             fprintf(fp, "tun device:      %s\n", gstate.tun_name);

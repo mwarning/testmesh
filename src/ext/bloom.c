@@ -46,7 +46,7 @@ uint16_t bloom_ones(const uint8_t *bloom)
     return ones;
 }
 
-uint8_t bloom_test(const uint8_t *bloom, uint32_t id)
+bool bloom_test(const uint8_t *bloom, uint32_t id)
 {
     uint8_t bloom_id[BLOOM_M]; 
     bloom_init(&bloom_id[0], id);
@@ -110,7 +110,7 @@ void bloom_delete(uint8_t *bloom, uint32_t id)
     }
 }
 
-uint16_t bloom_similar(uint8_t *bloom1, uint8_t *bloom2)
+uint16_t bloom_similar_ones(uint8_t *bloom1, uint8_t *bloom2)
 {
     uint8_t bloom[BLOOM_M] = {0};
 

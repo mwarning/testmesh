@@ -28,16 +28,16 @@ enum {
     TYPE_RREP
 };
 
-#define TIMEOUT_ROUTING_ENTRY 20
+#define TIMEOUT_ROUTING_ENTRY_SEC 20
 
 typedef struct RoutingEntry_ {
     Address next_hop_addr;
     uint16_t hop_count;
-    time_t first_updated; // == created
-    time_t last_updated;
+    uint64_t first_updated; // == created
+    uint64_t last_updated;
     uint8_t bloom[BLOOM_M];
-    time_t bloom_first_updated;
-    time_t bloom_last_updated;
+    uint64_t bloom_first_updated;
+    uint64_t bloom_last_updated;
     struct RoutingEntry_ *next;
 } RoutingEntry;
 
@@ -85,7 +85,7 @@ static uint16_t g_sequence_number = 0;
 // {<destiantion id> : [<next-hop-neighbor>]}
 static RoutingEntries *g_routing_table = NULL;
 //static uint8_t full_flood = 1;
-//static time_t full_flood_time = 0;
+//static uint64_t full_flood_time = 0;
 static uint32_t broadcast_capacity = 1;
 
 static size_t get_data_size(DATA *p)
@@ -107,7 +107,7 @@ static void routing_entry_timeout(RoutingEntries *e)
     RoutingEntry *cur;
 
     LL_FOREACH_SAFE(e->entries, cur, tmp) {
-        if ((cur->last_updated + TIMEOUT_ROUTING_ENTRY) < gstate.time_now) {
+        if ((cur->last_updated + TIMEOUT_ROUTING_ENTRY_SEC * 1000) < gstate.time_now) {
             log_debug("timeout routing entry for id 0x%08x / %s", e->dst_id, str_addr(&cur->next_hop_addr));
             LL_DELETE(e->entries, cur);
             free(cur);
@@ -553,7 +553,7 @@ static bool console_handler(FILE* fp, const char *argv[])
     if (match(argv, "h")) {
         fprintf(fp, "r                       print routing table\n");
     } else if (match(argv, "i")) {
-        fprintf(fp, "routing entry timeout: %us\n", TIMEOUT_ROUTING_ENTRY);
+        fprintf(fp, "routing entry timeout: %us\n", TIMEOUT_ROUTING_ENTRY_SEC);
     } else if (match(argv, "r")) {
         RoutingEntries *tmp;
         RoutingEntries *cur;
@@ -571,8 +571,8 @@ static bool console_handler(FILE* fp, const char *argv[])
                     str_addr(&e->next_hop_addr),
                     e->hop_count,
                     str_bloom(&e->bloom[0]),
-                    str_ago(e->bloom_first_updated),
-                    str_ago(e->bloom_last_updated)
+                    str_since(e->bloom_first_updated),
+                    str_since(e->bloom_last_updated)
                 );
                 e_count += 1;
             }

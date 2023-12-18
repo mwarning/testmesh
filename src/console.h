@@ -14,4 +14,7 @@ void console_log_message(const char *message);
 void console_server_handler(int rc, int serversock);
 void console_client_handler(int rc, int clientsock);
 
+bool console_setup(void);
+void console_free(void);
+
 #endif // _CONSOLE_H

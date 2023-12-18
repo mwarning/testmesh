@@ -98,7 +98,7 @@ typedef struct PathCacheEntry_ {
     uint32_t dst_id;
     Addr path[MAX_PATH_COUNT];
     uint32_t path_count;
-    time_t last_updated;
+    uint64_t last_updated;
     struct PathCacheEntry_ *next;
 } PathCacheEntry;
 
@@ -216,7 +216,7 @@ static void path_cache_timeout()
     PathCacheEntry *cur;
 
     LL_FOREACH_SAFE(g_path_cache, cur, tmp) {
-        if ((cur->last_updated + PATH_CACHE_TIMEOUT_SECONDS) < gstate.time_now) {
+        if ((cur->last_updated + PATH_CACHE_TIMEOUT_SECONDS * 1000) < gstate.time_now) {
             log_debug("timeout path cache entry for id 0x%08x", cur->dst_id);
             LL_DELETE(g_path_cache, cur);
             free(cur);
@@ -549,7 +549,7 @@ static bool console_handler(FILE *fp, const char *argv[])
         LL_FOREACH(g_path_cache, cur) {
             fprintf(fp, "0x%08x\t%s\t%u\t[%s]\n",
                 cur->dst_id,
-                str_ago(cur->last_updated),
+                str_since(cur->last_updated),
                 (unsigned) cur->path_count,
                 format_path(&cur->path[0], cur->path_count)
             );

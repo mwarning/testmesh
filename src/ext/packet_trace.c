@@ -16,7 +16,7 @@
 struct DebugData {
     uint32_t src;
     uint32_t dst;
-    time_t time;
+    uint64_t time;
     char *marker;
     char *message;
 };
@@ -93,6 +93,6 @@ static const char *str(const char *s)
 
 void packet_trace_json(FILE* fp)
 {
-    fprintf(fp, "{\"marker\": \"%s\", \"message\": \"%s\", \"time\": %zu}",
+    fprintf(fp, "{\"marker\": \"%s\", \"message\": \"%s\", \"time_ms\": %zu}",
         str(g_debug_data.marker), str(g_debug_data.message), (size_t) g_debug_data.time);
 }

@@ -17,7 +17,7 @@ typedef struct {
     uint64_t bytes_read;
     uint64_t packets_write;
     uint64_t packets_read;
-    time_t time_prev;
+    uint64_t time_prev;
 
     // for speed measurement
     uint64_t bytes_write_prev;
@@ -67,7 +67,7 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_read, uint64_t
 {
     Traffic *cur;
 
-    if ((g_traffic_total.time_prev + 1) < gstate.time_now) {
+    if ((g_traffic_total.time_prev + 1000) < gstate.time_now) {
         g_traffic_total.bytes_read_prev = g_traffic_total.bytes_read;
         g_traffic_total.bytes_write_prev = g_traffic_total.bytes_write;
     }
@@ -85,7 +85,7 @@ static void traffic_add_bytes(const Address *addr, uint64_t bytes_read, uint64_t
         g_traffic_count_all += 1;
     }
 
-    if ((cur->time_prev + 1) < gstate.time_now) {
+    if ((cur->time_prev + 1000) < gstate.time_now) {
         cur->bytes_read_prev = cur->bytes_read;
         cur->bytes_write_prev = cur->bytes_write;
         cur->time_prev = gstate.time_now;
@@ -233,7 +233,7 @@ void traffic_debug(FILE* out, const char *argv[])
                 str_bytes(speed_read(cur)),
                 str_bytes(cur->bytes_write),
                 str_bytes(speed_write(cur)),
-                str_ago(cur->time_prev));
+                str_since(cur->time_prev));
         }
 
         free(entries);

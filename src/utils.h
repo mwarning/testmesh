@@ -25,7 +25,6 @@
 // for convenience to store MAC addresses
 #define AF_MAC 99
 
-
 struct mac {
     uint8_t data[6];
 };
@@ -53,13 +52,13 @@ typedef struct {
 const option_t *find_option(const option_t options[], const char name[]);
 int setargs(const char **argv, int argv_size, char *args);
 
-// match e.g. ["get", "1234", "foo"] with a comma separated string "get,*,foo", the asterisk matches anything
 bool match(const char *argv[], const char *pattern);
 uint32_t adler32(const void *buf, size_t buflen); // a hash method
 void hex_dump(const char *desc, const void *buf, size_t buflen);
 ssize_t bytes_random(void *buffer, size_t size); // get random bytes
 uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen); // get unique id for IP connection pair
 bool is_newer_seqnum(uint16_t cur, uint16_t new);
+uint64_t time_now_millis();
 
 bool address_is_unicast(const Address *addr);
 bool address_is_multicast(const Address *addr);
@@ -72,10 +71,10 @@ const char *str_yesno(bool value);
 const char *str_bool(bool value);
 const char *str_mac(const struct mac *addr);
 const char *str_bytes(uint64_t bytes);
-const char *str_time(time_t seconds);
-const char *str_duration(time_t from, time_t to);
-const char *str_since(time_t time);
-const char *str_ago(time_t time);
+const char *str_time(uint64_t ms);
+const char *str_duration(uint64_t from, uint64_t to);
+const char *str_since(uint64_t time);
+const char *str_until(uint64_t time);
 const char *str_addr(const Address *addr);
 const char *str_addr6(const struct sockaddr_in6 *addr);
 
