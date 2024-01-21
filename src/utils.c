@@ -300,7 +300,7 @@ const char *str_bool(bool value)
     return value ? "true" : "false";
 }
 
-uint64_t time_now_millis()
+uint64_t time_millis_now()
 {
     struct timespec now;
     // exact by probably < 10ms
@@ -309,6 +309,20 @@ uint64_t time_now_millis()
         exit(1);
     }
     return now.tv_sec * 1000U + now.tv_nsec / 1000000U;
+}
+
+uint32_t time_millis_resolution()
+{
+	struct timespec res;
+	if (-1 == clock_getres(CLOCK_MONOTONIC_COARSE, &res)) {
+		log_error("clock_getres() %s", strerror(errno));
+        exit(1);
+	}
+    if (res.tv_sec >= 1) {
+        log_error("clock_getres() bad resolution");
+        exit(1);
+    }
+	return res.tv_sec * 1000U + res.tv_nsec / 1000000U;
 }
 
 static const char *_str_time(uint64_t ms, bool is_negative)
@@ -354,27 +368,27 @@ const char *str_time(uint64_t ms)
     return _str_time(ms, false);
 }
 
-const char *str_duration(uint64_t from, uint64_t to)
+const char *str_duration(uint64_t from_ms, uint64_t to_ms)
 {
-    if (from == 0 || to == 0) {
+    if (from_ms == 0 || to_ms == 0) {
         return "-";
     }
 
-    if (from <= to) {
-        return _str_time(to - from, false);
+    if (from_ms <= to_ms) {
+        return _str_time(to_ms - from_ms, false);
     } else {
-        return _str_time(from - to, true);
+        return _str_time(from_ms - to_ms, true);
     }
 }
 
-const char *str_since(uint64_t time_ms)
+const char *str_since(uint64_t ms)
 {
-    return str_duration(time_ms, gstate.time_now);
+    return str_duration(ms, gstate.time_now);
 }
 
-const char *str_until(uint64_t time_ms)
+const char *str_until(uint64_t ms)
 {
-    return str_duration(gstate.time_now, time_ms);
+    return str_duration(gstate.time_now, ms);
 }
 
 const char *str_bytes(uint64_t bytes)
@@ -612,6 +626,18 @@ static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str
     freeaddrinfo(info);
 
     return rc;
+}
+
+bool parse_hex(uint64_t *ret, const char *val, int bytes)
+{
+    size_t len = strlen(val);
+    if (len < 3 || len > (2 + 2 * bytes) || (len % 2) != 0 || val[0] != '0' || val[1] != 'x') {
+       return false;
+    }
+
+    char *end = NULL;
+    *ret = strtoul(val + 2, &end, 16);
+    return (val + len) == end;
 }
 
 /*

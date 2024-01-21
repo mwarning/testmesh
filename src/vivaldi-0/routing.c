@@ -347,7 +347,7 @@ static char *str_pos(char *buf, const float *pos)
     return buf;
 }
 
-static bool console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, int argc, const char *argv[])
 {
     char buf_pos[8 * DIM];
 

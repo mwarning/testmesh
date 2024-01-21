@@ -204,7 +204,7 @@ static int is_client(const char *cmd)
 
 int main(int argc, char *argv[])
 {
-    uint64_t now = time_now_millis();
+    uint64_t now = time_millis_now();
     gstate.time_started = now;
     gstate.time_now = now;
 
@@ -272,6 +272,9 @@ int main(int argc, char *argv[])
         strftime(time_buf, 26, "%Y:%m:%d %H:%M:%S", localtime(&rawtime));
         log_info("Started:        %s", time_buf);
     }
+
+    gstate.time_resolution = time_millis_resolution();
+    log_info("Resolution:     +/- %zums", (size_t) gstate.time_resolution);
 
     log_info("Log Level:      %s", log_level_str(gstate.log_level));
     log_info("IPv4/IPv6:      %s/%s", str_onoff(gstate.enable_ipv4), str_onoff(gstate.enable_ipv6));

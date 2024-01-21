@@ -51,8 +51,6 @@ void console_log_message(const char *message)
     }
 }
 
-//static int console_exec(int clientsock, FILE *fp, const char *line)
-
 enum {
     oHelp,
     oTraffic,
@@ -80,7 +78,7 @@ static const option_t g_options[] = {
     {NULL, 0, 0}
 };
 
-static int console_exec(int clientsock, FILE *fp, char *line)
+static bool console_exec(int clientsock, FILE *fp, char *line)
 {
     const char *argv[8];
     int argc = setargs(&argv[0], ARRAY_SIZE(argv), line);
@@ -88,24 +86,22 @@ static int console_exec(int clientsock, FILE *fp, char *line)
     if (argc == 0) {
         // Print usage
         fprintf(fp, "%s", g_usage);
-        return 0;
+        return false;
     }
 
     const option_t *option = find_option(g_options, argv[0]);
 
     if (option == NULL) {
         // call protocol specific console handler
-        if (gstate.protocol->console_handler) {
-            gstate.protocol->console_handler(fp, argv);
-        } else {
+        if (gstate.protocol->console_handler == NULL || !gstate.protocol->console_handler(fp, argc, argv)) {
             fprintf(fp, "Unknown command. Use 'h' for help.\n");
         }
-        return 0;
+        return false;
     }
 
     if (option->num_args != argc) {
         fprintf(fp, "Unexpected number of arguments.\n");
-        return 0;
+        return false;
     }
 
     switch (option->code) {
@@ -160,7 +156,7 @@ static int console_exec(int clientsock, FILE *fp, char *line)
         break;
     case oQuit:
         // close console
-        return 1;
+        return true;
     case oInfo:
         fprintf(fp, "protocol:        %s\n", gstate.protocol->name);
         fprintf(fp, "own id:          0x%08x\n", gstate.own_id);
@@ -180,7 +176,7 @@ static int console_exec(int clientsock, FILE *fp, char *line)
                 str_bytes(tun_write_bytes()), tun_write_count());
         }
         if (gstate.protocol->console_handler) {
-            gstate.protocol->console_handler(fp, argv);
+            gstate.protocol->console_handler(fp, argc, argv);
         }
         break;
     case oHelp:
@@ -188,14 +184,13 @@ static int console_exec(int clientsock, FILE *fp, char *line)
         break;
     }
 
-    return 0;
+    return false;
 }
 
 void console_client_handler(int rc, int clientsock)
 {
     char request[256];
-
-    int ret = 0;
+    bool quit = false;
     FILE *fp;
 
     if (rc <= 0) {
@@ -204,11 +199,11 @@ void console_client_handler(int rc, int clientsock)
 
     fp = fdopen(dup(clientsock), "w");
 
-    while (1) {
+    while (!quit) {
         ssize_t read_len = read(clientsock, request, sizeof(request));
         if (read_len == 0) {
             // connection was closed by the remote
-            ret = 1;
+            quit = true;
             break;
         }
 
@@ -218,7 +213,7 @@ void console_client_handler(int rc, int clientsock)
         }
 
         request[read_len] = '\0';
-        ret = console_exec(clientsock, fp, request);
+        quit = console_exec(clientsock, fp, request);
     }
 
     if (fp) {
@@ -226,7 +221,7 @@ void console_client_handler(int rc, int clientsock)
     }
 
     // close connection
-    if (ret == 1) {
+    if (quit) {
         if (g_console_socket == clientsock) {
             g_console_socket = -1;
         }

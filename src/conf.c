@@ -83,7 +83,7 @@ static const char *usage_str =
     "  --control,-c <path>             Control socket to connect to a daemon\n"
     "  --tun-name <ifname>             Network entry interface, use none to disable (default: tun0)\n"
     "  --tun-setup <on/off>            Auto configure entry interface with IP address (default: on)\n"
-    "  --ether-type <hex>              Ethernet type for layer-2 packets (default: 88B5)\n"
+    "  --ether-type <hex>              Ethernet type for layer-2 packets (default: 0x88B5)\n"
     "  --log-file,-lf <path>           Write log output to file\n"
     "  --log-level,-ll <level>         Logging level. From 0 to " STR(MAX_LOG_LEVEL) " or by name (default: 3)\n"
     "  --log-time,-lt                  Add timestamps to logging output\n"
@@ -151,18 +151,6 @@ static bool conf_load_file(const char path[])
 
     fclose(file);
     return true;
-}
-
-static int parse_hex(uint64_t *ret, const char *val, int bytes)
-{
-    size_t len = strlen(val);
-    if (len < 3 || len > (2 + 2 * bytes) || (len % 2) != 0 || val[0] != '0' || val[1] != 'x') {
-       return 1;
-    }
-
-    char *end = NULL;
-    *ret = strtoul(val + 2, &end, 16);
-    return (val + len) != end;
 }
 
 static bool conf_set(const char *opt, const char *val)
@@ -278,7 +266,7 @@ static bool conf_set(const char *opt, const char *val)
         gstate.control_socket_path = strdup(val);
         break;
     case oGatewayIdentifier:
-        if (parse_hex(&n, val, sizeof(gstate.gateway_id))) {
+        if (!parse_hex(&n, val, sizeof(gstate.gateway_id))) {
             log_error("Invalid hex value for %s: %s", opt, val);
             return false;
         }
@@ -290,7 +278,7 @@ static bool conf_set(const char *opt, const char *val)
         gstate.gateway_id_set = true;
         break;
     case oOwnIdentifier:
-        if (parse_hex(&n, val, sizeof(gstate.own_id))) {
+        if (!parse_hex(&n, val, sizeof(gstate.own_id))) {
             log_error("Invalid hex value for %s: %s", opt, val);
             return false;
         }
@@ -325,7 +313,7 @@ static bool conf_set(const char *opt, const char *val)
         }
         break;
     case oEtherType:
-        if (parse_hex(&n, val, sizeof(gstate.ether_type)) || n == 0) {
+        if (!parse_hex(&n, val, sizeof(gstate.ether_type)) || n == 0) {
             log_error("Invalid hex value for %s: %s", opt, val);
             return false;
         }

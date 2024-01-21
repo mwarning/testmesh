@@ -520,7 +520,7 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static bool console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, int argc, const char *argv[])
 {
     if (match(argv, "h")) {
         fprintf(fp,

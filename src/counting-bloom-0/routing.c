@@ -326,7 +326,7 @@ static char *str_bloom(char *buf, const uint8_t *bloom)
     return buf;
 }
 
-static bool console_handler(FILE *fp, const char *argv[])
+static bool console_handler(FILE *fp, int argc, const char *argv[])
 {
     char buf_bloom[BLOOM_M * 6];
 

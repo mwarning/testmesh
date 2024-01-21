@@ -1132,7 +1132,7 @@ static void periodic_handler()
     }
 }
 
-static bool console_handler(FILE* fp, const char* argv[])
+static bool console_handler(FILE* fp, int argc, const char* argv[])
 {
     if (match(argv, "h")) {
         fprintf(fp, "a                       custom action\n");
@@ -1206,7 +1206,7 @@ static bool console_handler(FILE* fp, const char* argv[])
             fprintf(fp, "\"next\": \"0x%08x\", \"next_d\": %zu",
                 g_dht_next, dht_distance(gstate.own_id, g_dht_next));
         } else {
-            fprintf(fp, "\"next\": null, \"next_d\": null,");
+            fprintf(fp, "\"next\": null, \"next_d\": null");
         }
         fprintf(fp, "},\n");
         fprintf(fp, "\"root\": {");
@@ -1224,10 +1224,10 @@ static bool console_handler(FILE* fp, const char* argv[])
         packet_trace_json(fp);
         fprintf(fp, "\n}");
     } else {
-        return true;
+        return false;
     }
 
-    return false;
+    return true;
 }
 
 static void init()

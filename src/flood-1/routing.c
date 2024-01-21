@@ -156,16 +156,16 @@ static void ext_handler_l2(const Address *rcv, const Address *src, const Address
     }
 }
 
-static bool console_handler(FILE* fp, const char *argv[])
+static bool console_handler(FILE* fp, int argc, const char *argv[])
 {
     if (match(argv, "i")) {
         fprintf(fp, "critical:   %s (%s ago)\n",
             str_yesno(g_is_critical), str_since(g_is_critical_time));
     } else {
-        return true;
+        return false;
     }
 
-    return false;
+    return true;
 }
 
 static void periodic_handler()

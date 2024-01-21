@@ -30,7 +30,7 @@ typedef struct {
     void (*ext_handler_l3)(const Address *src, uint8_t *packet, size_t length); // receive IP frames
     bool (*peer_handler)(const char *address, bool add);
     bool (*interface_handler)(uint32_t ifindex, const char *ifname, bool add);
-    bool (*console_handler)(FILE* file, const char *argv[]);
+    bool (*console_handler)(FILE* file, int argc, const char *argv[]);
     bool (*config_handler)(const char *option, const char *value);
 } Protocol;
 
@@ -61,8 +61,11 @@ struct state {
     // state
     bool is_running;
     bool disable_stdin;
+
+    // times in milliseconds
     uint64_t time_now;
     uint64_t time_started;
+    uint32_t time_resolution;
 #ifdef MULTICAST
     // local network discovery address
     struct sockaddr_in6 mcast_addr;
