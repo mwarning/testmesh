@@ -15,17 +15,17 @@
 #define BLOOM_BITTEST(bv, idx) (bv[(idx)/8U] & (1U << ((idx)%8U)))
 
 // set BLOOM_K bits based on id
-void bloom_init(uint8_t *bloom, uint64_t id);
-void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2);
-void bloom_add(uint8_t *bloom, uint32_t id);
-uint16_t bloom_ones(const uint8_t *bloom);
-bool bloom_test(const uint8_t *bloom, uint32_t id);
-void bloom_add(uint8_t *bloom, uint32_t id);
-void bloom_delete(uint8_t *bloom, uint32_t id);
+void bloom_init(void *bloom, uint64_t id);
+void bloom_merge(void *bloom1, const void *bloom2);
+void bloom_add(void *bloom, uint32_t id);
+uint16_t bloom_ones(const void *bloom);
+bool bloom_test(const void *bloom, uint32_t id);
+void bloom_add(void *bloom, uint32_t id);
+void bloom_delete(void *bloom, uint32_t id);
 
 // count of same ones
-uint16_t bloom_similar_ones(uint8_t *bloom1, uint8_t *bloom2);
+uint16_t bloom_similar_ones(void *bloom1, void *bloom2);
 
-char *str_bloom(const uint8_t *bloom);
+char *str_bloom(const void *bloom);
 
 #endif // _BLOOM_H_
