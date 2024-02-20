@@ -262,7 +262,7 @@ void dsr_bloom_1_register()
 {
     static const Protocol p = {
         .name = "dsr-bloom-1",
-        .init = &init,
+        .init_handler = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
         .console_handler = &console_handler,

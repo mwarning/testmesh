@@ -60,6 +60,7 @@ ssize_t bytes_random(void *buffer, size_t size); // get random bytes
 uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen); // get unique id for IP connection pair
 bool is_newer_seqnum(uint16_t cur, uint16_t new);
 bool parse_hex(uint64_t *ret, const char *val, int bytes);
+char *bytes_to_base16(char dst[], size_t dstsize, const uint8_t src[], size_t srcsize);
 
 uint64_t time_millis_now();
 uint32_t time_millis_resolution();
@@ -70,6 +71,7 @@ bool address_is_broadcast(const Address *addr);
 bool address_equal(const Address *a, const Address *b);
 uint32_t address_ifindex(const Address *addr);
 
+const char *str_af(int af);
 const char *str_onoff(bool value);
 const char *str_yesno(bool value);
 const char *str_bool(bool value);
@@ -85,10 +87,13 @@ const char *str_addr6(const struct sockaddr_in6 *addr);
 const char *str_in4(const struct in_addr *addr);
 const char *str_in6(const struct in6_addr *addr);
 
-uint32_t addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, uint32_t subnet_len);
-bool addr_is_localhost(const struct sockaddr_storage *addr);
-bool addr_is_multicast(const struct sockaddr_storage *addr);
-bool addr_is_link_local(const struct sockaddr_storage *addr);
-int addr_parse(struct sockaddr_storage *addr, const char full_addr_str[], const char default_port[], uint32_t af);
+uint32_t addr_cmp_subnet(const struct sockaddr *addr1, const struct sockaddr *addr2, uint32_t subnet_len);
+bool addr_is_localhost(const struct sockaddr *addr);
+bool addr_is_multicast(const struct sockaddr *addr);
+bool addr_is_link_local(const struct sockaddr *addr);
+bool addr_parse(struct sockaddr *addr, const char full_addr_str[], const char default_port[], uint32_t af);
+uint16_t addr_port_get(const struct sockaddr *addr);
+bool addr_port_set(struct sockaddr *addr, uint16_t port);
+socklen_t addr_length(const struct sockaddr *addr);
 
 #endif // _UTILS_H_

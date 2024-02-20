@@ -127,7 +127,7 @@ static const Addr *address2addr(const Address *address)
             addr.type = ADDR_TYPE_IPV6;
             addr.port = ntohs(address->ip6.sin6_port);
             memcpy(&addr.addr.in6, &address->ip6.sin6_addr, 16);
-            if (addr_is_link_local((struct sockaddr_storage*) &address->ip6.sin6_addr)) {
+            if (addr_is_link_local((struct sockaddr*) &address->ip6.sin6_addr)) {
                 addr.ifindex = ntohs(address->ip6.sin6_scope_id);
             }
             return &addr;
@@ -157,7 +157,7 @@ static const Address *addr2address(const Addr *addr)
             address.family = AF_INET6;
             address.ip6.sin6_port = addr->port;
             memcpy(&address.ip6.sin6_addr, &addr->addr.in6, 16);
-            if (addr_is_link_local((struct sockaddr_storage*) &address.ip6)) {
+            if (addr_is_link_local((struct sockaddr*) &address.ip6)) {
                 address.ip6.sin6_scope_id = htons(addr->ifindex);
             }
             return &address;
@@ -580,7 +580,7 @@ void dsr_0_register()
 {
     static const Protocol p = {
         .name = "dsr-0",
-        .init = &init,
+        .init_handler = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
         .console_handler = &console_handler,

@@ -28,7 +28,7 @@
  */
 
 int g_client_sock = -1;
-int g_shutdown_after_reply = 0;
+bool g_shutdown_after_reply = false;
 
 void client_usage(const char *program_name)
 {

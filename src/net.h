@@ -21,4 +21,7 @@ void net_loop(void);
 // Close sockets
 void net_free(void);
 
+int net_socket(const char name[], const char ifname[], const int protocol, const int af);
+int net_bind(const char name[], const char addr[], const int port, const char ifname[], const int protocol);
+
 #endif // _NET_H

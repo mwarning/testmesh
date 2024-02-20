@@ -127,7 +127,7 @@ void flood_0_register()
 {
     static const Protocol p = {
         .name = "flood-0",
-        .init = &init,
+        .init_handler = &init,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
     };

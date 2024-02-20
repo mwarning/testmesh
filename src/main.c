@@ -24,6 +24,7 @@
 
 
 struct state gstate = {
+    .af = AF_UNSPEC,
     .protocol = NULL,
     .do_fork = 0,
     .time_now = 0,
@@ -274,7 +275,7 @@ int main(int argc, char *argv[])
     }
 
     gstate.time_resolution = time_millis_resolution();
-    log_info("Resolution:     +/- %zums", (size_t) gstate.time_resolution);
+    log_info("Time:           +/- %zums", (size_t) gstate.time_resolution);
 
     log_info("Log Level:      %s", log_level_str(gstate.log_level));
     log_info("IPv4/IPv6:      %s/%s", str_onoff(gstate.enable_ipv4), str_onoff(gstate.enable_ipv6));
@@ -329,8 +330,8 @@ int main(int argc, char *argv[])
         log_info("Ether-type:     0x%04x", gstate.ether_type);
     }
 
-    if (gstate.protocol->init) {
-        gstate.protocol->init();
+    if (gstate.protocol->init_handler) {
+        gstate.protocol->init_handler();
     }
 
     if (gstate.protocol->ext_handler_l3) {
@@ -378,8 +379,8 @@ int main(int argc, char *argv[])
 
     log_info("Shutting down...");
 
-    if (gstate.protocol->exit) {
-        gstate.protocol->exit();
+    if (gstate.protocol->exit_handler) {
+        gstate.protocol->exit_handler();
     }
 
     if (gstate.log_to_file) {

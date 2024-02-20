@@ -23,8 +23,8 @@
 
 typedef struct {
     const char *name;
-    void (*init)();
-    void (*exit)();
+    void (*init_handler)();
+    void (*exit_handler)();
     void (*tun_handler)(uint32_t dst_id, uint8_t *packet, size_t length); // receive IP frames from tun0
     void (*ext_handler_l2)(const Address *rvc, const Address *src, const Address *dst, uint8_t *packet, size_t length); // receive Ethernet frames
     void (*ext_handler_l3)(const Address *src, uint8_t *packet, size_t length); // receive IP frames
@@ -39,8 +39,9 @@ const Protocol *protocols_find(const char *protocol);
 void protocols_print(FILE *fd);
 
 struct state {
-    const Protocol *protocol;
+    int af;
 
+    const Protocol *protocol;
     // sockets
     int sock_help; // helper socket used to communicate with the kernel
     int sock_console; // unix socket

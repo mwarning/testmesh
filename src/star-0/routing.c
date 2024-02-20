@@ -617,8 +617,8 @@ void star_0_register()
 {
     static const Protocol p = {
         .name = "star-0",
-        .init = &init_handler,
-        .exit = &exit_handler,
+        .init_handler = &init_handler,
+        .exit_handler = &exit_handler,
         .tun_handler = &tun_handler,
         .ext_handler_l2 = &ext_handler_l2,
         .console_handler = &console_handler,

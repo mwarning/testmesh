@@ -142,3 +142,102 @@ void net_free(void)
 
 	g_count = 0;
 }
+
+int net_socket(const char name[], const char ifname[], const int protocol, const int af)
+{
+    const int opt_on = 1;
+    int sock = -1;
+
+    // Disable IPv6 or IPv4
+    if (gstate.af != AF_UNSPEC && gstate.af != af) {
+        goto fail;
+    }
+
+    if ((sock = socket(af, (protocol == IPPROTO_TCP) ? SOCK_STREAM : SOCK_DGRAM, protocol)) < 0) {
+        log_error("%s: Failed to create socket: %s", name, strerror(errno));
+        goto fail;
+    }
+
+    if (net_set_nonblocking(sock) < 0) {
+        log_error("%s: Failed to make socket nonblocking: %s", name, strerror(errno));
+        goto fail;
+    }
+
+#if defined(__APPLE__) || defined(__CYGWIN__) || defined(__FreeBSD__)
+    if (ifname) {
+        log_error("%s: Bind to device not supported on Windows and MacOSX.", name);
+        goto fail;
+    }
+#else
+    if (ifname && setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname))) {
+        log_error("%s: Unable to bind to device %s: %s", name, ifname, strerror(errno));
+        goto fail;
+    }
+#endif
+
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt_on, sizeof(opt_on)) < 0) {
+        log_error("%s: Unable to set SO_REUSEADDR for %s: %s", name, ifname, strerror(errno));
+        goto fail;
+    }
+
+    return sock;
+
+fail:
+    close(sock);
+
+    return -1;
+}
+
+int net_bind(const char name[], const char addr[], const int port, const char ifname[], const int protocol)
+{
+    const int opt_on = 1;
+    struct sockaddr_storage addr_storage;
+    struct sockaddr *address = (struct sockaddr *) &addr_storage;
+    int sock = -1;
+
+    if (!addr_parse(address, addr, "0", AF_UNSPEC)) {
+        log_error("%s: Failed to parse IP address '%s'", name, addr);
+        goto fail;
+    }
+
+    addr_port_set(address, port);
+
+    if ((sock = net_socket(name, ifname, protocol, address->sa_family)) < 0) {
+        goto fail;
+    }
+
+    if (address->sa_family == AF_INET6) {
+        if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &opt_on, sizeof(opt_on)) < 0) {
+            log_error("%s: Failed to set IPV6_V6ONLY for %s: %s",
+                name, str_addr((Address*)address), strerror(errno));
+            goto fail;
+        }
+    }
+
+    socklen_t addrlen = addr_length(address);
+    if (bind(sock, address, addrlen) < 0) {
+        log_error("%s: Failed to bind socket to %s: %s",
+            name, str_addr((Address*)address), strerror(errno)
+        );
+        goto fail;
+    }
+
+    if (protocol == IPPROTO_TCP && listen(sock, 5) < 0) {
+        log_error("%s: Failed to listen on %s: %s (%s)",
+            name, str_addr((Address*)address), strerror(errno)
+        );
+        goto fail;
+    }
+
+    if (ifname) {
+        log_info("%s: bind to %s, interface %s", name, str_addr((Address*)address), ifname);
+    } else {
+        log_info("%s: bind to %s", name, str_addr((Address*)address));
+    }
+
+    return sock;
+
+fail:
+    close(sock);
+    return -1;
+}

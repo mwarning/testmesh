@@ -19,6 +19,106 @@
 #include "utils.h"
 
 
+char *bytes_to_base16(char dst[], size_t dstsize, const uint8_t src[], size_t srcsize)
+{
+    static const char hexchars[16] = "0123456789abcdef";
+
+    // + 1 for the '\0'
+    if (dstsize != (2 * srcsize + 1)) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < srcsize; ++i) {
+        dst[2 * i] = hexchars[src[i] / 16];
+        dst[2 * i + 1] = hexchars[src[i] % 16];
+    }
+
+    dst[2 * srcsize] = '\0';
+
+    return dst;
+}
+
+bool addr_port_set(struct sockaddr *addr, uint16_t port)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        ((struct sockaddr_in *)addr)->sin_port = htons(port);
+        return true;
+    case AF_INET6:
+        ((struct sockaddr_in6 *)addr)->sin6_port = htons(port);
+        return true;
+    default:
+        return false;
+    }
+}
+
+uint16_t addr_port_get(const struct sockaddr *addr)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        return ntohs(((const struct sockaddr_in *)addr)->sin_port);
+    case AF_INET6:
+        return ntohs(((const struct sockaddr_in6 *)addr)->sin6_port);
+    default:
+        return 0;
+    }
+}
+
+socklen_t addr_length(const struct sockaddr *addr)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        return sizeof(struct sockaddr_in);
+    case AF_INET6:
+        return sizeof(struct sockaddr_in6);
+    default:
+        return 0;
+    }
+}
+
+const char *str_af(int af) {
+    switch (af) {
+    case AF_INET:
+        return "IPv4";
+    case AF_INET6:
+        return "IPv6";
+    case AF_UNSPEC:
+        return "IPv4+IPv6";
+    case AF_MAC:
+        return "MAC";
+    default:
+        return "<invalid>";
+    }
+}
+
+static uint32_t min3(uint32_t a, uint32_t b, uint32_t c)
+{
+    if (a <= b && a <= c) {
+        return a;
+    } else if (b <= a && b <= c) {
+        return b;
+    } else {
+        return c;
+    }
+}
+
+int levenshtein(const uint8_t *s1, size_t s1len, const uint8_t *s2, size_t s2len)
+{
+    uint32_t lastdiag, olddiag;
+    uint32_t column[s1len + 1];
+    for (size_t y = 1; y <= s1len; ++y)
+        column[y] = y;
+    for (size_t x = 1; x <= s2len; ++x) {
+        column[0] = x;
+        for (size_t y = 1, lastdiag = x - 1; y <= s1len; ++y) {
+            olddiag = column[y];
+            column[y] = min3(column[y] + 1, column[y - 1] + 1, lastdiag + (s1[y-1] == s2[x - 1] ? 0 : 1));
+            lastdiag = olddiag;
+        }
+    }
+    return column[s1len];
+}
+
 bool is_newer_seqnum(uint16_t cur, uint16_t new)
 {
     if (cur >= new) {
@@ -262,12 +362,12 @@ struct in6_ifreq {
     uint32_t ifindex;
 };
 
-static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr_storage *addr)
+static const char *str_addr_storage_buf(char *addrbuf, const struct sockaddr *addr)
 {
     char buf[INET6_ADDRSTRLEN];
     int port;
 
-    switch (addr->ss_family) {
+    switch (addr->sa_family) {
     case AF_INET6:
         port = ((struct sockaddr_in6 *)addr)->sin6_port;
         inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, buf, sizeof(buf));
@@ -438,7 +538,7 @@ const char *str_addr(const Address *addr)
     switch (addr->family) {
     case AF_INET6:
     case AF_INET:
-        return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
+        return str_addr_storage_buf(buf, (struct sockaddr*) addr);
     case AF_MAC: {
         const struct mac *a = &addr->mac.addr;
         snprintf(buf, INET6_ADDRSTRLEN + 8,
@@ -487,7 +587,7 @@ const char *str_addr6(const struct sockaddr_in6 *addr)
     static char straddr6buf[4][INET6_ADDRSTRLEN + 8];
     static size_t straddr6buf_i = 0;
     char *buf = straddr6buf[++straddr6buf_i % 4];
-    return str_addr_storage_buf(buf, (struct sockaddr_storage*) addr);
+    return str_addr_storage_buf(buf, (struct sockaddr*) addr);
 }
 
 const char *str_in4(const struct in_addr *addr)
@@ -521,16 +621,16 @@ static uint32_t common_bits(const void *p1, const void* p2, uint32_t bits_n)
     return bits_n;
 }
 
-uint32_t addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sockaddr_storage *addr2, uint32_t subnet_len)
+uint32_t addr_cmp_subnet(const struct sockaddr *addr1, const struct sockaddr *addr2, uint32_t subnet_len)
 {
     const void *p1;
     const void* p2;
 
-    if (addr1->ss_family != addr2->ss_family) {
+    if (addr1->sa_family != addr2->sa_family) {
         return 0;
     }
 
-    switch (addr1->ss_family) {
+    switch (addr1->sa_family) {
     case AF_INET6:
         p1 = &((const struct sockaddr_in6 *)addr1)->sin6_addr;
         p2 = &((const struct sockaddr_in6 *)addr2)->sin6_addr;
@@ -546,13 +646,13 @@ uint32_t addr_cmp_subnet(const struct sockaddr_storage *addr1, const struct sock
     return common_bits(p1, p2, subnet_len);
 }
 
-bool addr_is_localhost(const struct sockaddr_storage *addr)
+bool addr_is_localhost(const struct sockaddr *addr)
 {
     //return (memcmp(addr, &in6addr_loopback, 16) == 0);
     // 127.0.0.1
     const uint32_t inaddr_loopback = htonl(INADDR_LOOPBACK);
 
-    switch (addr->ss_family) {
+    switch (addr->sa_family) {
     case AF_INET:
         return (memcmp(&((struct sockaddr_in *)addr)->sin_addr, &inaddr_loopback, 4) == 0);
     case AF_INET6:
@@ -562,9 +662,9 @@ bool addr_is_localhost(const struct sockaddr_storage *addr)
     }
 }
 
-bool addr_is_multicast(const struct sockaddr_storage *addr)
+bool addr_is_multicast(const struct sockaddr *addr)
 {
-    switch (addr->ss_family) {
+    switch (addr->sa_family) {
     case AF_INET:
         return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr));
     case AF_INET6:
@@ -574,9 +674,9 @@ bool addr_is_multicast(const struct sockaddr_storage *addr)
     }
 }
 
-bool addr_is_link_local(const struct sockaddr_storage *addr)
+bool addr_is_link_local(const struct sockaddr *addr)
 {
-    switch (addr->ss_family) {
+    switch (addr->sa_family) {
     case AF_INET: {
         const struct in_addr *a = &((const struct sockaddr_in *) addr)->sin_addr;
         return addr_is_link_local_ipv4(a);
@@ -591,12 +691,12 @@ bool addr_is_link_local(const struct sockaddr_storage *addr)
     }
 }
 
-static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str[], const char port_str[], uint32_t af)
+static int addr_parse_internal(struct sockaddr *ret, const char addr_str[], const char port_str[], uint32_t af)
 {
     struct addrinfo hints;
     struct addrinfo *info = NULL;
     struct addrinfo *p = NULL;
-    int rc = EXIT_FAILURE;
+    bool rc = false;
 
     memset(&hints, '\0', sizeof(struct addrinfo));
     hints.ai_socktype = SOCK_STREAM;
@@ -604,20 +704,20 @@ static int addr_parse_internal(struct sockaddr_storage *ret, const char addr_str
     hints.ai_family = af;
 
     if (getaddrinfo(addr_str, port_str, &hints, &info) != 0) {
-        return EXIT_FAILURE;
+        return false;
     }
 
     p = info;
     while (p != NULL) {
         if ((af == AF_UNSPEC || af == AF_INET6) && p->ai_family == AF_INET6) {
             memcpy(ret, p->ai_addr, sizeof(struct sockaddr_in6));
-            rc = EXIT_SUCCESS;
+            rc = true;
             break;
         }
 
         if ((af == AF_UNSPEC || af == AF_INET) && p->ai_family == AF_INET) {
             memcpy(ret, p->ai_addr, sizeof(struct sockaddr_in));
-            rc = EXIT_SUCCESS;
+            rc = true;
             break;
         }
         p = p->ai_next;
@@ -651,7 +751,7 @@ bool parse_hex(uint64_t *ret, const char *val, int bytes)
 * "[<address>]"
 * "[<address>]:<port>"
 */
-int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], const char default_port[], uint32_t af)
+bool addr_parse(struct sockaddr *addr_ret, const char full_addr_str[], const char default_port[], uint32_t af)
 {
     char addr_buf[256];
     char *addr_beg;
@@ -663,7 +763,7 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
     size_t len = strlen(full_addr_str);
     if (len >= (sizeof(addr_buf) - 1)) {
         // address too long
-        return -1;
+        return false;
     } else {
         addr_beg = addr_buf;
     }
@@ -679,7 +779,7 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
 
         if (addr_tmp == NULL) {
             // broken format
-            return EXIT_FAILURE;
+            return false;
         }
 
         *addr_tmp = '\0';
@@ -691,7 +791,7 @@ int addr_parse(struct sockaddr_storage *addr_ret, const char full_addr_str[], co
             port_str = addr_tmp + 2;
         } else {
             // port expected
-            return EXIT_FAILURE;
+            return false;
         }
     } else if (last_colon && last_colon == strchr(addr_buf, ':')) {
         // <non-ipv6-addr>:<port>
