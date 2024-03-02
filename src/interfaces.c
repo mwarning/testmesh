@@ -265,6 +265,7 @@ static bool interface_add_internal(const char *ifname, bool is_dynamic)
     };
     strcpy(&ifa->ifname[0], ifname);
 
+    // might fail
     interface_setup(ifa);
 
     // prepend
@@ -321,10 +322,9 @@ static void init_macaddr(Address *dst, const void *mac_addr, int ifindex)
 static void read_internal_l2(int events, int fd)
 {
     // some offset to prepend a header before forwarding (as optimization)
+    // not used anywhere yet - maybe makes no sense
     #define PADDING 100
 
-    struct interface *ifa;
-    ssize_t readlen;
     uint8_t buffer[PADDING + ETH_FRAME_LEN];
     uint8_t *begin = &buffer[PADDING];
 
@@ -332,14 +332,14 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
-    readlen = read(fd, begin, ETH_FRAME_LEN);
+    ssize_t readlen = read(fd, begin, ETH_FRAME_LEN);
 
     if (readlen < 0 || readlen > ETH_FRAME_LEN) {
         log_warning("recv(): %zd %s", readlen, strerror(errno));
         return;
     }
 
-    ifa = get_interface_by_fd(fd);
+    struct interface *ifa = get_interface_by_fd(fd);
 
     if (!is_valid_ifa(ifa)) {
         log_error("recvfrom() on invalid interface %s", (ifa ? ifa->ifname : "???"));
@@ -746,29 +746,46 @@ static void periodic_interfaces_handler(int _events, int _fd)
     }
 }
 
-bool interfaces_debug(FILE *fd)
+void interfaces_debug_json(FILE *fd)
+{
+    struct interface *ifa;
+
+    fprintf(fd, "[");
+
+    ifa = g_interfaces;
+    while (ifa) {
+        fprintf(fd, "{\"name\": \"%s\", \"ifmac\": \"%s\", \"is_dynamic\": %s, \"state\": \"%s\"}",
+            ifa->ifname,
+            str_mac(&ifa->ifmac),
+            str_bool(ifa->is_dynamic),
+            is_valid_ifa(ifa) ? "up" : "down"
+        );
+        ifa = ifa->next;
+    }
+    fprintf(fd, "]");
+}
+
+void interfaces_debug(FILE *fd)
 {
     int count = 0;
     struct interface *ifa;
 
-    fprintf(fd, "name         status mac-address        dynamic ifsocket ifindex\n");
+    fprintf(fd, "name         address            dynamic ifsocket ifindex status\n");
 
     ifa = g_interfaces;
     while (ifa) {
-        fprintf(fd, "%-12s %-6s %-18s %-7s %-8d %-8u\n",
+        fprintf(fd, "%-12s %-18s %-7s %-8d %-8u %-6s\n",
             ifa->ifname,
-            is_valid_ifa(ifa) ? "up" : "down",
             str_mac(&ifa->ifmac),
             str_onoff(ifa->is_dynamic),
             ifa->ifsock_l2,
-            ifa->ifindex
+            ifa->ifindex,
+            is_valid_ifa(ifa) ? "up" : "down"
         );
         count += 1;
         ifa = ifa->next;
     }
     fprintf(fd, " %d interfaces\n", count);
-
-    return true;
 }
 
 bool interfaces_init()

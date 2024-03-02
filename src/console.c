@@ -135,14 +135,30 @@ static bool console_exec(int clientsock, FILE *fp, char *line)
         interfaces_debug(fp);
         break;
     case oLogging:
-        if (g_console_socket == -1) {
-            g_console_socket = clientsock;
-            fprintf(fp, "log to console enabled\n");
-        } else if (g_console_socket == clientsock) {
-            g_console_socket = -1;
-            fprintf(fp, "log to console disabled\n");
+        if (clientsock == STDIN_FILENO) {
+            // local terminal session
+            if (gstate.log_to_terminal) {
+                gstate.log_to_terminal = false;
+                fprintf(fp, "log to terminal disabled\n");
+            } else {
+                gstate.log_to_terminal = true;
+                fprintf(fp, "log to terminal enabled\n");
+            }
         } else {
-            fprintf(fp, "log goes to different remote console already\n");
+            // console session via socket (testmesh-ctl)
+            if (g_console_socket == clientsock || g_console_socket == -1) {
+                if (g_console_socket == clientsock) {
+                    g_console_socket = -1;
+                    gstate.log_to_socket = false;
+                    fprintf(fp, "log to console disabled\n");
+                } else {
+                    g_console_socket = clientsock;
+                    gstate.log_to_socket = true;
+                    fprintf(fp, "log to console enabled\n");
+                }
+            } else {
+                fprintf(fp, "log goes to different remote console already (only one is supported)\n");
+            }
         }
         break;
     case oLogLevel:
