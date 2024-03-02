@@ -37,7 +37,6 @@ static const char *g_usage =
     "interfaces              List all used interfaces.\n"
     "interface-add <ifname>  Add interface.\n"
     "interface-del <ifname>  Remove interface.\n"
-    "peer-add <address>      Add peer via IP address.\n"
     "l                       Enable/Disable log to console.\n"
     "ll <log-level>          Toggle log to this console / change verbosity.\n"
     "q                       Close this console.\n"
@@ -55,7 +54,6 @@ enum {
     oHelp,
     oTraffic,
     oQuit,
-    oPeer,
     oInterfaceAdd,
     oInterfaceDel,
     oInterfaces,
@@ -68,7 +66,6 @@ static const option_t g_options[] = {
     {"h", 1, oHelp},
     {"t", 1, oTraffic},
     {"q", 1, oQuit},
-    {"peer-add", 2, oPeer},
     {"interface-add", 2, oInterfaceAdd},
     {"interface-del", 2, oInterfaceDel},
     {"interfaces", 1, oInterfaces},
@@ -107,15 +104,6 @@ static bool console_exec(int clientsock, FILE *fp, char *line)
     switch (option->code) {
     case oTraffic:
         traffic_debug(fp, argv);
-        break;
-    case oPeer:
-        if (gstate.protocol->peer_handler) {
-            if (!gstate.protocol->peer_handler(argv[1], true)) {
-                fprintf(fp, "Failed to add peer.\n");
-            }
-        } else {
-            fprintf(fp, "Not supported by protocol %s\n", gstate.protocol->name);
-        }
         break;
     case oInterfaceAdd:
         if (interface_add(argv[1])) {

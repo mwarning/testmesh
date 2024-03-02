@@ -28,7 +28,6 @@ enum OPCODE {
     oLogTime,
     oEnableIPv4,
     oEnableIPv6,
-    oPeer,
     oHelp,
     oVersion
 };
@@ -45,7 +44,6 @@ static option_t g_options[] = {
     {"--log-file", 1, oLogFile},
     {"-lf", 1, oLogFile},
     {"--ether-type", 1, oEtherType},
-    {"--peer", 1, oPeer},
     {"--config", 1, oConfig},
     {"--tun-name", 1, oTunName},
     {"--tun-setup", 1, oTunSetup},
@@ -188,20 +186,6 @@ static bool conf_set(const char *opt, const char *val)
     case oVersion:
         printf(PROGRAM_NAME " " PROGRAM_VERSION "\n");
         exit(0);
-    case oPeer:
-        if (gstate.protocol == NULL) {
-            log_error("%s needs to be used after a protocol", option->name);
-            return false;
-        }
-        if (gstate.protocol->peer_handler == NULL) {
-            log_error("Protocol %s does not support peers", gstate.protocol->name);
-            return false;
-        }
-        if (!gstate.protocol->peer_handler(val, true)) {
-            log_error("Failed to add peer: %s", val);
-            return EXIT_SUCCESS;
-        }
-        break;
     case oProtocol:
         gstate.protocol = protocols_find(val);
         if (gstate.protocol == NULL) {
