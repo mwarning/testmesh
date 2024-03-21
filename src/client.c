@@ -37,6 +37,7 @@ void client_usage(const char *program_name)
         "  %s [-c <control-socket-path>] [<command-to-send>]\n"
         "\n"
         "-c <path>       Path to control socket (Default: "CLIENT_DEFAULT_SOCKET").\n"
+        "-k              Do not close terminal if command are passed on the command line.\n"
         "-h              Prints this help text.\n"
         "\n"
         "If no command is given as argument, then an interactive shell will be started.\n",
@@ -48,7 +49,7 @@ void client_usage(const char *program_name)
 void client_handler_out(int rc, int fd)
 {
     char request[1024];
-    int ret = 0;
+    bool ret = false;
 
     if (rc <= 0) {
         return;
@@ -59,7 +60,7 @@ void client_handler_out(int rc, int fd)
         //printf("read_len: %d\n", read_len);
         if (read_len == 0) {
             // connection was closed by the remote
-            ret = 1;
+            ret = true;
             break;
         }
 
@@ -72,8 +73,8 @@ void client_handler_out(int rc, int fd)
     }
 
     // close connection
-    if (ret == 1 || g_shutdown_after_reply) {
-        gstate.is_running = 0;
+    if (ret || g_shutdown_after_reply) {
+        gstate.is_running = false;
     }
 }
 
@@ -105,16 +106,20 @@ int client_main(int argc, char *argv[])
 {
     const char *socket_path = CLIENT_DEFAULT_SOCKET;
     char *command = NULL; // command from console
+    bool no_shutdown_after_reply = false;
 
     int option;
-    while ((option = getopt(argc, argv, "c:h")) > 0) {
+    while ((option = getopt(argc, argv, "c:hk")) > 0) {
         switch(option) {
             case 'c':
                 socket_path = optarg;
                 break;
             case 'h':
                 client_usage(argv[0]);
-                return 0;
+                return EXIT_SUCCESS;
+            case 'k':
+                no_shutdown_after_reply = true;
+                break;
             default:
                 log_error("Unknown option %c", option);
                 client_usage(argv[0]);
@@ -158,13 +163,25 @@ int client_main(int argc, char *argv[])
     net_add_handler(g_client_sock, &client_handler_out);
 
     if (command) {
+        if (no_shutdown_after_reply) {
+            g_shutdown_after_reply = false;
+        } else {
+            g_shutdown_after_reply = true;
+        }
+
     	// write to socket
         ssize_t write_len = write(g_client_sock, command, strlen(command));
         if (write_len < 0) {
             fprintf(stderr, "Failed to write: %s\n", strerror(errno));
         }
-        g_shutdown_after_reply = 1;
+
+        // allow further input from stdin
+        if (no_shutdown_after_reply) {
+            net_add_handler(STDIN_FILENO, &client_handler_in);
+        }
     } else {
+        g_shutdown_after_reply = false;
+        // allow further input from stdin
         net_add_handler(STDIN_FILENO, &client_handler_in);
     }
 
