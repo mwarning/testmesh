@@ -12,7 +12,8 @@ enum FIND_INTERFACES {
 const char *str_find_interfaces(enum FIND_INTERFACES value);
 
 bool interfaces_init();
-bool interfaces_debug(FILE *fd);
+void interfaces_debug(FILE *fd);
+void interfaces_debug_json(FILE *fd);
 
 const char *str_ifindex(unsigned ifindex);
 

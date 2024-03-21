@@ -27,7 +27,7 @@ struct interface {
     uint32_t ifindex;
     char ifname[16];
     struct mac ifmac;
-    int ifsock_l2; // ifsock_i3?
+    int ifsock_l2;
     bool is_dynamic;    // interface was added automatically
 };
 
@@ -52,8 +52,11 @@ static void interface_reset_handler(struct interface *ifa)
 {
     if (ifa->ifsock_l2 != -1) {
         net_remove_handler(ifa->ifsock_l2, &read_internal_l2);
-        close(ifa->ifsock_l2);
-        ifa->ifsock_l2 = -1;
+
+        if (ifa->ifsock_l2 != -1) {
+            close(ifa->ifsock_l2);
+            ifa->ifsock_l2 = -1;
+        }
     }
 
     ifa->ifmac = g_nullmac;
@@ -226,10 +229,6 @@ static struct interface *get_interface_by_fd(int fd)
 
 static void interface_remove(struct interface *ifa_prev, struct interface *ifa)
 {
-    if (gstate.protocol->interface_handler) {
-        gstate.protocol->interface_handler(ifa->ifindex, &ifa->ifname[0], false);
-    }
-
     if (ifa == g_interfaces) {
         g_interfaces = ifa->next;
     } else {
@@ -265,9 +264,6 @@ static bool interface_add_internal(const char *ifname, bool is_dynamic)
     };
     strcpy(&ifa->ifname[0], ifname);
 
-    // might fail
-    interface_setup(ifa);
-
     // prepend
     if (g_interfaces == NULL) {
         ifa->next = NULL;
@@ -275,10 +271,6 @@ static bool interface_add_internal(const char *ifname, bool is_dynamic)
         ifa->next = g_interfaces;
     }
     g_interfaces = ifa;
-
-    if (gstate.protocol->interface_handler) {
-        gstate.protocol->interface_handler(ifa->ifindex, &ifa->ifname[0], true);
-    }
 
     return true;
 }
@@ -293,14 +285,13 @@ bool interface_del(const char *ifname)
     struct interface *ifa_prev;
     struct interface *ifa;
 
-    if (g_interfaces == NULL) {
-        return false;
-    }
-
     ifa_prev = NULL;
     ifa = g_interfaces;
     while (ifa) {
         if (0 == strcmp(ifa->ifname, ifname)) {
+            if (gstate.protocol->interface_handler) {
+                gstate.protocol->interface_handler(ifa->ifindex, &ifa->ifname[0], false);
+            }
             interface_remove(ifa_prev, ifa);
             return true;
         }
@@ -415,7 +406,7 @@ void send_bcast_l2(const uint32_t ifindex, const void* data, size_t data_len)
     char sendbuf[ETH_FRAME_LEN] = {0};
     const size_t sendlen = sizeof(struct ethhdr) + data_len;
 
-    if (sendlen >= sizeof(sendbuf)) {
+    if (data_len >= (sizeof(sendbuf) - sizeof(struct ethhdr))) {
         log_error("send_bcast_l2() too much data");
         return;
     }
@@ -451,7 +442,7 @@ bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
     struct interface *ifa;
 
     if (addr->family != AF_MAC) {
-        log_error("send_ucast_l2() used wrong address type");
+        log_error("send_ucast_l2() address type AF_MAC expected");
         return false;
     }
 
@@ -494,17 +485,17 @@ bool send_ucast_l2(const Address *addr, const void* data, size_t data_len)
 static void read_internal_l3(int events, int fd)
 {
     Address src_addr = {0};
-    ssize_t readlen;
     uint8_t buffer[ETH_FRAME_LEN];
-    socklen_t addr_len;
 
     if (events <= 0) {
         return;
     }
 
-    addr_len = sizeof(Address);
-    readlen = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &src_addr, &addr_len);
-    //static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to)
+    assert(fd == gstate.sock_udp);
+
+    socklen_t addr_len = sizeof(Address);
+    ssize_t readlen = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &src_addr, &addr_len);
+    //static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to);
 
     if (readlen <= 0) {
         log_error("recvfrom() for %s returned %lld: %s", str_addr(&src_addr), readlen, strerror(errno));
@@ -519,12 +510,12 @@ static void read_internal_l3(int events, int fd)
 
 void send_ucast_l3(const Address *addr, const void *data, size_t data_len)
 {
-    if (!(addr->family == AF_INET || addr->family == AF_INET6)) {
-        log_error("send_ucast_l3() used wrong address type");
+    if (addr->family != AF_INET && addr->family != AF_INET6) {
+        log_error("send_ucast_l3() address type AF_INET or AF_INET6 expected");
         return;
     }
 
-    socklen_t slen = sizeof(struct sockaddr_storage);
+    socklen_t slen = sizeof(Address);
     if (sendto(gstate.sock_udp, data, data_len, 0, (struct sockaddr*) addr, slen) == -1) {
         log_error("failed send packet to %s: %s", str_addr(addr), strerror(errno));
         return;
@@ -726,14 +717,14 @@ static void periodic_interfaces_handler(int _events, int _fd)
     ifa_prev = NULL;
     ifa = g_interfaces;
     while (ifa) {
-        unsigned ifindex = if_nametoindex(ifa->ifname);
-        if (ifindex != ifa->ifindex) {
-            log_warning("interface %s changed ifindex: %d => %d", ifa->ifname, ifa->ifindex, ifindex);
-            interface_reset_handler(ifa);
-        }
-
         if (!is_valid_ifa(ifa)) {
             bool ok = interface_setup(ifa);
+
+            if (gstate.protocol->interface_handler) {
+                bool added = ok ? true : false;
+                gstate.protocol->interface_handler(ifa->ifindex, &ifa->ifname[0], added);
+            }
+
             if (!ok && ifa->is_dynamic) {
                 struct interface *next = ifa->next;
                 interface_remove(ifa_prev, ifa);
@@ -741,6 +732,13 @@ static void periodic_interfaces_handler(int _events, int _fd)
                 continue;
             }
         }
+
+        unsigned ifindex = if_nametoindex(ifa->ifname);
+        if (ifindex != ifa->ifindex) {
+            log_warning("interface %s changed ifindex: %d => %d", ifa->ifname, ifa->ifindex, ifindex);
+            interface_reset_handler(ifa);
+        }
+
         ifa_prev = ifa;
         ifa = ifa->next;
     }
@@ -790,7 +788,7 @@ void interfaces_debug(FILE *fd)
 
 bool interfaces_init()
 {
-    if (gstate.sock_udp > 0) {
+    if (gstate.sock_udp != -1) {
         net_add_handler(gstate.sock_udp, &read_internal_l3);
     }
 
@@ -801,6 +799,9 @@ bool interfaces_init()
 #endif
 
     net_add_handler(-1, &periodic_interfaces_handler);
+
+    // make sure interfaces are initialized before any packet are send
+    periodic_interfaces_handler(-1, -1);
 
     return true;
 }
