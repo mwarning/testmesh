@@ -166,38 +166,38 @@ static void setup_mcast_socket_receive(int *sock)
 }
 #endif
 
-static void setup_unicast_socket(int *sock)
+static int create_udp_socket(const struct sockaddr_in6 *addr)
 {
     int fd;
 
     if ((fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
         log_error("socket() %s", strerror(errno));
-        exit(1);
+        return -1;
     }
 
     int loop = 0;
-    if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, (char *)&loop, sizeof(loop)) < 0) {
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, (char *)&loop, sizeof(loop)) == -1) {
         log_error("setsockopt(IPV6_MULTICAST_LOOP) %s", strerror(errno));
-        exit(1);
+        return -1;
     }
-
+/*
     int on = 1;
-    if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0) {
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) == -1) {
         printf("setsockopt IPV6_RECVPKTINFO ");
-        exit(1);
+        return -1;
     }
-
+*/
     // bind socket to port (works for IPv4 and IPv6)
-    if (bind(fd, (struct sockaddr*) &gstate.ucast_addr, sizeof(gstate.ucast_addr)) == -1) {
+    if (bind(fd, (struct sockaddr*) addr, sizeof(struct sockaddr_in6)) == -1) {
         log_error("bind() to unicast address: %s", strerror(errno));
-        exit(1);
+        return -1;
     }
 
-    *sock = fd;
+    return fd;
 }
 
 // program name matches *-ctl
-static int is_client(const char *cmd)
+static bool is_client(const char *cmd)
 {
     const char *sep = strrchr(cmd, '-');
     return sep && (strcmp(sep + 1, "ctl") == 0);
@@ -312,7 +312,7 @@ int main(int argc, char *argv[])
     // setup unicast address for bind
     gstate.ucast_addr.sin6_family = AF_INET6;
     inet_pton(AF_INET6, "::", &gstate.ucast_addr.sin6_addr);
-    gstate.ucast_addr.sin6_port = htons(UNICAST_PORT);
+    gstate.ucast_addr.sin6_port = htons(UNICAST_UDP_PORT);
 
     unix_signals();
 
@@ -335,13 +335,15 @@ int main(int argc, char *argv[])
     }
 
     if (gstate.protocol->ext_handler_l3) {
-        setup_unicast_socket(&gstate.sock_udp);
+        gstate.sock_udp = create_udp_socket(&gstate.ucast_addr);
+        if (gstate.sock_udp == -1) {
+            return EXIT_FAILURE;
+        }
 #ifdef MULTICAST
         setup_mcast_socket_receive(&gstate.sock_mcast_receive);
-
-        log_info("Listen on multicast: %s", str_addr6(&gstate.mcast_addr));
+        log_info("Listen:         %s (multicast)", str_addr6(&gstate.mcast_addr));
 #endif
-        log_info("Listen on unicast:   %s", str_addr6(&gstate.ucast_addr));
+        log_info("Listen:         %s", str_addr6(&gstate.ucast_addr));
     }
 
     if (!interfaces_init()) {
@@ -369,7 +371,7 @@ int main(int argc, char *argv[])
 
         unix_fork();
     } else {
-        if (gstate.disable_stdin == 0) {
+        if (!gstate.disable_stdin) {
             printf("Press Enter for help.\n\n");
             net_add_handler(STDIN_FILENO, &console_client_handler);
         }

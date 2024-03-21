@@ -18,7 +18,7 @@
 
 #define MULTICAST_ADDR "ff12::114"
 #define MULTICAST_PORT 4321
-#define UNICAST_PORT 654
+#define UNICAST_UDP_PORT 25872
 
 
 typedef struct {
