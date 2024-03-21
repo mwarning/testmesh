@@ -2,59 +2,60 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "bloom.h"
 
-// set BLOOM_K bits based on id
-void bloom_init(void *bloom, uint64_t id)
+
+void bloom_init(void *bloom, uint64_t id, uint32_t bloom_m, uint32_t bloom_k)
 {
-    memset(bloom, 0, BLOOM_M);
+    memset(bloom, 0, bloom_m);
 
     // linear congruential generator
     uint64_t next = id;
-    for (size_t i = 0; i < BLOOM_K; ++i) {
+    for (size_t i = 0; i < bloom_k; ++i) {
         next = next * 1103515245 + 12345;
         uint32_t r = (next / 65536) % 32768;
-        uint32_t j = r % (BLOOM_M * 8);
+        uint32_t j = r % (bloom_m * 8);
         BLOOM_BITSET(((uint8_t*) bloom), j);
     }
 }
 
-void bloom_merge(void *bloom1, const void *bloom2)
+void bloom_merge(void *bloom1, const void *bloom2, uint32_t bloom_m)
 {
     uint8_t *b1 = (uint8_t*) bloom1;
     uint8_t *b2 = (uint8_t*) bloom2;
-    for (size_t i = 0; i < BLOOM_M; ++i) {
+    for (size_t i = 0; i < bloom_m; ++i) {
         b1[i] |= b2[i];
     }
 }
 
-void bloom_add(void *bloom, uint32_t id)
+void bloom_add(void *bloom, uint32_t id, uint32_t bloom_m, uint32_t bloom_k)
 {
-    uint8_t bloom_id[BLOOM_M];
-    bloom_init(bloom_id, id);
-    bloom_merge(bloom, bloom_id);
+    uint8_t bloom_id[bloom_m];
+    bloom_init(bloom_id, id, bloom_m, bloom_k);
+    bloom_merge(bloom, bloom_id, bloom_m);
 }
 
 // count of bits set in bloom filter
-uint16_t bloom_ones(const void *bloom)
+uint16_t bloom_ones(const void *bloom, uint32_t bloom_m)
 {
     uint16_t ones = 0;
 
-    for (size_t i = 0; i < (8 * BLOOM_M); ++i) {
+    for (size_t i = 0; i < (8 * bloom_m); ++i) {
         ones += (0 != BLOOM_BITTEST(((uint8_t*) bloom), i));
     }
 
     return ones;
 }
 
-bool bloom_test(const void *bloom, uint32_t id)
+bool bloom_test(const void *bloom, uint32_t id, uint32_t bloom_m, uint32_t bloom_k)
 {
-    uint8_t bloom_id[BLOOM_M]; 
-    bloom_init(bloom_id, id);
+    uint8_t bloom_id[bloom_m];
+    bloom_init(bloom_id, id, bloom_m, bloom_k);
 
     uint8_t *b = (uint8_t*) bloom;
-    for (size_t i = 0; i < BLOOM_M; ++i) {
+    for (size_t i = 0; i < bloom_m; ++i) {
         if ((b[i] & bloom_id[i]) != bloom_id[i]) {
             return false;
         }
@@ -83,11 +84,15 @@ static bool bloom_good(const uint8_t *bloom, uint16_t hop_count)
     }
 }*/
 
-char *str_bloom(const void *bloom)
+char *str_bloom(const void *bloom, uint32_t bloom_m)
 {
-    static char buf[BLOOM_M * 8 + 1];
+    assert(bloom_m <= 16);
+    static char strbloombuf[4][16 * 8 + 1];
+    static size_t strbloombuf_i = 0;
+    char *buf = strbloombuf[++strbloombuf_i % 4];
+
     char *cur = buf;
-    for (size_t i = 0; i < (8 * BLOOM_M); ++i) {
+    for (size_t i = 0; i < (8 * bloom_m); ++i) {
         uint32_t bit = (0 != BLOOM_BITTEST(((uint8_t*) bloom), i));
         cur += sprintf(cur, "%"PRIu32, bit);
     }
@@ -102,27 +107,28 @@ static void bloom_merge(uint8_t *bloom1, const uint8_t *bloom2)
     }
 }*/
 
-void bloom_delete(void *bloom, uint32_t id)
+void bloom_delete(void *bloom, uint32_t id, uint32_t bloom_m, uint32_t bloom_k)
 {
     uint8_t *b = (uint8_t*) bloom;
-    uint8_t bloom_id[BLOOM_M];
-    bloom_init(bloom_id, id);
+    uint8_t bloom_id[bloom_m];
+    bloom_init(bloom_id, id, bloom_m, bloom_k);
     //bloom_merge(bloom, &bloom_id[0]);
 
-    for (size_t i = 0; i < BLOOM_M; ++i) {
+    for (size_t i = 0; i < bloom_m; ++i) {
         b[i] &= ~bloom_id[i];
     }
 }
 
-uint16_t bloom_similar_ones(void *bloom1, void *bloom2)
+uint16_t bloom_similar_ones(void *bloom1, void *bloom2, uint32_t bloom_m)
 {
-    uint8_t bloom[BLOOM_M] = {0};
+    uint8_t bloom[bloom_m];
+    memset(bloom, 0, bloom_m);
     uint8_t *b1 = (uint8_t*) bloom1;
     uint8_t *b2 = (uint8_t*) bloom2;
 
-    for (size_t i = 0; i < BLOOM_M; ++i) {
+    for (size_t i = 0; i < bloom_m; ++i) {
         bloom[i] = b1[i] & b2[i];
     }
 
-    return bloom_ones(bloom);
+    return bloom_ones(bloom, bloom_m);
 }

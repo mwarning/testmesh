@@ -19,6 +19,10 @@
 
 #include "routing.h"
 
+#define BLOOM_M      8  // size of the bloom filter (in bytes)
+#define BLOOM_K      2  // number of hash functions
+
+
 enum {
     TYPE_DATA
 };
@@ -64,9 +68,9 @@ static void handle_DATA(const Address *addr, DATA *p, size_t recv_len)
 
         // destination is the local tun0 interface => write packet to tun0
         tun_write(payload, p->payload_length);
-    } else if (!bloom_test(&p->bloom[0], gstate.own_id)) {
+    } else if (!bloom_test(&p->bloom[0], gstate.own_id, BLOOM_M, BLOOM_K)) {
         log_debug("DATA: own id not in bloom filter => forward");
-        bloom_add(&p->bloom[0], gstate.own_id);
+        bloom_add(&p->bloom[0], gstate.own_id, BLOOM_M, BLOOM_K);
         send_bcast_l2(0, p, recv_len);
     } else {
         log_debug("DATA: own id in bloom filter => drop");

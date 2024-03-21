@@ -19,6 +19,9 @@
 
 #include "routing.h"
 
+#define BLOOM_M      8  // size of the bloom filter (in bytes)
+#define BLOOM_K      2  // number of hash functions
+
 #define TIMEOUT_ENTRY_SEC 60
 
 enum {
@@ -114,7 +117,7 @@ static void forward_DATA(DATA *p, size_t recv_len)
 
     // find neighbor that is nearest
     HASH_ITER(hh, g_neighbors, cur, tmp) {
-        if (bloom_test(&cur->bloom[0], p->dst_id)) {
+        if (bloom_test(&cur->bloom[0], p->dst_id, BLOOM_M, BLOOM_K)) {
             if (next == NULL || cur->hop_cnt < next->hop_cnt) {
                 next = cur;
             }
@@ -157,13 +160,13 @@ static void handle_DATA(const Address *src_addr, DATA *p, size_t recv_len)
         return;
     }
 
-    if (bloom_test(&p->bloom[0], gstate.own_id)) {
+    if (bloom_test(&p->bloom[0], gstate.own_id, BLOOM_M, BLOOM_K)) {
         log_debug("DATA: own id in packets bloom filter => drop");
         return;
     }
 
     // limit bloom filter fill rate to BLOOM_LIMIT percent
-    if (bloom_ones(&p->bloom[0]) > (int) ((BLOOM_M * 8) * BLOOM_LIMIT) / 100) {
+    if (bloom_ones(&p->bloom[0], BLOOM_M) > (int) ((BLOOM_M * 8) * BLOOM_LIMIT) / 100) {
         log_debug("DATA: bloom filter occupancy reached => drop");
         return;
     }
@@ -171,13 +174,13 @@ static void handle_DATA(const Address *src_addr, DATA *p, size_t recv_len)
     Entry *entry = entry_find(p->sender_id);
     if (entry) {
         memcpy(&entry->addr, src_addr, sizeof(entry->addr));
-        bloom_merge(&entry->bloom[0], &p->bloom[0]);
+        bloom_merge(&entry->bloom[0], &p->bloom[0], BLOOM_M);
     } else {
         entry_add(p->sender_id, p->hop_cnt, &p->bloom[0], src_addr);
     }
 
     // add own id
-    bloom_add(&p->bloom[0], gstate.own_id);
+    bloom_add(&p->bloom[0], gstate.own_id, BLOOM_M, BLOOM_K);
 
     p->hop_cnt += 1;
 
@@ -197,7 +200,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
     data->seq_num = g_seq_num++;
     data->dst_id = dst_id;
     data->payload_length = packet_length;
-    bloom_init(&data->bloom[0], gstate.own_id);
+    bloom_init(&data->bloom[0], gstate.own_id, BLOOM_M, BLOOM_K);
 
     forward_DATA(data, get_data_size(data));
 }
@@ -224,11 +227,11 @@ static bool console_handler(FILE *fp, int argc, const char *argv[])
         fprintf(fp, "n: print routing table\n");
     } else if (match(argv, "i")) {
         uint8_t own_bloom[BLOOM_M];
-        bloom_init(&own_bloom[0], gstate.own_id);
+        bloom_init(&own_bloom[0], gstate.own_id, BLOOM_M, BLOOM_K);
 
         fprintf(fp, "id: 0x%08x\n", gstate.own_id);
         fprintf(fp, "bloom-size: %u, hash-funcs: %u\n", BLOOM_M, BLOOM_K);
-        fprintf(fp, "bloom: %s\n", str_bloom(&own_bloom[0]));
+        fprintf(fp, "bloom: %s\n", str_bloom(&own_bloom[0], BLOOM_M));
     } else if (match(argv, "n")) {
         unsigned counter = 0;
         Entry *cur;
@@ -240,7 +243,7 @@ static bool console_handler(FILE *fp, int argc, const char *argv[])
                 cur->sender_id,
                 str_addr(&cur->addr),
                 str_since(cur->last_updated),
-                str_bloom(&cur->bloom[0]),
+                str_bloom(&cur->bloom[0], BLOOM_M),
                 (unsigned) cur->hop_cnt
             );
             counter += 1;

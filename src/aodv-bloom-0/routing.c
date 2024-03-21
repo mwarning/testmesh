@@ -22,6 +22,10 @@
 
 #include "routing.h"
 
+#define BLOOM_M      8  // size of the bloom filter (in bytes)
+#define BLOOM_K      2  // number of hash functions
+
+
 enum {
     TYPE_DATA,
     TYPE_RREQ, // broadcast / unicast
@@ -349,7 +353,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
         } else {
             p->hop_count += 1;
 
-            bloom_add(&p->bloom[0], gstate.own_id);
+            bloom_add(&p->bloom[0], gstate.own_id, BLOOM_M, BLOOM_K);
 
 /*
     
@@ -372,7 +376,7 @@ static void handle_RREQ(const Address *rcv, const Address *src, const Address *d
                 }
                 */
                 LL_FOREACH(es->entries, e) {
-                    if (bloom_test(&e->bloom[0], p->dst_id)) {
+                    if (bloom_test(&e->bloom[0], p->dst_id, BLOOM_M, BLOOM_K)) {
                         if (!neighbor_check_add(&neighbors, &e->next_hop_addr)) {
                             log_debug("RREQ: forward to %s", str_addr(&e->next_hop_addr));
                             send_ucast_l2(&e->next_hop_addr, p, sizeof(RREQ));
@@ -513,7 +517,7 @@ static void tun_handler(uint32_t dst_id, uint8_t *packet, size_t packet_length)
             .bloom = {0},
         };
 
-        bloom_add(&rreq.bloom[0], gstate.own_id);
+        bloom_add(&rreq.bloom[0], gstate.own_id, BLOOM_M, BLOOM_K);
 
         // avoid processing of this packet again
         seqnum_cache_update(rreq.src_id, rreq.seq_num);
@@ -570,7 +574,7 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
                 fprintf(fp, "  %s %6u      %6s   %8s ago    %8s ago\n",
                     str_addr(&e->next_hop_addr),
                     e->hop_count,
-                    str_bloom(&e->bloom[0]),
+                    str_bloom(&e->bloom[0], BLOOM_M),
                     str_since(e->bloom_first_updated),
                     str_since(e->bloom_last_updated)
                 );
