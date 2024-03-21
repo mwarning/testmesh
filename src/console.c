@@ -75,6 +75,11 @@ static const option_t g_options[] = {
     {NULL, 0, 0}
 };
 
+static bool is_stdin(int fd)
+{
+    return fd == STDIN_FILENO && !gstate.do_fork;
+}
+
 static bool console_exec(int clientsock, FILE *fp, char *line)
 {
     const char *argv[8];
@@ -123,8 +128,8 @@ static bool console_exec(int clientsock, FILE *fp, char *line)
         interfaces_debug(fp);
         break;
     case oLogging:
-        if (clientsock == STDIN_FILENO) {
-            // local terminal session
+        if (is_stdin(clientsock)) {
+            // local terminal session (and stdin not closed)
             if (gstate.log_to_terminal) {
                 gstate.log_to_terminal = false;
                 fprintf(fp, "log to terminal disabled\n");
