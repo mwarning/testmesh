@@ -5,7 +5,10 @@ Included is also a OpenWrt package that is ready to be used in real networks, al
 
 The goal of this project is to help to develop better mesh routing protocols, so that community networks such as Freifunk can scale better.
 
-Note: These implementations use simplified algorithms that do not adhere to any technical publication.
+Note: These implementations
+* do not adhere to any technical publication
+* do not care about byte ordering (Endianness)
+* are single threaded for simplicity (but use non-blocking I/O)
 
 Implemented Protocols:
 
