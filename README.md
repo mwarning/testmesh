@@ -73,6 +73,9 @@ Implemented Protocols:
   - incomplete!
   - spanning tree
   - proactive
+- [root-storage-0](src/root-storage-0/)
+  - incomplete!
+  - proactive
 
 Notes:
  - 32Bit node identifiers are mapped to and from IP addresses
