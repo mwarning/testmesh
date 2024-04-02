@@ -7,7 +7,6 @@
 #include <sys/time.h>
 #include <assert.h>
 
-#include "../ext/bloom.h"
 #include "../ext/uthash.h"
 #include "../ext/packet_cache.h"
 #include "../ext/packet_trace.h"
@@ -20,13 +19,13 @@
 #include "../interfaces.h"
 
 #include "routing.h"
+#include "ranges.h"
 
 enum {
     TYPE_DATA,
 
     TYPE_ROOT_CREATE,
     TYPE_ROOT_STORE,
-    //TYPE_BLOOM,
 
     TYPE_RREQ,
     TYPE_RREP,
@@ -54,19 +53,12 @@ enum FLAGS {
     FLAG_IS_DESTINATION = 4,
 };
 
-#define DHT_PORT 6881
-//#define DEFAULT_PEER_PORT 25872
 #define HOP_TIMEOUT_MIN_SECONDS 30
 #define HOP_TIMEOUT_MAX_SECONDS (60 * 60 * 24)
 #define NODE_MIN_AGE_SECONDS 30
 #define NODE_MAX_AGE_SECONDS (60 * 60 * 24)
 #define TRAFFIC_DURATION_SECONDS 8
 #define UNKNOWN_SEQUENCE_NUMBER UINT32_MAX
-//#define UNKNOWN_HOP_COUNT UINT16_MAX
-//#define INITIAL_ROOT_STORE_SEND_INTERVAL_MS 100
-
-#define BLOOM_M 8
-#define BLOOM_K 2
 
 typedef struct {
     Address next_hop_addr; // use neighbor object with id and address?
@@ -107,49 +99,6 @@ typedef struct {
     uint64_t time_created; // or use neighbor creation time?
 } Root;
 
-/*
-typedef struct {
-    uint8_t bloom_data[BLOOM_M];
-    uint64_t bloom_received;
-    uint64_t bloom_send; // only set for parent
-    uint64_t bloom_changed;
-} Bloom;
-*/
-
-enum RouteType {
-    RouteTypeId,
-    RouteTypeNet,
-    RouteTypeBloom,
-};
-
-/*
-typedef struct __attribute__((__packed__)) {
-    uint8_t min_hop_count;
-    uint8_t max_hop_count;
-    uint16_t id_prefix;
-} ROOT_STORE_NET;
-*/
-
-typedef struct {
-    uint8_t hop_count;
-    uint32_t src_id;
-} RouteById;
-
-typedef struct {
-    enum RouteType type;
-    bool was_forwarded;
-    uint64_t received_time; // not used
-    union {
-        RouteById route_by_id;
-    };
-} RouteHint;
-
-typedef struct {
-    size_t data_capacity;
-    size_t data_size;
-    RouteHint *data;
-} Storage;
-
 // for detecting connection breaks
 typedef struct {
     Address address;
@@ -163,8 +112,7 @@ typedef struct {
     uint64_t last_updated;
 
     Root root;
-    //Bloom bloom;
-    Storage storage;
+    Ranges ranges;
 
     // TODO: use
     Traffic unicast_traffic;
@@ -271,7 +219,7 @@ typedef struct __attribute__((__packed__)) {
 } ROOT_CREATE;
 
 typedef struct __attribute__((__packed__)) {
-    uint8_t hop_count;
+    //uint8_t hop_count;
     uint32_t src_id;
 } ROOT_STORE_ID;
 
@@ -279,18 +227,8 @@ typedef struct __attribute__((__packed__)) {
 
 typedef struct __attribute__((__packed__)) {
     uint8_t type;
-    //uint16_t seq_num;
-    uint8_t entry_count; // also acts as hop count
-    ROOT_STORE_ID entries[MAX_ROOT_STORE_ENTRIES];
+    uint8_t data[1500 - 1];
 } ROOT_STORE;
-
-// synchronize to we minimize send time
-typedef struct __attribute__((__packed__)) {
-    uint8_t type;
-//    uint16_t seq_num;
-    uint8_t hop_count;
-    uint8_t bloom_data[BLOOM_M];
-} BLOOM;
 
 // TODO: use
 typedef struct __attribute__((__packed__)) {
@@ -307,7 +245,9 @@ typedef struct __attribute__((__packed__)) {
 } NETWORK_SHORTCUT_IPV6;
 
 static Peer *g_peers = NULL;
+#ifdef DHT
 static bool g_enable_dht = false;
+#endif
 static uint16_t g_sequence_number = 0;
 static IFState *g_ifstates = NULL;
 static Node *g_nodes = NULL;
@@ -364,6 +304,7 @@ static void neighbors_added(const Neighbor *neighbor)
 {
 }
 
+/*
 static void reset_root(Root *root)
 {
     memset(root, 0, sizeof(Root));
@@ -373,7 +314,7 @@ static void reset_root(Root *root)
     root->time_created = 0;
     root->store_send_time = 0;
     root->store_send_counter = 0;
-}
+}*/
 
 static void nodes_remove_next_hop_addr(const Address *addr);
 
@@ -513,7 +454,7 @@ static void dht_periodic()
 
 static void neighbor_free(Neighbor *neighbor)
 {
-    free(neighbor->storage.data);
+    free(neighbor->ranges.data);
     free(neighbor);
 }
 
@@ -636,6 +577,7 @@ static bool get_is_needed(const IFState *ifstate)
     return ret;
 }
 
+/*
 bool is_better_storage_item(const RouteById *cur, const RouteById *new)
 {
     return new->hop_count < cur->hop_count;
@@ -667,6 +609,7 @@ static Neighbor *get_next_hop(uint32_t dst_id)
 
     return found_ne;
 }
+*/
 
 // send and count outgoing unicast traffic
 static void send_ucast_wrapper(const Address *next_hop_addr, const void* data, size_t data_len)
@@ -977,16 +920,6 @@ static size_t get_size_ROOT_CREATE(const ROOT_CREATE *p)
     return sizeof(ROOT_CREATE);
 }
 
-static size_t get_size_ROOT_STORE(const ROOT_STORE *p)
-{
-    return (offsetof(ROOT_STORE, entries) + p->entry_count * sizeof(ROOT_STORE_ID));
-}
-
-static size_t get_size_BLOOM(const BLOOM *p)
-{
-    return sizeof(BLOOM);
-}
-
 static size_t get_size_PING(const PING *p)
 {
     return sizeof(PING);
@@ -1179,140 +1112,6 @@ static uint64_t next_ROOT_STORE_periodic()
     */
 }
 
-#if 0
-static void send_BLOOM_periodic()
-{
-    static uint64_t last = 0;
-
-/*
-    neighbor->bloom_received
-    neighbor->bloom_changed
-
-    1. send a new bloom packet when any of the neighbors filter changes
-*/
-
-    if (last == 0 || (last - gstate.time_now) > 1000) {
-        last = gstate.time_now;
-
-        Neighbor *parent = get_parent();
-
-        if (parent && !we_are_root()) {
-            BLOOM p = {
-                .type = TYPE_BLOOM
-            };
-
-            bloom_init(&p.bloom_data, gstate.own_id, BLOOM_M, BLOOM_K);
-
-            Neighbor *neighbor;
-            Neighbor *tmp;
-            HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-                bloom_merge(&p.bloom_data, &neighbor->bloom.bloom_data, BLOOM_M);
-            }
-
-            log_debug("send_BLOOM_periodic: %s to %s",
-                str_bloom(&p.bloom_data, BLOOM_M), str_addr(&parent->address));
-
-            send_ucast_wrapper(&parent->address, &p, get_size_BLOOM(&p));
-            parent->bloom.bloom_send = gstate.time_now;
-        }
-    }
-}
-#endif
-
-static const char *str_storage(const RouteHint *es, uint32_t count, bool was_forwarded)
-{
-    static char strdurationbuf[4][256];
-    static size_t strdurationbuf_i = 0;
-    char *buf = strdurationbuf[++strdurationbuf_i % 4];
-
-    buf[0] = 0;
-    for (size_t i = 0, written = 0; i < count; ++i) {
-        const RouteHint *r = &es[i];
-        switch (r->type) {
-        case RouteTypeId:
-        //if (es[i].was_forwarded == was_forwarded) { // filter
-            const char *fmt = (written > 0) ? ", 0x%x/%d%c" : "0x%x/%d%c";
-            int rc = snprintf(&buf[written], sizeof(strdurationbuf[0]) - written, fmt,
-                r->route_by_id.src_id, (int) r->route_by_id.hop_count, (r->was_forwarded ? '!' : '?'));
-            if (rc > 0) {
-                written += rc;
-            } else {
-                i = count; // break
-            }
-        }
-        //}
-    }
-
-    return buf;
-}
-
-static const char *str_entries(const ROOT_STORE_ID *es, uint32_t count)
-{
-    static char strdurationbuf[4][256];
-    static size_t strdurationbuf_i = 0;
-    char *buf = strdurationbuf[++strdurationbuf_i % 4];
-
-    buf[0] = 0;
-    for (size_t i = 0, written = 0; i < count; ++i) {
-        const char *fmt = (written > 0) ? ", 0x%x/%d" : "0x%x/%d";
-        int rc = snprintf(&buf[written], sizeof(strdurationbuf[0]) - written, fmt, es[i].src_id, (int) es[i].hop_count);
-        if (rc > 0) {
-            written += rc;
-        } else {
-            break;
-        }
-    }
-
-    return buf;
-}
-
-// add item, ignore duplciates
-static void root_store_add(ROOT_STORE *rs, uint32_t src_id, uint8_t hop_count)
-{
-    assert(rs->entry_count < MAX_ROOT_STORE_ENTRIES);
-
-    for (size_t i = 0; i < rs->entry_count; ++i) {
-        ROOT_STORE_ID *e = &rs->entries[i];
-        if (e->src_id == src_id) {
-            if (hop_count < e->hop_count) {
-                e->hop_count = hop_count;
-            }
-            return;
-        }
-    }
-
-    rs->entries[rs->entry_count] = (ROOT_STORE_ID) {
-        .src_id = src_id,
-        .hop_count = hop_count,
-    };
-    rs->entry_count += 1;
-}
-
-static void print_storage()
-{
-    Neighbor *parent = get_parent();
-    Neighbor *neighbor;
-    Neighbor *tmp;
-
-    int x = 0;
-    HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-        // sort storage by hop count?
-        log_debug("[%d, %p] print_storage: %s [%s] (is_parent: %s, data_size: %d)",
-            x++, neighbor,
-            str_addr(&neighbor->address),
-            str_storage(&neighbor->storage.data[0], neighbor->storage.data_size, false),
-            str_bool(parent == neighbor),
-            (int) neighbor->storage.data_size);
-    }
-}
-
-#if 0
-find biggest common prefix
-
-find most compact bloom
-
-#endif
-
 static void send_ROOT_STORE_periodic()
 {
     Neighbor *parent = get_parent();
@@ -1327,57 +1126,35 @@ static void send_ROOT_STORE_periodic()
 
             ROOT_STORE p = {
                 .type = TYPE_ROOT_STORE,
-                //.seq_num = g_sequence_number++,
-                .entry_count = 1,
-                .entries = {(ROOT_STORE_ID) {
-                    .hop_count = 1,
-                    .src_id = gstate.own_id,
-                }},
             };
+
+            Ranges ranges;
+            ranges_init(&ranges);
+
+            //log_debug("send_ROOT_STORE_periodic: storage");
+            //print_storage();
+
+            // add own id
+            ranges_add(&ranges, gstate.own_id, 0);
 
             Neighbor *neighbor;
             Neighbor *tmp;
-
-            log_debug("send_ROOT_STORE_periodic: storage");
-            print_storage();
-
-            // pick nearest neighbors
-            size_t index = 0;
-            bool done = true;
-            do {
-                done = true;
-                HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-                    if (neighbor != parent
-                            && index < neighbor->storage.data_size
-                            && p.entry_count < MAX_ROOT_STORE_ENTRIES) {
-                        RouteHint *si = &neighbor->storage.data[index];
-                        switch (si->type) {
-                        case RouteTypeId:
-                            //log_debug("consider 0x%x/%d%c", si->src_id, si->hop_count, si->was_forwarded ? '!' : '?');
-                            if (!si->was_forwarded && si->route_by_id.hop_count < UINT8_MAX) {
-                                si->was_forwarded = true;
-                                root_store_add(&p, si->route_by_id.src_id, si->route_by_id.hop_count + 1);
-                            }
-                        }
-                        done = false;
-                    }
+            HASH_ITER(hh, g_neighbors, neighbor, tmp) {
+                if (neighbor != parent) {
+                    ranges_add_all(&ranges, &neighbor->ranges);
                 }
-                index += 1;
-            } while (!done);
+            }
 
-            // clear all storages (parent too)
-            //HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-            //    neighbor->storage.data_size = 0;
-            //}
-
-            //log_debug("send_ROOT_STORE_periodic: after");
-            //print_storage();
-
-            log_debug("send_ROOT_STORE_periodic: entries: [%s] to parent %s",
-                str_entries(&p.entries[0], p.entry_count),
-                str_addr(&parent->address));
-
-            send_ucast_wrapper(&parent->address, &p, get_size_ROOT_STORE(&p));
+            // bytes available for ranges
+            size_t data_size_max = FIELD_SIZEOF(ROOT_STORE, data);
+            int rc = ranges_compress(&p.data[0], data_size_max, &ranges);
+            if (rc > 0) {
+                assert(rc <= data_size_max);
+                send_ucast_wrapper(&parent->address, &p, offsetof(ROOT_STORE, data) + rc);
+            } else {
+                log_error("failed to compress ranges");
+            }
+            ranges_free(&ranges);
 
             parent->root.store_send_counter += 1;
         }
@@ -1443,11 +1220,12 @@ static void periodic_handler()
     nodes_periodic();
     send_ROOT_CREATE_periodic();
     send_ROOT_STORE_periodic();
-    //send_BLOOM_periodic();
     peers_periodic();
+#ifdef DHT
     if (g_enable_dht) {
         dht_periodic();
     }
+#endif
 }
 
 static void handle_PING(const Neighbor *from_neighbor, const Address *src, uint8_t flags, PING *p, size_t length)
@@ -1658,70 +1436,26 @@ static void handle_RREP(const Address *src, uint8_t flags, RREP *p, size_t lengt
     }
 }
 
-/*
-typedef struct {
-    uint64_t time_created;
-    RREQ rreq;
-    UT_hash_handle hh;
-
-} DHTPendingLookup;
-
-static *dht_lookups = NULL;
-
-void DHTPendingLookup_add(const RREQ *p)
+static void send_RREQ(const char *context, const Neighbor *from, const RREQ *p)
 {
-    DHTPendingLookup *e = NULL;
-    HASH_FIND(hh, dht_lookups, id, sizeof(uint32_t), e);
-
-    if (e) {
-        // e->
-    } else {
-        e = (DHTPendingLookup*) malloc(sizeof(DHTPendingLookup));
-        e->time_created = gstate.time_now;
-        memcpy(&e->rreq, p, sizeof(RREQ));
-        HASH_ADD(hh, dht_lookups, id, sizeof(uint32_t), e);
-    }
-}
-
-// TODO: move to dht_periodic
-void dht_lookups_periodic()
-{
-    DHTPendingLookup *tmp;
-    DHTPendingLookup *entry;
-    HASH_ITER(hh, dht_lookups, entry, tmp) {
-        if ((gstate->time_now - entry->time_created) > 16000) {
-            // remove after 16 seconds
-            HASH_DEL(dht_lookups, entry);
-            free(entry);
+    uint32_t counter = 0;
+    Neighbor *neighbor;
+    Neighbor *tmp;
+    HASH_ITER(hh, g_neighbors, neighbor, tmp) {
+        if (neighbor != from && ranges_includes(&neighbor->ranges, p->dst_id)) {
+            log_debug("%s: 0x%08x => 0x%08x, found routing hint, send to %s => forward",
+                context, p->src_id, p->dst_id, str_addr(&neighbor->address));
+            send_ucast_wrapper(&neighbor->address, p, get_size_RREQ(p));
+            counter += 1;
         }
     }
-}
+
+/*
+how do we handle false positives?
 */
 
-static void send_RREQ(const char *context, const Neighbor *neighbor, const RREQ *p)
-{
-    // lookup route hints
-    Neighbor *next = get_next_hop(p->dst_id);
-    if (next) {
-        /*
-        if (g_enable_dht) {
-            log_debug("RREQ: lookup on DHT => lookup");
-            uint8_t info_hash[SHA1_BIN_LENGTH] = {0};
-            memcpy(info_hash, &p->dst_id, sizeof(uint32_t));
-            dht_lookup(info_hash);
-            // TODO: store from the request came from
-        } else {
-        */
-        if (next != neighbor) {
-            log_debug("%s: 0x%08x => 0x%08x, found routing hint, send to %s => forward",
-                context, p->src_id, p->dst_id, str_addr(&next->address));
-            send_ucast_wrapper(&next->address, p, get_size_RREQ(p));
-        } else {
-            log_warning("%s: 0x%08x => 0x%08x, do not route back to sender => ignore",
-                context, p->src_id, p->dst_id);
-        }
-    } else {
-        // route towards too
+    if (counter == 0) {
+        // route towards parent as well
         Neighbor *parent = get_parent();
         if (parent) {
             if (parent != neighbor) {
@@ -1869,52 +1603,6 @@ static void handle_RERR(const Address *src, uint8_t flags, RERR *p, size_t lengt
     }
 }
 
-static void storage_add(Storage *storage, uint32_t src_id, uint16_t hop_count)
-{
-    //log_debug("storage_add: data_size: %d, data_capacity: %d",
-    //    (int) storage->data_size, (int) storage->data_capacity);
-
-    if (storage->data_size >= 262144) {
-        // prevent out of memory
-        log_warning("storage_add: out of memory");
-        return;
-    }
-
-    for (size_t i = 0; i < storage->data_size; ++i) {
-        RouteHint *e = &storage->data[i];
-        switch (e->type) {
-        case RouteTypeId:
-            if (e->route_by_id.src_id == src_id) {
-                e->was_forwarded = false;
-                e->received_time = 0;
-                e->route_by_id.hop_count = hop_count;
-                return;
-            }
-        }
-    }
-
-    if (storage->data) {
-        if (storage->data_capacity <= storage->data_size) {
-            storage->data_capacity *= 2;
-            storage->data = (RouteHint*) realloc(storage->data, sizeof(RouteHint) * storage->data_capacity);
-        }
-    } else {
-        storage->data_size = 0;
-        storage->data_capacity = 1;
-        storage->data = (RouteHint*) calloc(1, sizeof(RouteHint) * storage->data_capacity);
-    }
-
-    storage->data[storage->data_size] = (RouteHint) {
-        .was_forwarded = false,
-        .received_time = 0,
-        .route_by_id = (RouteById) {
-            .src_id = src_id,
-            .hop_count = hop_count,
-        }
-    };
-    storage->data_size += 1;
-}
-
 static void handle_ROOT_STORE(IFState *ifstate, Neighbor *neighbor, const Address *src, uint8_t flags, ROOT_STORE *p, size_t length)
 {
     bool is_broadcast = flags & FLAG_IS_BROADCAST;
@@ -1925,156 +1613,16 @@ static void handle_ROOT_STORE(IFState *ifstate, Neighbor *neighbor, const Addres
         return;
     }
 
-    if (length != get_size_ROOT_STORE(p)) {
-        log_trace("ROOT_STORE: invalid packet size => drop");
-        return;
-    }
+    int data_size = length - offsetof(ROOT_STORE, data); 
 
-    if (p->entry_count == 0 || p->entry_count > MAX_ROOT_STORE_ENTRIES) {
-        log_trace("ROOT_STORE: entry_count == 0 => drop");
-        return;
-    }
-
-/*
-    const ROOT_STORE_ID *first = &p->entries[0];
-
-    // good? do we need seq_nums here?
-    if (packet_is_duplicate(first->src_id, p->seq_num)) {
-        log_debug("ROOT_STORE: packet is old => drop (src_id: 0x%08x, seq_num: %d)", first->src_id, (int) p->seq_num);
-        return;
-    }
-*/
-    //bool is_root = we_are_root();
     // store entries, this is the important part
-    log_debug("ROOT_STORE: got packet (entry_count: %d, entries: [%s]) from %s",
-        (int) p->entry_count, str_entries(&p->entries[0], p->entry_count), str_addr(&neighbor->address));
-    
-    //log_debug("ROOT_STORE: before");
-    //print_storage();
-    for (size_t i = 0; i < p->entry_count; ++i) {
-        const ROOT_STORE_ID *e = &p->entries[i];
-        //nodes_update(e->src_id, src, e->hop_count, (i == 0) ? p->seq_num : UNKNOWN_SEQUENCE_NUMBER, 0);
-        //if (!is_root) {
-            //log_debug("ROOT_STORE: add [0x%x/%d]", e->src_id, (int) e->hop_count);
-            storage_add(&neighbor->storage, e->src_id, e->hop_count);
-        //}
+    log_debug("ROOT_STORE: got packet (data size: %d bytes)) from %s", data_size, str_addr(src));
+
+    ranges_clear(&neighbor->ranges);
+    int rc = ranges_decompress(&neighbor->ranges, &p->data[0], data_size);
+    if (rc == -1) {
+        log_warning("ROOT_STORE: failed to decompress ranges from %s", str_addr(src));
     }
-    //log_debug("ROOT_STORE: after");
-    //print_storage();
-    //nodes_update(p->src_id, src, p->hop_count, p->seq_num, 0);
-}
-
-#if 0
-static void send_ROOT_STORE()
-{
-    if (we_are_root()) {
-        return;
-    }
-
-    ROOT_STORE p = {
-        .type = TYPE_ROOT_STORE,
-        .seq_num = g_sequence_number++,
-        .entry_count = 0,
-    };
-
-    Neighbor *neighbor;
-    Neighbor *tmp;
-    HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-        StorageList *sl = neighbor->storage;
-        // insert oldest first?
-        while (sl) {
-            // insert
-            sl = sl->next;
-        }
-    }
-    // send to parent
-
-    Neighbor *parent = get_parent();
-    if (we_are_root()) {
-        log_debug("ROOT_STORE: got packet (0x%08x => parent) from neighbor %s, hop_count/entries: %d => accept",
-            first->src_id, str_addr(src), (int) p->entry_count);
-    } else {
-        if (is_destination) {
-            if (parent && !address_is_null(&parent->address)) {
-                log_debug("ROOT_STORE: got packet (0x%08x => parent) from neighbor %s, hop_count/entries: %d => forward",
-                    first->src_id, str_addr(src), (int) p->entry_count);
-
-                p->entries[p->entry_count] = (ROOT_STORE_ID) { .src_id = gstate.own_id };
-                p->entry_count += 1;
-
-                // forward to parent
-                p->hop_count += 1;
-                send_ucast_wrapper(&parent->address, p, get_size_ROOT_STORE(p));
-            } else {
-                log_trace("ROOT_STORE: got packet (0x%08x => parent) from neighbor %s, hop_count/entries: %d, no root => drop",
-                    first->src_id, str_addr(src), (int) p->entry_count);
-            }
-        } else {
-            log_trace("ROOT_STORE: overheard packet (0x%08x => parent) from neighbor %s, hop_count/entries: %d => drop",
-                first->src_id, str_addr(src), (int) p->entry_count);
-        }
-        /*
-        Node *node = next_node_by_id(p->dst_id);
-        Hop *hop = next_hop_by_node(node);
-        if (node && hop) {
-            log_debug("ROOT_STORE: got packet (0x%08x => 0x%08x), hop_count: %d, from %s, send to %s, %d hops away => forward",
-                p->src_id, p->dst_id, p->hop_count, str_addr(src), str_addr(&hop->next_hop_addr), (int) hop->hop_count);
-
-            p->hop_count += 1;
-            send_ucast_wrapper(&hop->next_hop_addr, p, get_size_ROOT_STORE(p));
-        } else {
-            log_debug("ROOT_STORE: no next hop known => drop");
-        }
-        */
-    }
-}
-#endif
-
-/*
-static void handle_BLOOM(IFState *ifstate, Neighbor *neighbor, const Address *src, uint8_t flags, BLOOM *p, size_t length)
-{
-    bool is_broadcast = flags & FLAG_IS_BROADCAST;
-    bool is_destination = flags & FLAG_IS_DESTINATION;
-
-    if (is_broadcast || !is_destination) {
-        log_trace("BLOOM: unexpected destination => drop");
-        return;
-    }
-
-    if (length != get_size_BLOOM(p)) {
-        log_debug("BLOOM: invalid packet size => drop");
-        return;
-    }
-
-    if (0 != memcmp(&neighbor->bloom.bloom_data, &p->bloom_data, BLOOM_M)) {
-        neighbor->bloom.bloom_changed = gstate.time_now;
-    }
-
-    neighbor->bloom.bloom_received = gstate.time_now;
-    memcpy(&neighbor->bloom.bloom_data, &p->bloom_data, BLOOM_M);
-}
-*/
-
-static bool is_latest_seqnum(uint32_t root_id, uint16_t seq_num)
-{
-    //bool cur_seq_num_set = false;
-    //uint16_t cur_seq_num;
-
-    Neighbor *neighbor;
-    Neighbor *tmp;
-    HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-        if (neighbor->root.root_set && neighbor->root.root_id == root_id) {
-            //log_debug("is_latest_seqnum: %d %d", (int) neighbor->root.root_seq_num, (int) seq_num);
-            if (!is_newer_seqnum(neighbor->root.root_seq_num, seq_num)) {
-                //log_debug("is old seq_num");
-                return false;
-            } else {
-                //log_debug("is new seq_num");
-            }
-        }
-    }
-
-    return true;
 }
 
 static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Address *src, uint8_t flags, ROOT_CREATE *p, size_t length)
@@ -2094,10 +1642,6 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
         // we are the previous sender => that neighbor relies on our broadcasts
         ifstate->recv_own_broadcast_time = gstate.time_now;
     }
-
-    //nodes_update(p->root_id, src, p->hop_count, UNKNOWN_SEQUENCE_NUMBER, 0);
-    //nodes_update(p->sender, src, 1, UNKNOWN_SEQUENCE_NUMBER, 0);
-    //nodes_update(p->prev_sender, src, 2, UNKNOWN_SEQUENCE_NUMBER, 0);
 
     Neighbor *old_parent = get_parent();
 
@@ -2325,9 +1869,6 @@ static void ext_handler(const Address *src, uint8_t flags, uint8_t *packet, size
     case TYPE_ROOT_STORE:
         handle_ROOT_STORE(ifstate, neighbor, src, flags, (ROOT_STORE*) packet, packet_length);
         break;
-    //case TYPE_BLOOM:
-    //    handle_BLOOM(ifstate, neighbor, src, flags, (BLOOM*) packet, packet_length);
-    //    break;
     default:
         log_warning("unknown packet type 0x%02x of size %zu from %s", packet[0], packet_length, str_addr(src));
         break;
@@ -2450,12 +1991,11 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
         Neighbor *tmp;
         uint32_t count = 0;
 
-        //fprintf(fp, "neighbors of [%s]:\n", str_coords(&g_root.coords));
-        //fprintf(fp, " address root_id root_hop_count bloom_data bloom_node_count is_parent\n"); // time_created time_packets_send time_last_recv\n");
         HASH_ITER(hh, g_neighbors, neighbor, tmp) {
             fprintf(fp, "address: %s\n",
                 str_addr(&neighbor->address)
             );
+            fprintf(fp, "    ranges:        %d\n", (int) neighbor->ranges.data_count);
             if (neighbor->root.root_set) {
                 fprintf(fp, "  root_id:        0x%08x\n", neighbor->root.root_id);
                 fprintf(fp, "  root_hop_count: %d\n", (int) neighbor->root.hop_count);
@@ -2564,20 +2104,6 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
 
     return true;
 }
-
-/*
-static void dht_forward_rreq()
-{
-    DHTPendingLookup *tmp;
-    DHTPendingLookup *entry;
-    HASH_ITER(hh, dht_lookups, entry, tmp) {
-        if ((gstate->time_now - entry->time_created) > 16000) {
-            // remove after 16 seconds
-            HASH_DEL(dht_lookups, entry);
-            free(entry);
-        }
-    }
-}*/
 
 #ifdef DHT
 static void dht_result_callback(const uint8_t info_hash[], int af, const void *data, size_t data_len)
