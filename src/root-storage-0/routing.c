@@ -6,6 +6,7 @@
 #include <net/if.h>
 #include <sys/time.h>
 #include <assert.h>
+#include <inttypes.h>
 
 #include "../ext/uthash.h"
 #include "../ext/packet_cache.h"
@@ -20,6 +21,7 @@
 
 #include "routing.h"
 #include "ranges.h"
+
 
 enum {
     TYPE_DATA,
@@ -73,7 +75,6 @@ typedef struct {
     uint32_t id;
     uint64_t time_created;
     uint64_t time_updated;
-    uint64_t time_dht_last_announcement;
     uint32_t seq_num; // sequence numbers are 16bit!, UINT32_MAX => not set
     Hop *hops;
     UT_hash_handle hh;
@@ -86,7 +87,6 @@ typedef struct {
 } Traffic;
 
 typedef struct {
-    bool root_set;
     uint32_t root_id;
     uint16_t hop_count;
     uint16_t root_seq_num;
@@ -102,6 +102,7 @@ typedef struct {
 // for detecting connection breaks
 typedef struct {
     Address address;
+    //bool is_child;
 
     // needed?
     uint64_t packets_send_count;
@@ -111,8 +112,19 @@ typedef struct {
     uint64_t time_created;
     uint64_t last_updated;
 
+
+    uint64_t root_store_to_others_received_time;
+    uint64_t root_store_to_us_received_time;
+
+    bool root_set;
     Root root;
+
+    bool ranges_set;
     Ranges ranges;
+    // neighbor is a child only if we received ranges recently and have not seen this node sending it do a different node
+    //uint64_t ranges_updated;
+    //uint64_t ranges_updated_next;
+    // we should have the same for the root....
 
     // TODO: use
     Traffic unicast_traffic;
@@ -219,13 +231,6 @@ typedef struct __attribute__((__packed__)) {
 } ROOT_CREATE;
 
 typedef struct __attribute__((__packed__)) {
-    //uint8_t hop_count;
-    uint32_t src_id;
-} ROOT_STORE_ID;
-
-#define MAX_ROOT_STORE_ENTRIES 200
-
-typedef struct __attribute__((__packed__)) {
     uint8_t type;
     uint8_t data[1500 - 1];
 } ROOT_STORE;
@@ -245,9 +250,6 @@ typedef struct __attribute__((__packed__)) {
 } NETWORK_SHORTCUT_IPV6;
 
 static Peer *g_peers = NULL;
-#ifdef DHT
-static bool g_enable_dht = false;
-#endif
 static uint16_t g_sequence_number = 0;
 static IFState *g_ifstates = NULL;
 static Node *g_nodes = NULL;
@@ -335,6 +337,17 @@ static void nodes_removed(const Node *node)
 
 }
 
+/*
+static void root_init(Root *root)
+{
+    memset(root, 0, sizeof(Root));
+}
+
+static void root_clear(Root *root)
+{
+    root_init(root);
+}*/
+
 static Neighbor *neighbors_find(const Address *addr)
 {
     Neighbor *neighbor = NULL;
@@ -348,6 +361,8 @@ static Neighbor *neighbors_get(const Address *addr)
     if (neighbor == NULL) {
         // add new entry
         neighbor = (Neighbor*) calloc(1, sizeof(Neighbor));
+        //root_init(&neighbor->root);
+        //ranges_init(&neighbor->ranges, 0);
         neighbor->time_created = gstate.time_now;
         memcpy(&neighbor->address, addr, sizeof(Address));
         HASH_ADD(hh, g_neighbors, address, sizeof(Address), neighbor);
@@ -380,77 +395,6 @@ static void nodes_remove_next_hop_addr(const Address *addr)
         }
     }
 }
-
-#ifdef DHT 
-const char *g_dht_peers[] = {"bttracker.debian.org:6881"};
-
-static void dht_periodic()
-{
-    static uint64_t last_announcement = 0;
-    static uint64_t last_check = 0;
-    static uint8_t info_hash[SHA1_BIN_LENGTH] = {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
-
-    if (last_check == 0 || (gstate.time_now - last_check) > 10000) {
-        last_check = gstate.time_now;
-
-        if (dht_count_nodes() > 10) {
-            if (last_announcement == 0 || (gstate.time_now - last_announcement) > (DHT_ANNOUNCEMENT_INTERVAL * 1000 - 1000)) {
-                dht_announce(info_hash, DHT_PORT);
-                //dht_lookup(info_hash);
-                last_announcement = gstate.time_now;
-            }
-        } else {
-            last_announcement = 0;
-
-            // choose random peer
-            size_t peer_count = ARRAY_SIZE(g_dht_peers);
-            const char *peer = g_dht_peers[((size_t) rand()) % peer_count];
-
-            struct sockaddr_storage address_storage;
-            struct sockaddr* address = (struct sockaddr*) &address_storage;
-
-            log_debug("DHT: Ping %s", peer);
-
-            bool resolved = false;
-            int af = gstate.af;
-            if (af == AF_UNSPEC || af == AF_INET6) {
-                if (addr_parse(address, peer, STR(DHT_PORT), AF_INET6)) {
-                    dht_ping(address);
-                    resolved = true;
-                }
-            }
-
-            if (af == AF_UNSPEC || af == AF_INET) {
-                if (addr_parse(address, peer, STR(DHT_PORT), AF_INET)) {
-                    dht_ping(address);
-                    resolved = true;
-                }
-            }
-
-            if (!resolved) {
-                log_warning("DHT: Failed to resolve %s", peer);
-            }
-        }
-    }
-
-    /*
-    // announce all the ids we know on the DHT
-    uint8_t info_hash[SHA1_BIN_LENGTH] = {0};
-    Node *node;
-    Node *ntmp;
-
-    HASH_ITER(hh, g_nodes, node, ntmp) {
-        uint64_t last = node->time_dht_last_announcement;
-        if (last == 0 || (gstate.time_now - last) > (DHT_ANNOUNCEMENT_INTERVAL * 1000 - 5000)) {
-            node->time_dht_last_announcement = gstate.time_now;
-            memset(info_hash, 0, sizeof(info_hash));
-            memcpy(info_hash, &node->id, sizeof(uint32_t));
-            log_debug("dht_announce: announce 0x%08x on the DHT", node->id);
-            dht_announce(info_hash, DHT_PORT);
-        }
-    }*/
-}
-#endif
 
 static void neighbor_free(Neighbor *neighbor)
 {
@@ -577,40 +521,6 @@ static bool get_is_needed(const IFState *ifstate)
     return ret;
 }
 
-/*
-bool is_better_storage_item(const RouteById *cur, const RouteById *new)
-{
-    return new->hop_count < cur->hop_count;
-}
-
-static Neighbor *get_next_hop(uint32_t dst_id)
-{
-    Neighbor *found_ne = NULL;
-    const RouteHint *found_si = NULL;
-
-    Neighbor *neighbor;
-    Neighbor *tmp;
-    HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-        const Storage *s = &neighbor->storage;
-        for (size_t i = 0; i < s->data_size; ++i) {
-            const RouteHint *r = &s->data[i];
-            switch (r->type) {
-                case RouteTypeId:
-                    if (r->route_by_id.src_id == dst_id) {
-                        if (found_si == NULL || is_better_storage_item(&found_si->route_by_id, &r->route_by_id)) {
-                            found_ne = neighbor;
-                            found_si = r;
-                        }
-                    }
-                    break;
-            }
-        }
-    }
-
-    return found_ne;
-}
-*/
-
 // send and count outgoing unicast traffic
 static void send_ucast_wrapper(const Address *next_hop_addr, const void* data, size_t data_len)
 {
@@ -714,6 +624,28 @@ static bool nodes_update(uint32_t id, const Address *addr, uint16_t hop_count, u
     return is_new_packet;
 }
 
+static bool neighbor_is_child(const Neighbor *neighbor)
+{
+    const uint64_t us = neighbor->root_store_to_us_received_time;
+    const uint64_t others = neighbor->root_store_to_others_received_time;
+    const uint64_t now = gstate.time_now;
+
+    if (us == 0) {
+        return false;
+    }
+
+    if (us < others) {
+        return false;
+    }
+
+    if (us <= now && ((now - us) > 8000)) {
+        // child timed out
+        return false;
+    }
+
+    return true;
+}
+
 static Neighbor *get_parent()
 {
     Neighbor *cur = NULL;
@@ -723,7 +655,7 @@ static Neighbor *get_parent()
     //log_debug("get_parent()");
 
     HASH_ITER(hh, g_neighbors, new, tmp) {
-        if (!new->root.root_set) {
+        if (!new->root_set) {
             // ignore
             continue;
         }
@@ -780,7 +712,7 @@ static Neighbor *get_parent()
 
     if (cur) {
         // see if we are root (return NULL)
-        if (cur->root.root_set) {
+        if (cur->root_set) {
             bool is_parent_overdue = (cur->root.root_recv_time + 1200) < gstate.time_now;
             if (is_parent_overdue) {
                 // we are root
@@ -878,15 +810,12 @@ static bool is_better_hop(const Hop *cur, const Hop *new)
         return true;
     }
 
+/*
     if (new->time_updated > cur->time_updated) {
         return true;
     }
-/*
-    // choose
-    if (new->time_updated > (cur->time_updated + 4)) {
-        return true;
-    }
 */
+
     // prefer everything over MAC addresses (that is IPv4/IPv6)
     // despite the hops
     if (cur->next_hop_addr.family == AF_MAC
@@ -981,11 +910,13 @@ static Node *find_neighbor_node_by_address(const Address *addr)
     return NULL;
 }
 
+/*
 static uint32_t get_neighbor_id(const Neighbor *neighbor)
 {
     Node *node = find_neighbor_node_by_address(&neighbor->address);
     return node ? node->id : 0;
 }
+*/
 
 static void send_cached_packet(uint32_t dst_id)
 {
@@ -1112,10 +1043,25 @@ static uint64_t next_ROOT_STORE_periodic()
     */
 }
 
+// get an upper limit count of ranges
+static size_t count_ranges(const Neighbor *parent)
+{
+    size_t max_ranges = 0;
+    Neighbor *neighbor;
+    Neighbor *tmp;
+    HASH_ITER(hh, g_neighbors, neighbor, tmp) {
+        if (neighbor_is_child(neighbor)) { //neighbor_is_child(neighbor)) {
+            max_ranges += neighbor->ranges.data_count;
+        }
+    }
+    return max_ranges;
+}
+
 static void send_ROOT_STORE_periodic()
 {
     Neighbor *parent = get_parent();
 
+    //log_debug("send_ROOT_STORE_periodic check");
     if (parent) {
         // root node has no parent!
         // merge all storage items and try to fit them in on packet
@@ -1129,27 +1075,43 @@ static void send_ROOT_STORE_periodic()
             };
 
             Ranges ranges;
-            ranges_init(&ranges);
-
+            ranges_init(&ranges, count_ranges(parent));
             //log_debug("send_ROOT_STORE_periodic: storage");
             //print_storage();
 
             // add own id
             ranges_add(&ranges, gstate.own_id, 0);
 
+            int i = 0;
             Neighbor *neighbor;
             Neighbor *tmp;
             HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-                if (neighbor != parent) {
+                // only include children
+                if (neighbor_is_child(neighbor)) { //is_child_node(parent, neighbor)) {
+                    log_debug("send_ROOT_STORE_periodic: [%d] neighbor ranges: %s", i, ranges_str(&neighbor->ranges));
                     ranges_add_all(&ranges, &neighbor->ranges);
+                    i += 1;
                 }
             }
-
+/*
+{
+    log_debug("ranges out: %s", ranges_str(&ranges));
+}
+*/
             // bytes available for ranges
             size_t data_size_max = FIELD_SIZEOF(ROOT_STORE, data);
             int rc = ranges_compress(&p.data[0], data_size_max, &ranges);
-            if (rc > 0) {
-                assert(rc <= data_size_max);
+/*
+{
+    Ranges out;
+    ranges_init(&out, 0);
+
+    int rc2 = ranges_decompress(&out, &p.data[0], rc);
+    log_debug("ranges out/in: rc2: %d, ranges out: %s", rc2, ranges_str(&ranges));
+}*/
+
+            if (rc != -1) {
+                assert(rc > 0 && rc <= data_size_max);
                 send_ucast_wrapper(&parent->address, &p, offsetof(ROOT_STORE, data) + rc);
             } else {
                 log_error("failed to compress ranges");
@@ -1221,11 +1183,6 @@ static void periodic_handler()
     send_ROOT_CREATE_periodic();
     send_ROOT_STORE_periodic();
     peers_periodic();
-#ifdef DHT
-    if (g_enable_dht) {
-        dht_periodic();
-    }
-#endif
 }
 
 static void handle_PING(const Neighbor *from_neighbor, const Address *src, uint8_t flags, PING *p, size_t length)
@@ -1608,20 +1565,34 @@ static void handle_ROOT_STORE(IFState *ifstate, Neighbor *neighbor, const Addres
     bool is_broadcast = flags & FLAG_IS_BROADCAST;
     bool is_destination = flags & FLAG_IS_DESTINATION;
 
-    if (is_broadcast || !is_destination) {
+    if (is_broadcast) {
+        log_trace("ROOT_STORE: broadcast destination => ignore");
+        return;
+    }
+
+    if (!is_destination) {
+        neighbor->root_store_to_others_received_time = gstate.time_now;
         log_trace("ROOT_STORE: unexpected destination => drop");
         return;
     }
 
-    int data_size = length - offsetof(ROOT_STORE, data); 
-
-    // store entries, this is the important part
-    log_debug("ROOT_STORE: got packet (data size: %d bytes)) from %s", data_size, str_addr(src));
-
     ranges_clear(&neighbor->ranges);
+
+    int data_size = length - offsetof(ROOT_STORE, data);
+/*
+    char buf[200];
+    hex_dump(buf, sizeof(buf), &p->data[0], data_size);
+    log_debug(buf);
+*/
     int rc = ranges_decompress(&neighbor->ranges, &p->data[0], data_size);
     if (rc == -1) {
+        neighbor->ranges_set = false;
         log_warning("ROOT_STORE: failed to decompress ranges from %s", str_addr(src));
+    } else {
+        neighbor->root_store_to_us_received_time = gstate.time_now;
+        neighbor->ranges_set = true;
+        //store entries, this is the important part
+        log_debug("ROOT_STORE: got packet (%d bytes) from %s", data_size, str_addr(src));
     }
 }
 
@@ -1651,7 +1622,7 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
     uint16_t cur_root_seq_num;
 
     if (old_parent) {
-        assert(old_parent->root.root_set);
+        assert(old_parent->root_set);
         cur_root_id = old_parent->root.root_id;
         cur_root_seq_num = old_parent->root.root_seq_num;
     } else {
@@ -1666,7 +1637,7 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
 }
 
     // check sequence number for the neighbor
-    if (neighbor->root.root_set && neighbor->root.root_id == p->root_id
+    if (neighbor->root_set && neighbor->root.root_id == p->root_id
             && !is_newer_seqnum(neighbor->root.root_seq_num, p->root_seq_num)) {
         // duplicate packet
         log_debug("handle_ROOT_CREATE: duplicate packet from %s root_id: 0x%08x, seq_num: %d",
@@ -1674,11 +1645,11 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
         return;
     }
 
-    if (neighbor->root.root_id != p->root_id || !neighbor->root.root_set) {
+    if (neighbor->root.root_id != p->root_id || !neighbor->root_set) {
         neighbor->root.time_created = gstate.own_id;
     }
 
-    neighbor->root.root_set = true;
+    neighbor->root_set = true;
     neighbor->root.root_id = p->root_id;
     neighbor->root.hop_count = p->hop_count;
     neighbor->root.root_seq_num = p->root_seq_num;
@@ -1878,8 +1849,7 @@ static void ext_handler(const Address *src, uint8_t flags, uint8_t *packet, size
 static void ext_handler_l3(const Address *src, uint8_t *packet, size_t packet_length)
 {
     if (address_is_broadcast(src)) {
-        // broadcast source is invalid => ignore
-        log_warning("ext_handler_l3: source address is broadcast: %s", str_addr(src));
+        // packet from broadcast source address => invalid
         return;
     }
 
@@ -1889,17 +1859,17 @@ static void ext_handler_l3(const Address *src, uint8_t *packet, size_t packet_le
 
 static void ext_handler_l2(const Address *rcv, const Address *src, const Address *dst, uint8_t *packet, size_t packet_length)
 {
-    log_debug("rcv: %s, src: %s, dst: %s", str_addr(rcv), str_addr(src), str_addr(dst));
-
-    if (address_is_broadcast(src)) {
-        log_warning("ext_handler_l2: source address is invalid (broadcast): %s", str_addr(src));
-        return;
-    }
-
     if (address_equal(rcv, src)) {
         // own unicast packet => ignore
         return;
     }
+
+    if (address_is_broadcast(src)) {
+        // packet from broadcast source address => invalid
+        return;
+    }
+
+    //log_debug("rcv: %s, src: %s, dst: %s", str_addr(rcv), str_addr(src), str_addr(dst));
 
     uint8_t flags = 0;
     if (address_is_broadcast(dst)) {
@@ -1934,12 +1904,6 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
         }
 
         interfaces_debug(fp);
-
-#ifdef DHT
-        if (g_enable_dht) {
-            dht_status(fp);
-        }
-#endif
 
         Neighbor *parent = get_parent();
 
@@ -1995,8 +1959,12 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
             fprintf(fp, "address: %s\n",
                 str_addr(&neighbor->address)
             );
-            fprintf(fp, "    ranges:        %d\n", (int) neighbor->ranges.data_count);
-            if (neighbor->root.root_set) {
+            if (neighbor->ranges_set) {
+                fprintf(fp,     "  ranges_span:    %"PRIu64"\n", ranges_span(&neighbor->ranges));
+                fprintf(fp,     "  ranges_count:   %d\n", (int) neighbor->ranges.data_count);
+                fprintf(fp,     "  ranges_data:    %s\n", ranges_str(&neighbor->ranges));
+            }
+            if (neighbor->root_set) {
                 fprintf(fp, "  root_id:        0x%08x\n", neighbor->root.root_id);
                 fprintf(fp, "  root_hop_count: %d\n", (int) neighbor->root.hop_count);
                 fprintf(fp, "  root_parent_id: 0x%08x\n", neighbor->root.parent_id);
@@ -2056,15 +2024,20 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
                 neighbor_count += 1;
 
                 fprintf(fp, "{");
-                fprintf(fp, "\"address\": \"%s\"", str_addr(&neighbor->address));
-                if (neighbor->root.root_set) {
-                    fprintf(fp, ",");
+                fprintf(fp, "\"is_child\": \"%s\",", str_bool(neighbor_is_child(neighbor)));
+                if (neighbor->ranges_set) {
+                    fprintf(fp, "\"ranges_span\": %"PRIu64",", ranges_span(&neighbor->ranges));
+                    fprintf(fp, "\"ranges_count\": %d,", (int) neighbor->ranges.data_count);
+                    fprintf(fp, "\"ranges_data\": \"%s\",", ranges_str(&neighbor->ranges));
+                }
+                if (neighbor->root_set) {
                     fprintf(fp, "\"root_id\": \"0x%08x\",", neighbor->root.root_id);
                     fprintf(fp, "\"root_hop_count\": %d,", (int) neighbor->root.hop_count);
                     fprintf(fp, "\"root_parent_id\": \"0x%08x\",", neighbor->root.parent_id);
                     fprintf(fp, "\"time_created\": \"%s\",", str_since(neighbor->root.time_created));
-                    fprintf(fp, "\"is_parent\": \"%s\"", str_bool(neighbor == parent));
+                    fprintf(fp, "\"is_parent\": \"%s\",", str_bool(neighbor == parent));
                 }
+                fprintf(fp, "\"address\": \"%s\"", str_addr(&neighbor->address));
                 fprintf(fp, "}");
             }
             fprintf(fp, "],\n");
@@ -2105,114 +2078,29 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
     return true;
 }
 
-#ifdef DHT
-static void dht_result_callback(const uint8_t info_hash[], int af, const void *data, size_t data_len)
-{
-    log_debug("dht_result_callback");
-
-    // map info_hash to node id
-    //Address address;
-    uint32_t id = 0;
-    memcpy(&id, info_hash, sizeof(uint32_t));
-
-    PING ping = {
-        .type = TYPE_PING,
-        .seq_num = g_sequence_number++,
-    };
-
-    switch (af) {
-        case AF_INET: {
-            size_t numresults = (data_len / sizeof(struct dht_addr4_t));
-            struct dht_addr4_t *data4 = (struct dht_addr4_t *) data;
-            for (size_t i = 0; i < numresults; ++i) {
-                /*
-                struct sockaddr_in address = {0};
-                address.sin_family = AF_INET;
-                address.sin_port = htons(data4->port);
-                memcpy(&address.sin_addr, &data4->addr, 4);
-                */
-
-                Address address = {0};
-                address.family = AF_INET;
-                ((struct sockaddr_in *)&address)->sin_port = htons(data4->port);
-                memcpy(&((struct sockaddr_in *)&address)->sin_addr, &data4->addr, 4);
-
-                log_debug("send PING over network to %s", str_addr(&address));
-                dht_send_packet((struct sockaddr *) &address, &ping, get_size_PING(&ping));
-
-                //nodes_update(id, &address, 1, UNKNOWN_SEQUENCE_NUMBER, 0); // TODO: hop count is actually wrong
-            }
-            break;
-        }
-        case AF_INET6: {
-            size_t numresults = (data_len / sizeof(struct dht_addr6_t));
-            struct dht_addr6_t *data6 = (struct dht_addr6_t *) data;
-            for (size_t i = 0; i < numresults; ++i) {
-                Address address = {0};
-                address.family = AF_INET6;
-                ((struct sockaddr_in6 *)&address)->sin6_port = htons(data6->port);
-                memcpy(&((struct sockaddr_in6 *)&address)->sin6_addr, &data6->addr, 16);
-
-                log_debug("send PING over network to %s", str_addr(&address));
-                dht_send_packet((struct sockaddr *) &address, &ping, get_size_PING(&ping));
-            }
-            break;
-        }
-    }
-}
-
-static bool dht_socket_callback(const Address* src, void *packet, size_t packet_length)
-{
-    return false;
-/*
-    if (packet_length > 0 && packet[0] == 'magic') {
-        uint8_t flags = FLAG_IS_DESTINATION;
-        ext_handler(src, flags, packet, packet_length);
-        return true;
-    } else {
-        // DHT traffic - not for us here
-        return false;
-    }
-*/
-}
-#endif
-
 static void init_handler()
 {
-    g_root.root_set = true;
+    if (!ranges_sanity_test()) {
+        log_error("Ranges sanity test failed!");
+        exit(1);
+    }
+
     g_root.root_id = gstate.own_id;
 
     //roots_add(gstate.own_id);
 
     net_add_handler(-1, &periodic_handler);
     packet_cache_init(20);
-
-#ifdef DHT
-    if (g_enable_dht) {
-        // DHT setup
-        uint8_t node_id[SHA1_BIN_LENGTH];
-        bytes_random(node_id, SHA1_BIN_LENGTH);
-
-        dht_setup(AF_UNSPEC, node_id, DHT_PORT, NULL, &dht_result_callback, &dht_socket_callback);
-    }
-#endif
 }
 
 static void exit_handler()
 {
-#ifdef DHT
-    if (g_enable_dht) {
-        dht_shutdown();
-    }
-#endif
+    // nothing to do yet
 }
 
 static bool config_handler(const char *option, const char *value)
 {
-    /*if (0 == strcmp(option, "enable-dht")) {
-        g_enable_dht = true;
-        return true;
-    } else*/ if (strcmp(option, "peer") && value != NULL) {
+    if (strcmp(option, "peer") && value != NULL) {
         peers_add(value);
         return true;
     }

@@ -1,9 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
-#include <inttypes.h>
 #include <assert.h>
 #include <stdio.h>
 
@@ -270,10 +268,11 @@ static void print_ranges(const char *context, Ranges *ranges)
     for (int i = 0; i < ranges->data_count; ++i) {
         printf("[%03d] from %"PRIu64" + %"PRIu64"\n", i, ranges->data[i].from, ranges->data[i].span);
     }
-    printf("ranges_count: %llu\n", ranges->data_count);
+    printf("ranges_count: %"PRIu64"\n", ranges->data_count);
     printf("########\n");
 }
 
+/*
 static void print_ranges2(const char *context, Range *ranges_data, uint32_t ranges_count)
 {
     Ranges ranges = {
@@ -283,6 +282,7 @@ static void print_ranges2(const char *context, Range *ranges_data, uint32_t rang
     };
     print_ranges(context, &ranges);
 }
+*/
 
 static int compress_big_ranges(uint8_t *packet, uint32_t packet_size, Range *ranges, uint32_t ranges_count)
 {
@@ -333,14 +333,18 @@ static uint32_t compress_small_ranges(uint8_t *packet, uint32_t packet_size, Ran
 
     size_t offset = 0;
 
+    uint32_t ranges_count_output = 0;
+    for (size_t i = 0; i < ranges_count; ++i) {
+        ranges_count_output += 1 + ranges[i].span;
+    }
+
     // write number of big ranges
-    int bytes1 = write_num(packet ? &packet[offset] : NULL, packet_size - offset, ranges_count);
+    int bytes1 = write_num(packet ? &packet[offset] : NULL, packet_size - offset, ranges_count_output);
     if (bytes1 < 0) {
         return -1;
     }
     offset += bytes1;
 
-    uint32_t ranges_written = 0;
     uint64_t prev = 0;
     for (size_t i = 0; i < ranges_count; ++i) {
         Range *r = &ranges[i];
@@ -351,9 +355,7 @@ static uint32_t compress_small_ranges(uint8_t *packet, uint32_t packet_size, Ran
             break;
         }
         offset += bytes;
-        //printf("from: %"PRIu64", diff: %"PRIu64", bytes: %d\n", r->from, diff, (int) bytes);
 
-        //printf("compress_small_ranges %d, %d\n", i, (int) r->span);
         for (uint64_t j = 0; j < r->span; ++j) {
             diff = 1;
             int bytes = write_num(packet ? &packet[offset] : NULL, packet_size - offset, diff);
@@ -361,16 +363,11 @@ static uint32_t compress_small_ranges(uint8_t *packet, uint32_t packet_size, Ran
                 break;
             }
             offset += bytes;
-            //printf("diff: %"PRIu64", bytes: %d\n", diff, (int) bytes);
         }
 
-        ranges_written += 1;
         prev = r->from + r->span;
     }
 
-    //print_ranges2("compress_small_ranges", ranges, ranges_count);
-
-    //printf("compress_small_ranges end; ranges_written: %d, offset: %d\n", (int) ranges_written, (int) offset);
     return offset;
 }
 
@@ -391,35 +388,24 @@ static int decompress_small_ranges(Ranges *ranges, const uint8_t *packet, uint32
 
     uint64_t prev_end = 0;
 
-    uint32_t i = 0;
+    uint32_t count = 0;
     while (offset < packet_size) {
         uint64_t diff = 0;
         int bytes1 = read_num(&diff, &packet[offset], packet_size - offset);
         if (bytes1 == -1) {
             return -1;
         }
-
         offset += bytes1;
+        //printf("bytes1: %d, diff: %"PRIu64"\n", (int) bytes1);
 
-        if (i == 0) {
-            ranges_add(ranges, prev_end + diff, 0);
-            i += 1;
-        } else {
-            if (diff == 0) {
-                // ignore, we would two identical ranges
-                continue;
-            } else if (diff == 1) {
-                ranges->data[ranges->data_count - 1].span += 1;
-            } else {
-                ranges_add(ranges, prev_end + diff, 0);
-                i += 1;
-            }
-        }
+        ranges_add(ranges, prev_end + diff, 0);
 
+        count += 1;
         prev_end += diff;
     }
 
-    if (i != ranges_count) {
+    if (count != ranges_count) {
+        printf("invalid ranges count %d != %d\n", (int) count, (int) ranges_count);
         return -1;
     }
 
@@ -441,8 +427,8 @@ static int decompress_big_ranges(Ranges *ranges, const uint8_t *packet, uint32_t
     offset += bytes0;
 
     uint64_t prev_end = 0;
-    uint32_t i = 0;
-    while (offset < packet_size && i < ranges_count) {
+    uint32_t count = 0;
+    while (offset < packet_size && count < ranges_count) {
         uint64_t diff = 0;
         int bytes1 = read_num(&diff, &packet[offset], packet_size - offset);
         if (bytes1 == -1) {
@@ -450,7 +436,7 @@ static int decompress_big_ranges(Ranges *ranges, const uint8_t *packet, uint32_t
         }
         offset += bytes1;
 
-        //printf("decompress_big_ranges: from: %"PRIu64"\n", from);
+        //printf("decompress_big_ranges: from: %"PRIu64"\n", prev_end + diff);
 
         uint64_t span = 0;
         int bytes2 = read_num(&span, &packet[offset], packet_size - offset);
@@ -463,10 +449,10 @@ static int decompress_big_ranges(Ranges *ranges, const uint8_t *packet, uint32_t
         ranges_add(ranges, prev_end + diff, span);
 
         prev_end += diff + span;
-        i += 1;
+        count += 1;
     }
 
-    if (i != ranges_count) {
+    if (count != ranges_count) {
         return -1;
     }
 
@@ -556,7 +542,6 @@ int ranges_decompress(Ranges *ranges, const uint8_t *packet, uint32_t packet_siz
 {
     //printf("ranges_decompress start\n");
     size_t offset = 0;
-    uint32_t ranges_count = 0;
 
     int bytes1 = decompress_big_ranges(ranges, &packet[offset], packet_size - offset);
     if (bytes1 == -1) {
@@ -582,7 +567,7 @@ static int compress(uint8_t *packet, uint32_t packet_size, Ranges* ranges)
 
     uint32_t border_count = ranges->data_count;
     for (uint32_t i = 0; i < border_count; ++i) {
-        if (ranges->data[i].span <= 2) {
+        if (ranges->data[i].span == 0) {
             border_count = i;
             break;
         }
@@ -621,92 +606,72 @@ static int compress(uint8_t *packet, uint32_t packet_size, Ranges* ranges)
     return offset;
 }
 
-// calulate the amount of bytes saved when we remove the item with the biggest min_diff
-static int drop_ranges_estimate_bytes_saved(size_t packet_size, const Ranges *ranges, uint64_t merge_distance)
-{
-    //printf("# drop_ranges_estimate_bytes_saved begin\n");
-    if (ranges->data_count == 0) {
-        return 0;
-    }
-
-    // create copy
-    Ranges ranges_new;
-    ranges_init(&ranges_new);
-    ranges_add_all(&ranges_new, ranges);
-
-    // shrink copy
-    drop_ranges(&ranges_new, merge_distance);
-
-    int written_bytes = compress(NULL, UINT32_MAX, &ranges_new);
-    ranges_free(&ranges_new);
-
-    //printf("# drop_ranges_estimate_bytes_saved end\n");
-    return written_bytes;
-}
-
-static int merge_ranges_estimate_bytes_saved(size_t packet_size, const Ranges *ranges, uint64_t merge_distance)
-{
-    //printf("# merge_ranges_estimate_bytes_saved begin\n");
-    if (ranges->data_count == 0) {
-        return 0;
-    }
-
-    // create copy
-    Ranges ranges_new;
-    ranges_init(&ranges_new);
-    ranges_add_all(&ranges_new, ranges);
-
-    // shrink copy
-    merge_ranges(&ranges_new, merge_distance);
-
-    int bytes_written = compress(NULL, UINT32_MAX, &ranges_new);
-    ranges_free(&ranges_new);
-
-    //printf("# merge_ranges_estimate_bytes_saved end\n");
-    return bytes_written;
-}
-
-int ranges_compress(uint8_t *packet, size_t packet_size, Ranges *ranges)
+int ranges_compress(uint8_t *packet, uint32_t packet_size, Ranges *ranges)
 {
     // make sure that we have no overlapping ranges
-    merge_ranges(ranges, 0);
+    merge_ranges(ranges, 1);
 
     //print_ranges("ranges_compress:", ranges);
 
-    uint64_t distance = 1;
-
     // calculate the size if we had enough storage
     uint32_t current_size = compress(NULL, UINT32_MAX, ranges);
-    printf("current_size: %d\n", current_size);
+    //printf("current_size: %d\n", current_size);
 
+    Ranges drop_estimate;
+    Ranges merge_estimate;
+    ranges_init(&drop_estimate, ranges->data_count);
+    ranges_init(&merge_estimate, ranges->data_count);
+
+    uint64_t distance = 2;
     while (current_size > packet_size) {
-        // calculate next step
-        int drop_bytes = drop_ranges_estimate_bytes_saved(packet_size, ranges, distance);
-        int merge_bytes = merge_ranges_estimate_bytes_saved(packet_size, ranges, distance);
+        ranges_clear(&drop_estimate);
+        ranges_clear(&merge_estimate);
+        ranges_add_all(&drop_estimate, ranges);
+        ranges_add_all(&merge_estimate, ranges);
 
-        printf("distance: %"PRIu64", drop ranges: improve by %d bytes, merge ranges: improve by %d bytes ",
-                distance, current_size - drop_bytes, current_size - merge_bytes);
+        // dry run compression
+        drop_ranges(&drop_estimate, distance);
+        int drop_bytes = compress(NULL, UINT32_MAX, &drop_estimate);
+
+        // dry run compression
+        merge_ranges(&merge_estimate, distance);
+        int merge_bytes = compress(NULL, UINT32_MAX, &merge_estimate);
+
+        //printf("distance: %"PRIu64", drop ranges: improve by %d bytes, merge ranges: improve by %d bytes\n",
+        //        distance, current_size - drop_bytes, current_size - merge_bytes);
 
         if (drop_bytes >= 0 && ((merge_bytes >= 0 && drop_bytes < merge_bytes) || merge_bytes < 0)) {
-            printf("=> drop_ranges\n");
+            //printf("=> drop_ranges\n");
             drop_ranges(ranges, distance);
             current_size = drop_bytes;
         } else if (merge_bytes >= 0) {
-            printf("=> merge_ranges\n");
+            //printf("=> merge_ranges\n");
             merge_ranges(ranges, distance);
             current_size = merge_bytes;
         } else {
-            printf("=> increase distance\n");
+            //printf("=> increase distance\n");
         }
 
         distance *= 2;
     }
 
+    ranges_free(&drop_estimate);
+    ranges_free(&merge_estimate);
+
     // compress ranges
     int bytes = compress(packet, packet_size, ranges);
-    printf("bytes: %d, current_size: %d, packet_size: %d\n", bytes, current_size, packet_size);
+    //printf("bytes: %d, current_size: %"PRIu32", packet_size: %"PRIu32"\n", bytes, current_size, packet_size);
     assert(bytes == current_size);
     return bytes;
+}
+
+uint64_t ranges_span(const Ranges *ranges)
+{
+    uint64_t span = 0;
+    for (size_t i = 0; i < ranges->data_count; ++i) {
+        span += 1 + ranges->data[i].span;
+    }
+    return span;
 }
 
 const char *ranges_str(const Ranges *ranges)
@@ -716,12 +681,10 @@ const char *ranges_str(const Ranges *ranges)
     char *buf = strdurationbuf[++strdurationbuf_i % 4];
 
     buf[0] = 0;
-    int rc;
-    const char *fmt;
     for (size_t i = 0, written = 0; i < ranges->data_count; ++i) {
         Range *range = &ranges->data[i];
-        fmt = (written > 0) ? ", 0x%"PRIx64"+0x%"PRIx64"" : "0x%"PRIx64"+0x%"PRIx64"";
-        rc = snprintf(&buf[written], sizeof(strdurationbuf[0]) - written, fmt, range->from, range->span);
+        int rc = snprintf(&buf[written], sizeof(strdurationbuf[0]) - written,
+            "%s0x%"PRIx64"+%"PRIx64"",  i ? ", " : "", range->from, range->span);
         if (rc > 0) {
             written += rc;
         } else {
@@ -737,18 +700,23 @@ bool ranges_includes(const Ranges *ranges, uint64_t id)
 {
     for (size_t i = 0; i < ranges->data_count; ++i) {
         const Range *r = &ranges->data[i]; 
-        if (id >= r->from && id < r->from + r->span) {
+        if (id >= r->from && id <= r->from + r->span) {
             return true;
         }
     }
     return false;
 }
 
-void ranges_init(Ranges *ranges)
+void ranges_init(Ranges *ranges, size_t capacity_count)
 {
-    ranges->data = NULL;
+    if (capacity_count != 0) {
+        ranges->data = malloc(capacity_count * sizeof(Range));
+    } else {
+        ranges->data = NULL;
+    }
+
     ranges->data_count = 0;
-    ranges->data_capacity = 0;
+    ranges->data_capacity = capacity_count;
 }
 
 void ranges_clear(Ranges *ranges)
@@ -760,33 +728,94 @@ void ranges_free(Ranges *ranges)
 {
     if (ranges->data) {
         free(ranges->data);
+        ranges->data = NULL;
     }
-    ranges_init(ranges);
+    ranges->data_count = 0;
+    ranges->data_capacity = 0;
 }
 
 void ranges_add(Ranges *ranges, uint64_t from, uint64_t span)
 {
-    if (ranges->data) {
-        if (ranges->data_capacity == ranges->data_count) {
-            ranges->data_capacity *= 2;
-            ranges->data = (Range*) realloc(ranges->data, sizeof(Range) * ranges->data_capacity);
-        }
-    } else {
-        ranges->data_count = 0;
-        ranges->data_capacity = 1;
-        ranges->data = (Range*) malloc(sizeof(Range) * ranges->data_capacity);
-    }
-
-    ranges->data[ranges->data_count] = (Range) {
+    Range r = {
         .from = from,
         .span = span,
     };
-    ranges->data_count += 1;
+    Ranges rs = {
+        .data = &r,
+        .data_count = 1,
+        .data_capacity = 1,
+    };
+    ranges_add_all(ranges, &rs);
 }
 
 void ranges_add_all(Ranges *dst, const Ranges *src)
 {
-    for (size_t i = 0; i < src->data_count; ++i) {
-        ranges_add(dst, src->data[i].from, src->data[i].span);
+    size_t final_count = src->data_count + dst->data_count;
+    //assert(final_count <= dst->data_capacity);
+    if (dst->data_capacity < final_count) {
+        dst->data = realloc(dst->data, final_count * sizeof(Range));
+        dst->data_capacity = final_count;
     }
+    memcpy(&dst->data[dst->data_count], src->data, src->data_count * sizeof(Range));
+    dst->data_count = final_count;
+}
+
+static bool ranges_compare(const Ranges *rs1, const Ranges *rs2)
+{
+    if (rs1->data_count != rs2->data_count) {
+        return false;
+    }
+
+    for (size_t i = 0; i < rs1->data_count; ++i) {
+        const Range *r1 = &rs1->data[i];
+        const Range *r2 = &rs2->data[i];
+        if (r1->from != r2->from || r1->span != r2->span) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// check basic functionality
+bool ranges_sanity_test()
+{
+    Ranges ranges_in;
+    Ranges ranges_out;
+    ranges_init(&ranges_in, 0);
+    ranges_init(&ranges_out, 0);
+
+    ranges_add(&ranges_in, 12, 1);
+    ranges_add(&ranges_in, 12, 0);
+    ranges_add(&ranges_in, 13, 20);
+    ranges_add(&ranges_in, 20, 40);
+    ranges_add(&ranges_in, 17, 0);
+    ranges_add(&ranges_in, 10, 0);
+    ranges_add(&ranges_in, 15, 1);
+    ranges_add(&ranges_in, 11, 1);
+
+    uint8_t packet[80];
+    int bytes_written = ranges_compress(packet, sizeof(packet), &ranges_in);
+    int bytes_read = ranges_decompress(&ranges_out, packet, bytes_written);
+
+    //printf("bytes_written: %d, bytes_read: %d\n", (int) bytes_written, (int) bytes_read);
+
+    if (bytes_written != bytes_read
+            || bytes_written == -1
+            || bytes_read == -1) {
+        return false;
+    }
+
+    // make in and out comparable
+    merge_ranges(&ranges_in, 1);
+    merge_ranges(&ranges_out, 1);
+
+    //printf("ranges_in: %s\n", ranges_str(&ranges_in));
+    //printf("ranges_out: %s\n", ranges_str(&ranges_out));
+
+    if (!ranges_compare(&ranges_in, &ranges_out)) {
+        return false;
+    }
+
+    return true;
 }
