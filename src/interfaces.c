@@ -323,44 +323,46 @@ static void read_internal_l2(int events, int fd)
         return;
     }
 
-    ssize_t readlen = read(fd, begin, ETH_FRAME_LEN);
+    while (true) {
+        ssize_t readlen = read(fd, begin, ETH_FRAME_LEN);
 
-    if (readlen < 0 || readlen > ETH_FRAME_LEN) {
-        log_warning("recv(): %zd %s", readlen, strerror(errno));
-        return;
+        if (readlen == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // no more data
+            break;
+        }
+
+        struct interface *ifa = get_interface_by_fd(fd);
+
+        if (!is_valid_ifa(ifa)) {
+            log_error("recvfrom() on invalid interface %s", (ifa ? ifa->ifname : "???"));
+            break;
+        }
+
+        if (readlen < sizeof(struct ethhdr)) {
+            log_error("recvfrom() for %s returned %lld: %s",
+                (ifa ? ifa->ifname : "???"),
+                readlen,
+                (readlen < 0) ? strerror(errno) : "packet too small");
+            break;
+        }
+
+        struct ethhdr *eh = (struct ethhdr *) begin;
+
+        Address src_addr;
+        Address dst_addr;
+        Address rcv_addr;
+
+        init_macaddr(&src_addr, &eh->h_source, ifa->ifindex);
+        init_macaddr(&dst_addr, &eh->h_dest, ifa->ifindex);
+        init_macaddr(&rcv_addr, &ifa->ifmac, ifa->ifindex);
+
+        traffic_add_bytes_read(&src_addr, readlen);
+
+        uint8_t *payload = &begin[sizeof(struct ethhdr)];
+        size_t payload_len = readlen - sizeof(struct ethhdr);
+
+        gstate.protocol->ext_handler_l2(&rcv_addr, &src_addr, &dst_addr, payload, payload_len);
     }
-
-    struct interface *ifa = get_interface_by_fd(fd);
-
-    if (!is_valid_ifa(ifa)) {
-        log_error("recvfrom() on invalid interface %s", (ifa ? ifa->ifname : "???"));
-        return;
-    }
-
-    if (readlen < sizeof(struct ethhdr)) {
-        log_error("recvfrom() for %s returned %lld: %s",
-            (ifa ? ifa->ifname : "???"),
-            readlen,
-            (readlen < 0) ? strerror(errno) : "packet too small");
-        return;
-    }
-
-    struct ethhdr *eh = (struct ethhdr *) begin;
-
-    Address src_addr;
-    Address dst_addr;
-    Address rcv_addr;
-
-    init_macaddr(&src_addr, &eh->h_source, ifa->ifindex);
-    init_macaddr(&dst_addr, &eh->h_dest, ifa->ifindex);
-    init_macaddr(&rcv_addr, &ifa->ifmac, ifa->ifindex);
-
-    traffic_add_bytes_read(&src_addr, readlen);
-
-    uint8_t *payload = &begin[sizeof(struct ethhdr)];
-    size_t payload_len = readlen - sizeof(struct ethhdr);
-
-    gstate.protocol->ext_handler_l2(&rcv_addr, &src_addr, &dst_addr, payload, payload_len);
 }
 
 static bool send_internal_l2(struct interface *ifa, const uint8_t dst_addr[ETH_ALEN], const void* sendbuf, size_t sendlen)
@@ -493,19 +495,21 @@ static void read_internal_l3(int events, int fd)
 
     assert(fd == gstate.sock_udp);
 
-    socklen_t addr_len = sizeof(Address);
-    ssize_t readlen = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &src_addr, &addr_len);
-    //static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to);
+    while (true) {
+        socklen_t addr_len = sizeof(Address);
+        ssize_t readlen = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *) &src_addr, &addr_len);
+        //static ssize_t recv6_fromto(int fd, void *buf, size_t len, int flags, unsigned *ifindex, struct sockaddr_storage *from, struct sockaddr_storage *to);
 
-    if (readlen <= 0) {
-        log_error("recvfrom() for %s returned %lld: %s", str_addr(&src_addr), readlen, strerror(errno));
-        return;
+        if (readlen == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // no more data
+            break;
+        }
+
+        traffic_add_bytes_read(&src_addr, readlen);
+
+        assert(src_addr.family == AF_INET6 || src_addr.family == AF_INET);
+        gstate.protocol->ext_handler_l3(&src_addr, &buffer[0], readlen);
     }
-
-    traffic_add_bytes_read(&src_addr, readlen);
-
-    assert(src_addr.family == AF_INET6 || src_addr.family == AF_INET);
-    gstate.protocol->ext_handler_l3(&src_addr, &buffer[0], readlen);
 }
 
 void send_ucast_l3(const Address *addr, const void *data, size_t data_len)
