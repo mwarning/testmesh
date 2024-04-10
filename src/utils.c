@@ -257,24 +257,17 @@ bool address_equal(const Address *a, const Address *b)
     return 0 == memcmp(a, b, sizeof(Address));
 }
 
-void hex_dump(const char *desc, const void *buf, size_t buflen)
+bool hex_dump(char *dst, size_t dstlen, const void *buf, size_t buflen)
 {
     const uint8_t *pc = (const uint8_t*) buf;
+    size_t written = 0;
     uint8_t buff[17];
     size_t i;
 
-    // Output description if given.
-    if (desc != NULL) {
-        printf("%s:\n", desc);
-    }
-
     // Length checks.
     if (buflen == 0) {
-        printf("  ZERO LENGTH\n");
-        return;
-    } else if (buflen < 0) {
-        printf("  NEGATIVE LENGTH: %ld\n", buflen);
-        return;
+        written += snprintf(&dst[written], dstlen - written, "  ZERO LENGTH\n");
+        return true;
     }
 
     // Process every byte in the data.
@@ -283,15 +276,16 @@ void hex_dump(const char *desc, const void *buf, size_t buflen)
 
         if ((i % 16) == 0) {
             // Don't print ASCII buffer for the "zeroth" line.
-            if (i != 0)
-                printf("  %s\n", buff);
+            if (i != 0) {
+                written += snprintf(&dst[written], dstlen - written, "  %s\n", buff);
+            }
 
             // Output the offset.
-            printf("  %04lx ", i);
+            written += snprintf(&dst[written], dstlen - written, "  %04lx ", i);
         }
 
         // Now the hex code for the specific character.
-        printf(" %02x", pc[i]);
+        written += snprintf(&dst[written], dstlen - written, " %02x", pc[i]);
 
         // And buffer a printable ASCII character for later.
         if ((pc[i] < 0x20) || (pc[i] > 0x7e)) { // isprint() may be better.
@@ -304,12 +298,14 @@ void hex_dump(const char *desc, const void *buf, size_t buflen)
 
     // Pad out last line if not exactly 16 characters.
     while ((i % 16) != 0) {
-        printf("   ");
+        written += snprintf(&dst[written], dstlen - written, "   ");
         i++;
     }
 
     // And print the final ASCII buffer.
-    printf("  %s\n", buff);
+    written += snprintf(&dst[written], dstlen - written, "  %s\n", buff);
+
+    return written == dstlen;
 }
 
 // add source and destination and ports to create a connection fingerprint / stream id

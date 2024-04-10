@@ -55,7 +55,7 @@ int setargs(const char **argv, int argv_size, char *args);
 bool match(const char *argv[], const char *pattern); // matches a single argument
 int levenshtein(const uint8_t *s1, size_t s1len, const uint8_t *s2, size_t s2len);
 uint32_t adler32(const void *buf, size_t buflen); // a hash method
-void hex_dump(const char *desc, const void *buf, size_t buflen);
+bool hex_dump(char *dst, size_t dstlen, const void *buf, size_t buflen);
 ssize_t bytes_random(void *buffer, size_t size); // get random bytes
 uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen); // get unique id for IP connection pair
 bool is_newer_seqnum(uint16_t cur, uint16_t new);
