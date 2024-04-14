@@ -38,6 +38,7 @@ enum {
 };
 
 // memory "efficient" address representation
+// for inside the packet
 typedef struct {
     uint8_t type;
     uint16_t port; // only needed for IP address
@@ -127,7 +128,7 @@ static const Addr *address2addr(const Address *address)
             addr.type = ADDR_TYPE_IPV6;
             addr.port = ntohs(address->ip6.sin6_port);
             memcpy(&addr.addr.in6, &address->ip6.sin6_addr, 16);
-            if (addr_is_link_local((struct sockaddr*) &address->ip6.sin6_addr)) {
+            if (addr_is_linklocal((struct sockaddr*) &address->ip6.sin6_addr)) {
                 addr.ifindex = ntohs(address->ip6.sin6_scope_id);
             }
             return &addr;
@@ -157,7 +158,7 @@ static const Address *addr2address(const Addr *addr)
             address.family = AF_INET6;
             address.ip6.sin6_port = addr->port;
             memcpy(&address.ip6.sin6_addr, &addr->addr.in6, 16);
-            if (addr_is_link_local((struct sockaddr*) &address.ip6)) {
+            if (addr_is_linklocal((struct sockaddr*) &address.ip6)) {
                 address.ip6.sin6_scope_id = htons(addr->ifindex);
             }
             return &address;
