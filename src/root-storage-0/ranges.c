@@ -261,29 +261,6 @@ static int cmp_range_span(const void* _a, const void *_b)
     }
 }
 
-static void print_ranges(const char *context, Ranges *ranges)
-{
-    printf("########\n");
-    printf("%s\n", context);
-    for (int i = 0; i < ranges->data_count; ++i) {
-        printf("[%03d] from %"PRIu64" + %"PRIu64"\n", i, ranges->data[i].from, ranges->data[i].span);
-    }
-    printf("ranges_count: %"PRIu64"\n", ranges->data_count);
-    printf("########\n");
-}
-
-/*
-static void print_ranges2(const char *context, Range *ranges_data, uint32_t ranges_count)
-{
-    Ranges ranges = {
-        .data = ranges_data,
-        .data_count = ranges_count,
-        .data_capacity = 0,
-    };
-    print_ranges(context, &ranges);
-}
-*/
-
 static int compress_big_ranges(uint8_t *packet, uint32_t packet_size, Range *ranges, uint32_t ranges_count)
 {
     //printf("compress_big_ranges start: ranges_count: %d\n", (int) ranges_count);
@@ -608,7 +585,7 @@ static int compress(uint8_t *packet, uint32_t packet_size, Ranges* ranges)
 
 int ranges_compress(uint8_t *packet, uint32_t packet_size, Ranges *ranges)
 {
-    // make sure that we have no overlapping ranges
+    // merge touching (1) and overlapping (0) ranges
     merge_ranges(ranges, 1);
 
     //print_ranges("ranges_compress:", ranges);
@@ -684,7 +661,7 @@ const char *ranges_str(const Ranges *ranges)
     for (size_t i = 0, written = 0; i < ranges->data_count; ++i) {
         Range *range = &ranges->data[i];
         int rc = snprintf(&buf[written], sizeof(strdurationbuf[0]) - written,
-            "%s0x%"PRIx64"+%"PRIx64"",  i ? ", " : "", range->from, range->span);
+            "%s0x%"PRIx64"+%"PRIx64"",  (i ? ", " : ""), range->from, range->span);
         if (rc > 0) {
             written += rc;
         } else {
