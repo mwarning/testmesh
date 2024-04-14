@@ -27,6 +27,9 @@
 #include "tun.h"
 #include "traffic.h"
 
+/*
+* Provide an interactive console via stdin and unix socket.
+*/
 
 // forward log output over (a single) remote connection
 static int g_console_socket = -1;
@@ -241,16 +244,13 @@ void console_client_handler(int rc, int clientsock)
 
 void console_server_handler(int rc, int serversock)
 {
-    socklen_t addrlen;
-    int clientsock;
-    struct sockaddr_un addr;
-
     if (rc <= 0) {
         return;
     }
 
-    addrlen = sizeof(addr);
-    clientsock = accept(serversock, (struct sockaddr *) &addr, &addrlen);
+    struct sockaddr_un addr = {0};
+    socklen_t addrlen = sizeof(addr);
+    int clientsock = accept(serversock, (struct sockaddr *) &addr, &addrlen);
     if (clientsock < 0) {
         log_error("accept(): %s", strerror(errno));
         return;
