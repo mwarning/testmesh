@@ -405,8 +405,8 @@ static void nodes_timeout()
             const uint32_t age2 = time_now - hop->time_updated;
             if (age2 > (1000 * HOP_TIMEOUT_MIN_SECONDS)
                 && ((age2 > (1000 * HOP_TIMEOUT_MAX_SECONDS)) || (age1 < age2))) {
-                log_debug("timeout node 0x%08x, hop %s (age1: %s, age2: %s)",
-                    node->id, str_addr(&hop->next_hop_addr), str_time(age1), str_time(age2));
+                log_debug("timeout hop %s for node 0x%08x (age1: %s, age2: %s)",
+                    str_addr(&hop->next_hop_addr), node->id,  str_time(age1), str_time(age2));
                 HASH_DEL(node->hops, hop);
 
                 if (hop->hop_count == 1) {
