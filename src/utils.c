@@ -677,6 +677,61 @@ uint32_t addr_cmp_subnet(const struct sockaddr *addr1, const struct sockaddr *ad
     return common_bits(p1, p2, subnet_len);
 }
 
+/*
+Highjack IPv6 multicast scope definition:
+0x0     reserved
+0x1     interface-local     Interface-local scope spans only a single interface on a node, and is useful only for loopback transmission of multicast.
+0x2     link-local  Link-local scope spans the same topological region as the corresponding unicast scope.
+0x3     realm-local     Realm-local scope is defined as larger than link-local, automatically determined by network topology and must not be larger than the following scopes.[15]
+0x4     admin-local     Admin-local scope is the smallest scope that must be administratively configured, i.e., not automatically derived from physical connectivity or other, non-multicast-related configuration.
+0x5     site-local  Site-local scope is intended to span a single site belonging to an organisation.
+0x8     organization-local  Organization-local scope is intended to span all sites belonging to a single organization.
+0xe     global  Global scope spans all reachable nodes on the internet - it is unbounded.
+0xf     reserved
+For unicast addresses, two scopes are defined: link-local and global.
+
+https://en.wikipedia.org/wiki/IPv6_address#Address_scopes
+*/
+
+uint16_t address_scope(const Address *addr)
+{
+    switch (addr->family) {
+    case AF_MAC:
+        return 0x1;
+    case AF_INET: {
+        const struct in_addr *a = &((const struct sockaddr_in *) addr)->sin_addr;
+        if (addr_is_linklocal_ipv4(a)) {
+            return 0x02;
+        }
+        const uint8_t *address = (const uint8_t*) &addr->ip4.sin_addr;
+        if ((address[0] == 192 && address[0] == 168) || (address[0] == 10)) {
+            return 0x03;
+        } else {
+            return 0x0E;
+        }
+    }
+    case AF_INET6: {
+        const struct in6_addr *a = &((const struct sockaddr_in6 *) addr)->sin6_addr;
+        if (addr_is_linklocal_ipv6(a)) {
+            return 0x02;
+        }
+        return 0x01;
+        //sin6_addr.s6_addr[]
+/*
+        //const uint8_t *address = (const uint8_t*) &addr->ip6.sin6_addr;
+        return (a[0] == 0xFF) ||
+            (a[0] == 0xFE && (a[1] & 0xC0) == 0x80) ||
+            (memcmp(a, zeroes, 15) == 0 &&
+            (a[15] == 0 || a[15] == 1)) ||
+            (memcmp(a, v4prefix, 12) == 0);
+*/
+    }
+    default:
+        log_error("address_scope() invalid address");
+        exit(1);
+    }
+}
+
 bool addr_is_localhost(const struct sockaddr *addr)
 {
     //return (memcmp(addr, &in6addr_loopback, 16) == 0);
