@@ -55,7 +55,6 @@ enum FLAGS {
     FLAG_IS_DESTINATION = 4,
 };
 
-// RREP2 currently hands out outdated paths
 #define ENABLE_SEND_RREP2 true
 
 #define HOP_TIMEOUT_MS (8 * 1000)
@@ -75,7 +74,7 @@ typedef struct {
     uint32_t id;
     uint64_t time_created;
     uint64_t time_updated;
-    uint32_t seq_num; // sequence numbers are 16bit!, UINT32_MAX => not set
+    uint32_t seq_num; // sequence numbers are 16bit, use UINT32_MAX for unknown value
     Hop *hops;
     UT_hash_handle hh;
 } Node;
@@ -410,23 +409,13 @@ static void neighbors_periodic()
     * 1. directly after a DATA packet is send to them and no DATA reply was seen
     * 2. after extended periods (check with exponential backoff)
     */
-    // TODO: expect presence detection on root
     Neighbor *neighbor;
     Neighbor *tmp;
     HASH_ITER(hh, g_neighbors, neighbor, tmp) {
-        if (
-            //((neighbor->time_last_recv - neighbor->time_created) <= (gstate.time_now - neighbor->time_last_recv))
-            //||
-            //(neighbor->time_send_DATA != 0) // is set
-            (neighbor->time_updated < gstate.time_now) && (gstate.time_now - neighbor->time_updated) > HOP_TIMEOUT_MS // is set
-            //&& ((neighbor->time_send_DATA + 1000) < gstate.time_now) // data packet >1s ago
-            //&& (neighbor->time_send_DATA > (neighbor->packets_received_time + 2 * gstate.time_resolution))) // no response for last data packet
-        )
-        {
-            //log_debug("time_send_DATA: %d, packets_received_time: %d", (int) neighbor->time_send_DATA, (int) neighbor->packets_received_time);
-
+        if ((neighbor->time_updated < gstate.time_now)
+                && (gstate.time_now - neighbor->time_updated) > HOP_TIMEOUT_MS) {
             // we have send a DATA packet and have not seen a DATA back or PONG back => send PING
-            if (neighbor->pinged > 2) { //} MIN(2, neighbor->packets_received_count)) {
+            if (neighbor->pinged > 2) {
                 log_debug("neighbors_periodic() remove neighbor %s", str_addr(&neighbor->address));
                 neighbors_removed(neighbor);
                 HASH_DEL(g_neighbors, neighbor);
@@ -996,11 +985,6 @@ static uint64_t next_ROOT_STORE_periodic()
         log_error("next_ROOT_STORE_periodic() => we are root");
         return 0;
     }
-/*
-    uint64_t interval = root->time_root_store_send_interval;
-    interval -= (interval / 10); // 10% earlier
-    return root->time_root_store_send + interval;
-    */
 }
 
 /*
@@ -1024,11 +1008,9 @@ static void send_ROOT_STORE_periodic()
 
     //log_debug("send_ROOT_STORE_periodic check");
     if (parent) {
-        // root node has no parent!
-        // merge all storage items and try to fit them in on packet
-
-        //if (next_ROOT_STORE_periodic() <= gstate.time_now) {
-        if (parent->root.store_send_time == 0 || (parent->root.store_send_time + 1000) < gstate.time_now) {
+        // we have a parent => we are not root
+        if (parent->root.store_send_time == 0
+                || (parent->root.store_send_time + (HOP_TIMEOUT_MS / 2)) < gstate.time_now) {
             parent->root.store_send_time = gstate.time_now;
 
             ROOT_STORE p = {
@@ -1036,9 +1018,7 @@ static void send_ROOT_STORE_periodic()
             };
 
             Ranges ranges;
-            ranges_init(&ranges, 0); //count_ranges(parent));
-            //log_debug("send_ROOT_STORE_periodic: storage");
-            //print_storage();
+            ranges_init(&ranges, 0);
 
             // add own id
             ranges_add(&ranges, gstate.own_id, 0);
