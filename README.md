@@ -1,11 +1,11 @@
 # Testmesh - Basic Mesh Routing Protocols
 
 A code base to quickly implement mesh routing protocols. A collection of basic protocols have been implemented already.
-Included is also a OpenWrt package that is ready to be used in real networks, albeit not being production ready.
+Included is also a OpenWrt package that is ready to be used in real networks, albeit not being production quality.
 
-The goal of this project is to help to develop better mesh routing protocols, so that community networks such as Freifunk can scale better.
+The goal of this project is to help to develop better mesh routing protocols, so that community networks such as [Freifunk](https://freifunk.net) scale better.
 
-Note: These implementations
+Note: These implementations...
 * do not adhere to any technical publication
 * do not care about byte ordering (Endianness)
 * are single threaded for simplicity (but use non-blocking I/O)
@@ -106,19 +106,19 @@ $ ./build/testmesh -h
 Usage: testmesh -i eth0 -i wlan0
 
   --protocol,-p <protocol>        Select routing protocol
-  --daemon,-d                     Run as daemon
+  --daemon,-d                     Run as daemon in background
   --interface,-i <interface>      Limit to given interfaces
   --find-interfaces [on/off/auto] Find and add interfaces automatically (default: off)
   --own-id <id>                   Identifier of this node (default: <random>)
   --gateway-id <id>               Identifier of the gateway node (default: <none>)
-  --peer <address>                Add a peer manually by address
+  --config <file>                 Configuration file (default: <none>).
   --control,-c <path>             Control socket to connect to a daemon
   --tun-name <ifname>             Network entry interface, use none to disable (default: tun0)
   --tun-setup <on/off>            Auto configure entry interface with IP address (default: on)
-  --ether-type <hex>              Ethernet type (default: 88B5)
+  --ether-type <hex>              Ethernet type for layer-2 packets (default: 0x88B5)
   --log-file,-lf <path>           Write log output to file
-  --log-level,-ll <level>         Log level. From 0 to 6 or by name (Default: 3).
-  --log-time,-lt                  Add time stamps to log output.
+  --log-level,-ll <level>         Log level: mute, error, warning, info, verbose, debug, trace (default: info)
+  --log-time,-lt                  Add timestamps to logging output
   --disable-stdin                 Disable interactive console on startup
   --enable-ipv4,-4 <on/off>       Enable IPv4 (default: off)
   --enable-ipv6,-6 <on/off>       Enable IPv6 (default: on)
