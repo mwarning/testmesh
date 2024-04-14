@@ -23,6 +23,7 @@
 #define BLOOM_K      2  // number of hash functions
 
 #define TIMEOUT_ENTRY_SEC 60
+#define BLOOM_LIMIT 50  // limit for the bloom filter (in percent)
 
 enum {
     TYPE_DATA,
