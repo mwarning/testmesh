@@ -403,9 +403,6 @@ static size_t get_RREQ_size(const RREQ *p)
 // send a RREQ as broadcast
 static void send_RREQ(const RREQ* rreq)
 {
-    //log_debug("RREQ: entries_count: %u", rreq->entries_count);
-    print_RREQ(rreq);
-
     InterfaceState *ifstate;
     InterfaceState *tmp;
     HASH_ITER(hh, g_ifstates, ifstate, tmp) {
@@ -418,9 +415,6 @@ static void send_RREQ(const RREQ* rreq)
             size_t size = get_RREQ_size(rreq);
             send_bcast_l2(ifstate->ifindex, rreq, size);
             record_traffic(&ifstate->broadcast_traffic, size, 0);
-
-            // for statistics only
-            g_broadcast_send_counter += 1;
         } else {
             log_debug("RREQ: is not needed => drop");
         }
@@ -607,7 +601,6 @@ static void periodic_handler()
 {
     neighbors_periodic();
     nodes_periodic();
-    //traffic_periodic();
     send_rreq2_periodic();
 }
 
@@ -961,7 +954,6 @@ static void handle_PING(const Address *rcv, const Address *src, const Address *d
         //log_debug("PING: for me => send pong");
         PONG pong = {
             .type = TYPE_PONG,
-            //.seq_num = g_sequence_number++,
         };
         send_ucast_l2_wrapper(src, &pong, sizeof(pong));
     //} else {
