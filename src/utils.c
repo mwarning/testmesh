@@ -19,6 +19,33 @@
 #include "utils.h"
 
 
+int decrease_ip_ttl(const void *data, size_t length)
+{
+    uint8_t *buf = (uint8_t*) data;
+
+    if (buf && length > 0) {
+        uint8_t ip_version = (buf[0] >> 4) & 0x0f;
+
+        if (ip_version == 4 && length >= 20) {
+            uint8_t ttl = buf[8];
+            if (ttl > 0) {
+                ttl -= 1;
+            }
+            buf[8] = ttl;
+            return ttl;
+        } else if (ip_version == 6 && length >= 44) {
+            uint8_t hop_limit = buf[7];
+            if (hop_limit > 0) {
+                hop_limit -= 1;
+            }
+            buf[7] = hop_limit;
+            return hop_limit;
+        }
+    }
+
+    return -1;
+}
+
 char *bytes_to_base16(char dst[], size_t dstsize, const uint8_t src[], size_t srcsize)
 {
     static const char hexchars[16] = "0123456789abcdef";
@@ -238,13 +265,19 @@ bool address_is_broadcast(const Address *addr)
         return 0 == memcmp(&addr->mac.addr, &bmac[0], sizeof(bmac));
     case AF_INET6:
         // there are no broadcasts in IPv6
-        return 0;
+        return false;
     case AF_INET:
         return (ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr) & 0xff) == 0xff;
     default:
         log_error("address_is_broadcast() invalid address");
         exit(1);
     }
+}
+
+bool address_is_null(const Address *addr)
+{
+    static const Address null_address = {0};
+    return 0 == memcmp(&null_address, addr, sizeof(Address));
 }
 
 bool address_is_unicast(const Address *addr)
@@ -328,6 +361,7 @@ uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen)
             // TCP or UDP
             uint16_t sport = *((const uint16_t*) &buf[20]);
             uint16_t dport = *((const uint16_t*) &buf[22]);
+            // create hash
             return id ^ (sport + (((uint32_t) dport) << 16));
         } else {
             return id;
@@ -343,6 +377,7 @@ uint32_t get_ip_connection_fingerprint(const uint8_t *buf, size_t buflen)
             // TCP or UDP
             uint16_t sport = *((const uint16_t*) &buf[40]);
             uint16_t dport = *((const uint16_t*) &buf[42]);
+            // create hash
             return id ^ (sport + (((uint32_t) dport) << 16));
         } else {
             return id;
@@ -467,7 +502,7 @@ const char *str_time(uint64_t ms)
 const char *str_duration(uint64_t from_ms, uint64_t to_ms)
 {
     if (from_ms == 0 || to_ms == 0) {
-        return "-";
+        return "?";
     }
 
     if (from_ms <= to_ms) {
@@ -548,12 +583,12 @@ const char *str_addr(const Address *addr)
     }
 }
 
-static bool addr_is_link_local_ipv4(const struct in_addr *addr)
+static bool addr_is_linklocal_ipv4(const struct in_addr *addr)
 {
     return ((addr->s_addr & 0x0000ffff) == 0x0000fea9);
 }
 
-static bool addr_is_link_local_ipv6(const struct in6_addr *addr)
+static bool addr_is_linklocal_ipv6(const struct in6_addr *addr)
 {
     return (addr->s6_addr[0] == 0xfe) && ((addr->s6_addr[1] & 0xC0) == 0x80);
 }
@@ -562,12 +597,12 @@ uint32_t address_ifindex(const Address *addr)
 {
     switch (addr->family) {
     case AF_INET6:
-        if (addr_is_link_local_ipv6(&addr->ip6.sin6_addr)) {
+        if (addr_is_linklocal_ipv6(&addr->ip6.sin6_addr)) {
             return addr->ip6.sin6_flowinfo;
         }
         return 0;
     case AF_INET:
-        if (addr_is_link_local_ipv4(&addr->ip4.sin_addr)) {
+        if (addr_is_linklocal_ipv4(&addr->ip4.sin_addr)) {
             return 0; // no interface available for IPv4?
         }
         return 0;
@@ -670,19 +705,18 @@ bool addr_is_multicast(const struct sockaddr *addr)
     }
 }
 
-bool addr_is_link_local(const struct sockaddr *addr)
+bool addr_is_linklocal(const struct sockaddr *addr)
 {
     switch (addr->sa_family) {
     case AF_INET: {
         const struct in_addr *a = &((const struct sockaddr_in *) addr)->sin_addr;
-        return addr_is_link_local_ipv4(a);
+        return addr_is_linklocal_ipv4(a);
     }
     case AF_INET6: {
         const struct in6_addr *a = &((const struct sockaddr_in6 *) addr)->sin6_addr;
-        return addr_is_link_local_ipv6(a);
+        return addr_is_linklocal_ipv6(a);
     }
     default:
-        log_error("addr_is_link_local not implemented for protocol");
         return false;
     }
 }

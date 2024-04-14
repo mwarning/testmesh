@@ -52,6 +52,7 @@ typedef struct {
 const option_t *find_option(const option_t options[], const char name[]);
 int setargs(const char **argv, int argv_size, char *args);
 
+int decrease_ip_ttl(const void *data, size_t length);
 bool match(const char *argv[], const char *pattern); // matches a single argument
 int levenshtein(const uint8_t *s1, size_t s1len, const uint8_t *s2, size_t s2len);
 uint32_t adler32(const void *buf, size_t buflen); // a hash method
@@ -65,6 +66,8 @@ char *bytes_to_base16(char dst[], size_t dstsize, const uint8_t src[], size_t sr
 uint64_t time_millis_now();
 uint32_t time_millis_resolution();
 
+uint16_t address_scope(const Address *addr);
+bool address_is_null(const Address *addr);
 bool address_is_unicast(const Address *addr);
 bool address_is_multicast(const Address *addr);
 bool address_is_broadcast(const Address *addr);
@@ -90,7 +93,7 @@ const char *str_in6(const struct in6_addr *addr);
 uint32_t addr_cmp_subnet(const struct sockaddr *addr1, const struct sockaddr *addr2, uint32_t subnet_len);
 bool addr_is_localhost(const struct sockaddr *addr);
 bool addr_is_multicast(const struct sockaddr *addr);
-bool addr_is_link_local(const struct sockaddr *addr);
+bool addr_is_linklocal(const struct sockaddr *addr);
 bool addr_parse(struct sockaddr *addr, const char full_addr_str[], const char default_port[], uint32_t af);
 uint16_t addr_port_get(const struct sockaddr *addr);
 bool addr_port_set(struct sockaddr *addr, uint16_t port);
