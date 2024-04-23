@@ -446,7 +446,7 @@ static void remove_range(Ranges *ranges, size_t index)
     ranges->data_count -= 1;
 }
 
-static uint32_t merge_ranges(Ranges *ranges, uint64_t distance)
+uint32_t ranges_merge(Ranges *ranges, uint64_t distance)
 {
     qsort(ranges->data, ranges->data_count, sizeof(Range), &cmp_range_from);
 
@@ -586,7 +586,7 @@ static int compress(uint8_t *packet, uint32_t packet_size, Ranges* ranges)
 int ranges_compress(uint8_t *packet, uint32_t packet_size, Ranges *ranges)
 {
     // merge touching (1) and overlapping (0) ranges
-    merge_ranges(ranges, 1);
+    ranges_merge(ranges, 1);
 
     //print_ranges("ranges_compress:", ranges);
 
@@ -594,10 +594,8 @@ int ranges_compress(uint8_t *packet, uint32_t packet_size, Ranges *ranges)
     uint32_t current_size = compress(NULL, UINT32_MAX, ranges);
     //printf("current_size: %d\n", current_size);
 
-    Ranges drop_estimate;
-    Ranges merge_estimate;
-    ranges_init(&drop_estimate, ranges->data_count);
-    ranges_init(&merge_estimate, ranges->data_count);
+    Ranges drop_estimate = {0};
+    Ranges merge_estimate = {0};
 
     uint64_t distance = 2;
     while (current_size > packet_size) {
@@ -611,7 +609,7 @@ int ranges_compress(uint8_t *packet, uint32_t packet_size, Ranges *ranges)
         int drop_bytes = compress(NULL, UINT32_MAX, &drop_estimate);
 
         // dry run compression
-        merge_ranges(&merge_estimate, distance);
+        ranges_merge(&merge_estimate, distance);
         int merge_bytes = compress(NULL, UINT32_MAX, &merge_estimate);
 
         //printf("distance: %"PRIu64", drop ranges: improve by %d bytes, merge ranges: improve by %d bytes\n",
@@ -622,8 +620,8 @@ int ranges_compress(uint8_t *packet, uint32_t packet_size, Ranges *ranges)
             drop_ranges(ranges, distance);
             current_size = drop_bytes;
         } else if (merge_bytes >= 0) {
-            //printf("=> merge_ranges\n");
-            merge_ranges(ranges, distance);
+            //printf("=> ranges_merge\n");
+            ranges_merge(ranges, distance);
             current_size = merge_bytes;
         } else {
             //printf("=> increase distance\n");
@@ -673,27 +671,52 @@ const char *ranges_str(const Ranges *ranges)
     return buf;
 }
 
-bool ranges_includes(const Ranges *ranges, uint64_t id)
+bool ranges_contains_id(const Ranges *ranges, uint64_t id)
 {
+    Range range = {
+        .from = id,
+        .span = 0,
+    };
+    return ranges_contains_range(ranges, &range);
+}
+
+bool ranges_contains_range(const Ranges *ranges, const Range *range)
+{
+    uint64_t from = range->from;
+    uint64_t to = from + range->span;
     for (size_t i = 0; i < ranges->data_count; ++i) {
-        const Range *r = &ranges->data[i]; 
-        if (id >= r->from && id <= r->from + r->span) {
+        const Range *r = &ranges->data[i];
+        if ((from >= r->from) && (to <= (r->from + r->span))) {
             return true;
         }
     }
     return false;
 }
 
-void ranges_init(Ranges *ranges, size_t capacity_count)
+bool ranges_contains_ranges(const Ranges *rs1, const Ranges *rs2)
 {
-    if (capacity_count != 0) {
-        ranges->data = malloc(capacity_count * sizeof(Range));
-    } else {
-        ranges->data = NULL;
+    for (size_t i = 0; i < rs2->data_count; ++i) {
+        if (!ranges_contains_range(rs1, &rs2->data[i])) {
+            return false;
+        }
     }
+    return false;
+}
 
-    ranges->data_count = 0;
-    ranges->data_capacity = capacity_count;
+bool ranges_same(const Ranges *r1, const Ranges *r2)
+{
+    if (r1->data_count == r2->data_count) {
+        return (0 == memcmp(r1->data, r2->data, r1->data_count * sizeof(Range)));
+    } else {
+        return false;
+    }
+}
+
+void ranges_swap(Ranges *r1, Ranges *r2)
+{
+    Ranges tmp = *r1;
+    *r1 = *r2;
+    *r2 = tmp;
 }
 
 void ranges_clear(Ranges *ranges)
@@ -757,10 +780,8 @@ static bool ranges_compare(const Ranges *rs1, const Ranges *rs2)
 // check basic functionality
 bool ranges_sanity_test()
 {
-    Ranges ranges_in;
-    Ranges ranges_out;
-    ranges_init(&ranges_in, 0);
-    ranges_init(&ranges_out, 0);
+    Ranges ranges_in = {0};
+    Ranges ranges_out = {0};
 
     ranges_add(&ranges_in, 12, 1);
     ranges_add(&ranges_in, 12, 0);
@@ -784,8 +805,8 @@ bool ranges_sanity_test()
     }
 
     // make in and out comparable
-    merge_ranges(&ranges_in, 1);
-    merge_ranges(&ranges_out, 1);
+    ranges_merge(&ranges_in, 1);
+    ranges_merge(&ranges_out, 1);
 
     //printf("ranges_in: %s\n", ranges_str(&ranges_in));
     //printf("ranges_out: %s\n", ranges_str(&ranges_out));

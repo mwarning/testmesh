@@ -34,11 +34,17 @@ typedef struct {
 void ranges_add(Ranges *ranges, uint64_t from, uint64_t span);
 void ranges_add_all(Ranges *dst, const Ranges *src);
 
-bool ranges_includes(const Ranges *ranges, uint64_t id);
+bool ranges_contains_id(const Ranges *ranges, uint64_t id);
+bool ranges_contains_range(const Ranges *ranges, const Range *range);
+// check if ranges2 <= ranges1, assume both are sorted and merged with distance >= 1
+bool ranges_contains_ranges(const Ranges *ranges1, const Ranges *ranges2);
+
 const char *ranges_str(const Ranges *ranges);
 uint64_t ranges_span(const Ranges *ranges);
 
-void ranges_init(Ranges *ranges, size_t capacity_count);
+uint32_t ranges_merge(Ranges *ranges, uint64_t distance);
+void ranges_swap(Ranges *r1, Ranges *r2);
+bool ranges_same(const Ranges *r1, const Ranges *r2);
 void ranges_clear(Ranges *ranges);
 void ranges_free(Ranges *ranges);
 bool ranges_sanity_test();
