@@ -226,6 +226,7 @@ int main(int argc, char *argv[])
             log_error("Cannot create random identifier.");
             return EXIT_FAILURE;
         }
+        gstate.own_id_set = true;
     }
 
     if (g_protocols_len == 0) {
@@ -251,14 +252,12 @@ int main(int argc, char *argv[])
 
     log_info("Protocol:       %s", gstate.protocol->name);
 
-    if (gstate.own_id) {
+    if (gstate.own_id_set) {
         log_info("Own ID:         0x%08x", gstate.own_id);
     }
 
     if (gstate.gateway_id_set) {
         log_info("Gateway ID:     0x%08x", gstate.gateway_id);
-    } else {
-        log_info("Gateway ID:     none");
     }
 
     if (gstate.tun_name) {
