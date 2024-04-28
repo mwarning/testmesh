@@ -26,7 +26,7 @@
 struct state gstate = {
     .af = AF_UNSPEC,
     .protocol = NULL,
-    .do_fork = 0,
+    .do_fork = false,
     .time_now = 0,
     .time_started = 0,
     .sock_help = -1,
@@ -39,20 +39,20 @@ struct state gstate = {
     .find_interfaces = FIND_INTERFACES_OFF,
 
     .gateway_id = 0,
-    .gateway_id_set = 0,
+    .gateway_id_set = false,
     .own_id = 0,
-    .own_id_set = 0,
+    .own_id_set = false,
 
     .is_running = 1,
     .control_socket_path = NULL,
-    .disable_stdin = 0,
+    .disable_stdin = false,
 #ifdef MULTICAST
     .mcast_addr = {0},
 #endif
     .ucast_addr = {0},
 
-    .enable_ipv4 = 0,
-    .enable_ipv6 = 1,
+    .enable_ipv4 = false,
+    .enable_ipv6 = true,
 
     .tun_name = "tun0",
     .tun_fd = -1,
@@ -60,11 +60,11 @@ struct state gstate = {
     .tun_setup = 1, // auto configure IP address/route
     .tun_setup_ipv4_mtu = 1400, // only used if tun IPv4 setup is enabled
 
-    .log_to_syslog = 0,
+    .log_to_syslog = false,
     .log_to_file = NULL,
-    .log_to_terminal = 1, // disabled when running as daemon
-    .log_to_socket = 1, // output log via domain socket
-    .log_time = 0, // log with timestamp
+    .log_to_terminal = true, // disabled when running as daemon
+    .log_to_socket = true, // output log via domain socket
+    .log_time = false, // log with timestamp
     .log_level = 3,
 };
 
