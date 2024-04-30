@@ -56,7 +56,7 @@ enum FLAGS {
 };
 
 #define ENABLE_SEND_RREP2 true
-#define ENABLE_OPTIMIZED_ROOT_CREATE false // TOOD: use, but if we do not send often, then we might time out
+#define ENABLE_OPTIMIZED_ROOT_CREATE false
 #define ENABLE_OPTIMIZED_ROOT_STORE true
 
 #define HOP_TIMEOUT_MS (8 * 1000)
@@ -145,14 +145,11 @@ typedef struct Peer {
 typedef struct {
     uint32_t ifindex;
 
-//    Neighbor *neighbors;
-
     // We need to forward a broadcast (RREQ) if a neighbor uses us a source.
     uint64_t recv_own_broadcast_time;
     Address recv_own_broadcast_address;
 
-    uint64_t parent_changed_time;
-    //uint64_t recv_foreign_broadcast_time;
+    uint64_t neighborhood_changed_time;
     uint64_t send_broadcast_time;
 
     // TODO: use
@@ -258,7 +255,7 @@ static Peer *g_peers = NULL;
 static uint16_t g_sequence_number = 0;
 static IFState *g_ifstates = NULL;
 static Node *g_nodes = NULL;
-static Neighbor *g_neighbors = NULL; // TODO: move to g_ifstates
+static Neighbor *g_neighbors = NULL; // key includes the interface number (ifindex)
 
 // forward declaration
 static void send_ucast_wrapper(const Address *next_hop_addr, const void* data, size_t data_len);
@@ -304,7 +301,8 @@ static IFState *ifstate_get(const Address *address)
 
 static void neighbors_added(const Neighbor *neighbor)
 {
-    // nothing to do yet
+    IFState *ifstate = ifstate_get(&neighbor->address);
+    ifstate->neighborhood_changed_time = gstate.time_now;
 }
 
 static void nodes_remove_next_hop_addr(const Address *addr);
@@ -315,6 +313,9 @@ static void neighbors_removed(const Neighbor *neighbor)
 
     // make sure that the node is removed as well
     nodes_remove_next_hop_addr(&neighbor->address);
+
+    IFState *ifstate = ifstate_get(&neighbor->address);
+    ifstate->neighborhood_changed_time = gstate.time_now;
 
 /*
     if (address_equal(&neighbor->recv_own_broadcast_address)) {
@@ -460,109 +461,38 @@ static void record_traffic_by_addr(const Address *src, uint32_t out_bytes, uint3
     }
 }
 
-// small helper
-static bool again(uint64_t time, uint64_t duration)
+// small helper - timeout duration is over
+static bool over(uint64_t time, uint64_t duration)
 {
     return time == 0 || (time + duration) <= gstate.time_now;
 }
 
 // decide if it useful to send a broadcast
-static bool get_is_needed(const IFState *ifstate)
+static bool is_broadcast_needed_l2(const IFState *ifstate)
 {
+    bool neighborhood_changed = (ifstate->neighborhood_changed_time > ifstate->send_broadcast_time);
+    bool neighborhood_needed = ifstate->recv_own_broadcast_time > 0
+            && (ifstate->recv_own_broadcast_time > ifstate->send_broadcast_time);
+
+    log_debug("is_broadcast_needed_l2: recv_own_broadcast_time: %s, send_broadcast_time: %s, neighborhood_changed: %s, neighborhood_needed: %s",
+        str_since(ifstate->recv_own_broadcast_time), str_since(ifstate->send_broadcast_time),
+        str_bool(neighborhood_changed), str_bool(neighborhood_needed)
+    );
+
     if (ENABLE_OPTIMIZED_ROOT_CREATE) {
-/*
-re-evaluate: what do we need? what variables are involved
-
-settings:
-  - max time we do not send broadcast?
-variables:
-  - time of last received own broadcast
-  - time we do not expect a change in environment (influenced by neighbor change)
-
-simple:
-  - send broadcast every second
-  - if we send it and do not get our own packet back => do not send for 10s
-*/
-        if (again(ifstate->send_broadcast_time, 1000)) {
-            // a second is over since we send a broadcast last
-            if (again(ifstate->recv_own_broadcast_time, 10000)) {
-                // we have received our own broadcast >=10s ago
-                return true;
-            } else {
-                return false;
-            }
-        } else {
+        if (!neighborhood_needed && !neighborhood_changed) {
+            log_debug("is_broadcast_needed_l2: neighborhood_changed: %s, neighborhood_needed: %s => false",
+                str_bool(neighborhood_changed), str_bool(neighborhood_needed));
             return false;
-        }
-
-        uint64_t now = gstate.time_now;
-        uint64_t t1 = ifstate->send_broadcast_time; // last time we have send a broadcast
-        uint64_t t2 = ifstate->recv_own_broadcast_time; // must have been
-        //uint64_t t3 = ifstate->recv_foreign_broadcast_time;
-        uint64_t t4 = ifstate->parent_changed_time;
-
-        // every second
-        if (t1 == 0 || (now - t1) >= 1000) {
-            bool change_detected = (t4 > t1); // or new neighbor appeared
-            bool received_own = (t2 > t1);
-            if (t1 > 0 && t2 > 0 /*&& t2 >= t1*/ && (now - t2) <= HOP_TIMEOUT_MS) {
-                // do not send for 8s
-                return false;
-            }
-        }
-    }
-
-    return true;
-
-    // if received_own less then x seconds ago => do not send
-
-/*
-all permutations:
-        t1 < t2 < t4
-        => we are needed and then the parent changed
-          => send broadcast
-        t4 < t2 < t1
-        => parent changed, then we received our own broadcast, then we send a broadcast
-          => send broadcast
-
-        t2 < t1 < t4
-        => 
-
-        t4 < t1 < t2
-
-        t1 < t4 < t2
-        t2 < t4 < t1
-
-if t1 after t2 or t4 => send
-*/
-
-/*
-    bool ret = true;
-    int d = 0;
-    if (t2) {
-        //if (t3) {
-            if ((now - t2) < 8000) {
-                // we got our own echo recently => broadcast
-                d = 1;
-                ret = true;
-            }
-    } else {
-
-        if (t3) {
-            if ((now - t3) < 8000) {
-                // we got an old packet
-                d = 4;
-                ret = false;
-            }
         } else {
-
+            log_debug("is_broadcast_needed_l2: neighborhood_changed: %s, neighborhood_needed: %s => true",
+                str_bool(neighborhood_changed), str_bool(neighborhood_needed));
+            return true;
         }
+    } else {
+        //log_debug("is_broadcast_needed_l2: => true");
+        return true;
     }
-
-    log_debug("get_is_needed() %s (d: %d, t1: %s, t2: %s)", str_bool(ret), d, str_duration(t1, now), str_duration(t1, now));
-
-    return ret;
-*/
 }
 
 // send and count outgoing unicast traffic
@@ -672,7 +602,7 @@ static bool neighbor_is_child(const Neighbor *neighbor)
 {
     const uint64_t us = neighbor->root_store_to_us_received_time;
     const uint64_t others = neighbor->root_store_to_others_received_time;
-    const uint64_t now = gstate.time_now;
+//    const uint64_t now = gstate.time_now;
 
     if (us == 0) {
         return false;
@@ -888,12 +818,13 @@ static uint8_t* get_payload_DATA(DATA *p)
     return ((uint8_t*) p) + offsetof(DATA, payload_data);
 }
 
-static bool is_valid_address(const Address *addr)
+static bool is_zero_address(const Address *addr)
  {
     static const Address zero_address = {0};
     return 0 != memcmp(addr, &zero_address, sizeof(Address));
 }
 
+/*
 // return node behind an address (only possible if neighbor)
 // beware: slow - only for debugging
 static Node *find_neighbor_node_by_address(const Address *addr)
@@ -913,6 +844,7 @@ static Node *find_neighbor_node_by_address(const Address *addr)
 
     return NULL;
 }
+*/
 
 /*
 static uint32_t get_neighbor_id(const Neighbor *neighbor)
@@ -979,7 +911,7 @@ static void send_bcast_wrapper(const char *context, const IFState *interface, vo
     IFState *tmp;
     HASH_ITER(hh, g_ifstates, ifstate, tmp) {
         if (interface == NULL || interface == ifstate) {
-            if (get_is_needed(ifstate)) {
+            if (we_are_root() || is_broadcast_needed_l2(ifstate)) {
                 log_debug("%s: is needed => send", context);
                 //log_debug("%s: is_needed: %s => send", context, str_bool(is_needed));
 
@@ -1028,7 +960,7 @@ static void collect_ranges(Ranges *ranges)
     HASH_ITER(hh, g_neighbors, neighbor, tmp) {
         // only include children
         if (neighbor_is_child(neighbor)) {
-            log_debug("send_ROOT_STORE_periodic: [%d] neighbor ranges: %s", i, ranges_str(&neighbor->ranges));
+            //log_debug("send_ROOT_STORE_periodic: [%d] neighbor ranges: %s", i, ranges_str(&neighbor->ranges));
             ranges_add_all(ranges, &neighbor->ranges);
             i += 1;
         }
@@ -1044,17 +976,6 @@ static void send_ROOT_STORE_periodic()
 
     Neighbor *parent = get_parent();
 
-/*
-    if the parent has changed, then parent->root.store_send_time will be 
-
-neighbor->root_store_to_us_received_time = gstate.time_now;
-        } else {
-            // => neighbor is not our child node
-            neighbor->root_store_to_others_received_time = gstate.time_now;
-        }
-*/
-
-    //log_debug("send_ROOT_STORE_periodic check");
     if (parent) {
         ranges_clear(&ranges);
         collect_ranges(&ranges);
@@ -1075,8 +996,23 @@ neighbor->root_store_to_us_received_time = gstate.time_now;
             wait_ms = 1000;
         }
 
+        bool is_wait_over = over(parent->root.store_send_time, wait_ms);
+
         // send ranges to parent
-        if (is_different || again(parent->root.store_send_time, wait_ms)) {
+        if (is_different || is_wait_over) {
+            parent->root.store_send_counter += 1;
+            parent->root.store_send_time = gstate.time_now;
+
+            if (is_wait_over) {
+                // double wait time
+                wait_ms = MIN(wait_ms * 2, 1000 * (1 << 16));
+            }
+
+            if (is_different) {
+                // reset wait time
+                wait_ms = 1000;
+            }
+
             ranges_swap(&ranges, &tmp_ranges);
 
             ROOT_STORE p = {
@@ -1089,21 +1025,13 @@ neighbor->root_store_to_us_received_time = gstate.time_now;
 
             if (ranges_bytes != -1) {
                 assert(ranges_bytes > 0 && ranges_bytes <= data_size_max);
-                log_debug("send_ROOT_STORE_periodic: send to %s, ranges_bytes: %d, spans: %d, ranges: %s",
-                    str_addr(&parent->address), (int) ranges_bytes, (int) ranges_span(&ranges), ranges_str(&ranges));
+                log_debug("send_ROOT_STORE_periodic: send to %s, ranges_bytes: %d, spans: %d, ranges: %s, next: %s",
+                    str_addr(&parent->address), (int) ranges_bytes, (int) ranges_span(&ranges),
+                    ranges_str(&ranges), str_time(wait_ms));
                 send_ucast_wrapper(&parent->address, &p, offsetof(ROOT_STORE, data) + ranges_bytes);
             } else {
                 log_error("failed to compress ranges");
                 // assume to be send, we do not want to fail over and over again 
-            }
-
-            parent->root.store_send_counter += 1;
-            parent->root.store_send_time = gstate.time_now;
-
-            if (is_different) {
-                wait_ms = 1000;
-            } else {
-                wait_ms = MIN(wait_ms * 2, 1000 * (1 << 16));
             }
         }
     }
@@ -1131,7 +1059,7 @@ static void peers_periodic()
         uint32_t pings_send = 0;
         Peer *peer = g_peers;
         while (peer) {
-            if (!is_valid_address(&peer->address) && !neighbors_find(&peer->address)) {
+            if (!is_zero_address(&peer->address) && !neighbors_find(&peer->address)) {
                 // peer not resolved and not connected
                 bool resolved = false;
                 int af = gstate.af;
@@ -1618,7 +1546,15 @@ static void handle_ROOT_STORE(IFState *ifstate, Neighbor *neighbor, const Addres
 
 static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Address *src, uint8_t flags, ROOT_CREATE *p, size_t length)
 {
+    bool is_destination = flags & FLAG_IS_DESTINATION;
+
+/*
     // might be broadcast or unicast packet (e.g. per Internet)
+    if (!is_destination) {
+        log_trace("ROOT_CREATE: not for us => drop");
+        return;
+    }
+*/
     if (length != get_size_ROOT_CREATE(p)) {
         log_trace("ROOT_CREATE: invalid packet size => drop");
         return;
@@ -1632,6 +1568,7 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
     // might be prefix or hash?
     if (/*p->sender != p->prev_sender &&*/ p->prev_sender == gstate.own_id) {
         // we are the previous sender => that neighbor relies on our broadcasts
+        log_debug("ROOT_CREATE: got own packet");
         ifstate->recv_own_broadcast_time = gstate.time_now;
         memcpy(&ifstate->recv_own_broadcast_address, src, sizeof(Address));
     }
@@ -1678,14 +1615,13 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
     neighbor->root.root_recv_time = gstate.time_now;
     neighbor->root.parent_id = p->sender; // for debugging?
 
-    neighbor->root.store_send_counter = 0;
-    neighbor->root.store_send_time = 0;
-
     Neighbor* new_parent = get_parent();
 
     if (old_parent != new_parent) {
         log_debug("handle_ROOT_CREATE: parent changed");
-        ifstate->parent_changed_time = gstate.time_now;
+        new_parent->root.store_send_counter = 0;
+        new_parent->root.store_send_time = 0;
+        ifstate->neighborhood_changed_time = gstate.time_now;
     }
 
     // only forward root packet from parent
@@ -1988,7 +1924,6 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
             );
             if (neighbor->ranges_set) {
                 fprintf(fp,     "  ranges_span:    %"PRIu64"\n", ranges_span(&neighbor->ranges));
-                fprintf(fp,     "  ranges_count:   %d\n", (int) neighbor->ranges.data_count);
                 fprintf(fp,     "  ranges_data:    %s\n", ranges_str(&neighbor->ranges));
             }
             if (neighbor->root_set) {
@@ -2049,7 +1984,6 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
                 fprintf(fp, "\"is_child\": \"%s\",", str_bool(neighbor_is_child(neighbor)));
                 if (neighbor->ranges_set) {
                     fprintf(fp, "\"ranges_span\": %"PRIu64",", ranges_span(&neighbor->ranges));
-                    fprintf(fp, "\"ranges_count\": %d,", (int) neighbor->ranges.data_count);
                     fprintf(fp, "\"ranges_data\": \"%s\",", ranges_str(&neighbor->ranges));
                 }
                 if (neighbor->root_set) {
@@ -2081,7 +2015,7 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
                 ifstate_count += 1;
 
                 fprintf(fp, "{\"ifname\": \"%s\", \"flood_needed\": \"%s\"}",
-                    str_ifindex(ifstate->ifindex), str_bool(get_is_needed(ifstate)));
+                    str_ifindex(ifstate->ifindex), str_bool(is_broadcast_needed_l2(ifstate)));
             }
             fprintf(fp, "],\n");
         }
