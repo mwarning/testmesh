@@ -524,24 +524,24 @@ const char *str_until(uint64_t ms)
 
 const char *str_bytes(uint64_t bytes)
 {
-    static char strbytesbuf[4][8];
+    static char strbytesbuf[4][10];
     static size_t strbytesbuf_i = 0;
     char *buf = strbytesbuf[++strbytesbuf_i % 4];
 
     if (bytes < 1000) {
-        snprintf(buf, 8, "%uB", (unsigned) bytes);
+        snprintf(buf, 8, "%u B", (unsigned) bytes);
     } else if (bytes < 1000000) {
-        snprintf(buf, 8, "%.1fK", bytes / 1000.0);
+        snprintf(buf, 8, "%.1f KB", bytes / 1000.0);
     } else if (bytes < 1000000000) {
-        snprintf(buf, 8, "%.1fM", bytes / 1000000.0);
+        snprintf(buf, 8, "%.1f MB", bytes / 1000000.0);
     } else if (bytes < 1000000000000) {
-        snprintf(buf, 8, "%.1fG", bytes / 1000000000.0);
+        snprintf(buf, 8, "%.1f GB", bytes / 1000000000.0);
     } else if (bytes < 1000000000000000) {
-        snprintf(buf, 8, "%.1fT", bytes / 1000000000000.0);
+        snprintf(buf, 8, "%.1f TB", bytes / 1000000000000.0);
     } else if (bytes < 1000000000000000000) {
-        snprintf(buf, 8, "%.1fP", bytes / 1000000000000000.0);
+        snprintf(buf, 8, "%.1f PB", bytes / 1000000000000000.0);
     } else {
-        snprintf(buf, 8, "%.1fE", bytes / 1000000000000000000.0);
+        snprintf(buf, 8, "%.1f EB", bytes / 1000000000000000000.0);
     }
 
     return buf;
