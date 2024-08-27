@@ -1,11 +1,11 @@
 # Testmesh - Basic Mesh Routing Protocols
 
-A code base to quickly implement mesh routing protocols. A collection of basic protocols have been implemented already.
-Included is also a OpenWrt package that is ready to be used in real networks, albeit not being production quality.
+A code base to quickly implement mesh routing protocols in C. Included is also a OpenWrt package that is ready to be used in real networks.
 
 The goal of this project is to help to develop better mesh routing protocols, so that community networks such as [Freifunk](https://freifunk.net) scale better.
 
 Note: These implementations...
+* are highly experimental
 * do not adhere to any technical publication
 * do not care about byte ordering (Endianness)
 * are single threaded for simplicity (but use non-blocking I/O)
@@ -75,6 +75,9 @@ Implemented Protocols:
 - [trees-0](src/streets-0/)
   - incomplete!
   - spanning tree
+  - proactive
+- [streets-0](src/streets-0/)
+  - incomplete!
   - proactive
 - [root-storage-0](src/root-storage-0/)
   - incomplete!
@@ -147,9 +150,32 @@ socat - UNIX-CONNECT:/tmp/testmesh.sock
 * [Development Notes](docs/notes.md)
 * [Whish List](docs/whishes.md)
 
-## Similar Projects
+## Configure WLAN Interfaces for meshing
 
-* [LightKone](https://www.lightkone.eu): abstract mesh routing protocol via 5 parameters
+Usually we want to write data to an interface and expect it to be received by all other devices on the other end (be it radio or cable). There are several ways to do this.
+
+### Ad-Hoc
+
+* bad driver support by WLAN vendors
+* bad MAC layer
+
+Pro: old standard
+Cons: often disfunctional driver support
+
+### 802.11s
+
+* standardized
+* disable meshing to run your own algorithm on top
+
+Pro: widespread and much better support compared to Ad-Hoc
+Cons: driver support might still not be ideal
+
+### AP-Mode Meshing
+
+APuP (Access Point Micro Peering) allows an AP to talk other APs in the vicinity without separate mesh interface / SSID.
+
+Pro: no need for driver and Linux kernel modification
+Cons: experimental
 
 ## Other Mobile Ad-hoc Network Protocols
 
@@ -182,3 +208,5 @@ A diverse collection of interesting posts/articles/papers/videos.
 * [Scalability of Mobile Ad Hoc Networks: Theory vs Practice](http://dx.doi.org/10.1109/MILCOM.2010.5680385)
 * "The Scalability of Mesh Networks" [Part I](https://web.archive.org/web/20230629104052/https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/) [Part II](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/)
 * [B.A.T.M.A.N. - Better Approach to Mobile Ad-Hoc Networking](https://media.ccc.de/v/cccamp07-en-2039-BATMAN_-_Better_Approach_to_Mobile_Ad-Hoc_Networking)
+* [LightKone](https://www.lightkone.eu): abstract mesh routing protocol via 5 parameters
+* [APuP](https://blog.freifunk.net/2024/08/24/a-new-way-to-mesh-apup/)
