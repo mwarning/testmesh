@@ -25,7 +25,7 @@
 
 struct state gstate = {
     .af = AF_UNSPEC,
-    .protocol = NULL,
+    .protocol = DEFAULT_PROTOCOL,
     .do_fork = false,
     .time_now = 0,
     .time_started = 0,

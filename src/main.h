@@ -14,6 +14,7 @@
 
 #define PROGRAM_NAME "testmesh"
 #define PROGRAM_VERSION "1.0.0"
+#define DEFAULT_PROTOCOL NULL
 #define CLIENT_DEFAULT_SOCKET "/tmp/"PROGRAM_NAME".sock"
 
 #define MULTICAST_ADDR "ff12::114"
