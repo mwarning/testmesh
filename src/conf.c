@@ -155,14 +155,12 @@ static bool conf_set(const char *opt, const char *val)
     uint64_t n;
     const option_t *option = find_option(g_options, opt);
 
-    // allow handling of custom arguments on command line and in config file
-    if (option == NULL && gstate.protocol && gstate.protocol->config_handler) {
-        if (gstate.protocol->config_handler(opt, val)) {
+    if (option == NULL) {
+        // allow handling of custom arguments on command line and in configuration file
+        if (gstate.protocol && gstate.protocol->config_handler && gstate.protocol->config_handler(opt, val)) {
             return true;
         }
-    }
 
-    if (option == NULL) {
         log_error("Unknown parameter: %s", opt);
         return false;
     }
