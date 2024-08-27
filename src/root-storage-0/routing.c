@@ -56,8 +56,15 @@ enum FLAGS {
 };
 
 #define ENABLE_SEND_RREP2 true
+
+// Send root create packet only if the neighborhood changed or a neighbor needs it (we received our own broadcast!).
 #define ENABLE_OPTIMIZED_ROOT_CREATE false
-#define ENABLE_OPTIMIZED_ROOT_STORE true
+
+// Send client list only in increasing intervals. Interval is reset if parent changes.
+#define ENABLE_OPTIMIZED_ROOT_STORE false
+
+// Replace broadcast with multiple unicasts if there very few neighbors in a broadcast domain.
+#define ENABLE_OPTIMIZED_BROADCAST false
 
 #define HOP_TIMEOUT_MS (8 * 1000)
 #define TRAFFIC_DURATION_SECONDS 8
@@ -133,7 +140,10 @@ typedef struct {
     UT_hash_handle hh;
 } Neighbor;
 
+// for when we are root
 static Root g_root = {0};
+
+static Neighbor *g_parent = NULL;
 
 typedef struct Peer {
     char hostname[64];
@@ -145,11 +155,13 @@ typedef struct Peer {
 typedef struct {
     uint32_t ifindex;
 
+    uint32_t neighbor_count;
+
     // We need to forward a broadcast (RREQ) if a neighbor uses us a source.
     uint64_t recv_own_broadcast_time;
     Address recv_own_broadcast_address;
 
-    uint64_t neighborhood_changed_time;
+    uint64_t neighborhood_changed_time; // parent or neighbor changed
     uint64_t send_broadcast_time;
 
     // TODO: use
@@ -223,6 +235,7 @@ typedef struct __attribute__((__packed__)) {
     uint16_t type;
     uint8_t hop_count;
     uint16_t root_seq_num;
+    uint8_t required_send;
     // uint8_t neighbor_count;
     // uint8_t stored_nodes;
     // uint8_t has_public_address_ip; // the direct neighbors can verify this
@@ -250,6 +263,10 @@ typedef struct __attribute__((__packed__)) {
     uint16_t seq_num;
     uint8_t address[16];
 } NETWORK_SHORTCUT_IPV6;
+
+static uint64_t g_send_broadcast_time = 0;
+static uint64_t g_recv_own_broadcast_time = 0;
+static uint64_t g_recv_required_broadcast_time = 0;
 
 static Peer *g_peers = NULL;
 static uint16_t g_sequence_number = 0;
@@ -303,6 +320,7 @@ static void neighbors_added(const Neighbor *neighbor)
 {
     IFState *ifstate = ifstate_get(&neighbor->address);
     ifstate->neighborhood_changed_time = gstate.time_now;
+    ifstate->neighbor_count += 1;
 }
 
 static void nodes_remove_next_hop_addr(const Address *addr);
@@ -316,6 +334,11 @@ static void neighbors_removed(const Neighbor *neighbor)
 
     IFState *ifstate = ifstate_get(&neighbor->address);
     ifstate->neighborhood_changed_time = gstate.time_now;
+    ifstate->neighbor_count -= 1;
+
+    if (neighbor == g_parent) {
+        g_parent = NULL;
+    }
 
 /*
     if (address_equal(&neighbor->recv_own_broadcast_address)) {
@@ -480,14 +503,14 @@ static bool is_broadcast_needed_l2(const IFState *ifstate)
     );
 
     if (ENABLE_OPTIMIZED_ROOT_CREATE) {
-        if (!neighborhood_needed && !neighborhood_changed) {
-            log_debug("is_broadcast_needed_l2: neighborhood_changed: %s, neighborhood_needed: %s => false",
-                str_bool(neighborhood_changed), str_bool(neighborhood_needed));
-            return false;
-        } else {
+        if (neighborhood_needed || neighborhood_changed) {
             log_debug("is_broadcast_needed_l2: neighborhood_changed: %s, neighborhood_needed: %s => true",
                 str_bool(neighborhood_changed), str_bool(neighborhood_needed));
             return true;
+        } else {
+            log_debug("is_broadcast_needed_l2: neighborhood_changed: %s, neighborhood_needed: %s => false",
+                str_bool(neighborhood_changed), str_bool(neighborhood_needed));
+            return false;
         }
     } else {
         //log_debug("is_broadcast_needed_l2: => true");
@@ -627,7 +650,10 @@ static Neighbor *get_parent()
     Neighbor *new;
     Neighbor *tmp;
 
+    uint64_t timeout_ms = 8200; //1200;
+
     //log_debug("get_parent()");
+    int reason = -1; // reason why we switched parent
 
     HASH_ITER(hh, g_neighbors, new, tmp) {
         if (!new->root_set) {
@@ -639,33 +665,40 @@ static Neighbor *get_parent()
         //    str_addr(&new->address), new->root.root_id, (int) new->root.root_seq_num);
 
         if (cur == NULL) {
+            // no parent yet
             cur = new;
+            reason = 1;
             continue;
         }
 
-        bool is_neighbor_overdue = (new->root.root_recv_time + 1200) < gstate.time_now;
-        bool is_parent_overdue = (cur->root.root_recv_time + 1200) < gstate.time_now;
+        bool is_neighbor_overdue = (new->root.root_recv_time + timeout_ms) < gstate.time_now;
+        bool is_cur_overdue = (cur->root.root_recv_time + timeout_ms) < gstate.time_now;
 
-//log_debug("cur: is_overdue: %s, new: is_overdue: %s", str_bool(is_parent_overdue), str_bool(is_neighbor_overdue));
+//log_debug("cur: is_overdue: %s, new: is_overdue: %s", str_bool(is_cur_overdue), str_bool(is_neighbor_overdue));
 
-        if (is_neighbor_overdue != is_parent_overdue) {
-            if (is_parent_overdue) {
+        if (is_neighbor_overdue != is_cur_overdue) {
+            if (is_cur_overdue) {
+                // cur is overdue, but neighbor is not
                 cur = new;
+                reason = 2;
             } else {
-                // neighbor is overdue => ignore
+                // neighbor is overdue, but cur is not => ignore
                 continue;
             }
         } else {
+            // both are overdue or not
             if (new->root.root_id > cur->root.root_id) {
                 cur = new;
+                reason = 3;
             } else if (new->root.root_id == cur->root.root_id) {
                 uint16_t neighbor_scope = address_scope(&new->address);
-                uint16_t parent_scope = address_scope(&cur->address);
+                uint16_t cur_scope = address_scope(&cur->address);
 
-                if (neighbor_scope != parent_scope) {
-                    if (neighbor_scope > parent_scope) {
+                if (neighbor_scope != cur_scope) {
+                    if (neighbor_scope > cur_scope) {
                         log_debug("choose by address scope");
                         cur = new;
+                        reason = 4;
                     } else {
                         continue;
                     }
@@ -673,10 +706,12 @@ static Neighbor *get_parent()
 
                 if (new->root.hop_count < cur->root.hop_count) {
                     cur = new;
+                    reason = 5;
                 } else if (new->root.hop_count == cur->root.hop_count) {
                     int cmp = memcmp(&new->address, &cur->address, sizeof(Address));
                     if (cmp > 0) {
                         cur = new;
+                        reason = 6;
                     }
                 } else {
                     continue;
@@ -688,21 +723,39 @@ static Neighbor *get_parent()
     if (cur) {
         // see if we are root (return NULL)
         if (cur->root_set) {
-            bool is_parent_overdue = (cur->root.root_recv_time + 1200) < gstate.time_now;
-            if (is_parent_overdue) {
+            bool is_cur_overdue = (cur->root.root_recv_time + timeout_ms) < gstate.time_now;
+            if (is_cur_overdue) {
                 // we are root
                 cur = NULL;
+                reason = 7;
             } else {
                 if (g_root.root_id > cur->root.root_id) {
                     //log_debug("get_parent() => 0x%08x > 0x%08x we are root", g_root.root_id, cur->root.root_id);
                     // we are root
                     cur = NULL;
+                    reason = 8;
                 }
             }
         } else {
             // we are root
             cur = NULL;
+            reason = 9;
         }
+    }
+
+    if (g_parent != cur) {
+        if (g_parent && cur) {
+            log_debug("get_parent(): parent changed (0x%08x -> 0x%08x, reason: %d, %s %s)",
+                g_parent->root.root_id, cur->root.root_id, reason,
+                str_since(g_parent->root.root_recv_time), str_since(cur->root.root_recv_time));
+        } else if (cur) {
+            log_debug("get_parent(): parent changed (none -> 0x%08x), reason: %d", cur->root.root_id, reason);
+        } else if (g_parent) {
+            log_debug("get_parent(): parent changed (0x%08x -> none), reason: %d", g_parent->root.root_id, reason);
+        } else {
+            log_debug("get_parent(): parent changed (none -> none), reason: %d", reason);
+        }
+        g_parent = cur;
     }
 
     return cur;
@@ -893,6 +946,7 @@ static void send_cached_packet(uint32_t dst_id)
 static void send_bcast_wrapper(const char *context, const IFState *interface, void *packet, size_t packet_size)
 {
     if (interface == NULL) {
+    	// default route (Internet)
         Neighbor *neighbor;
         Neighbor *tmp;
         HASH_ITER(hh, g_neighbors, neighbor, tmp) {
@@ -911,16 +965,33 @@ static void send_bcast_wrapper(const char *context, const IFState *interface, vo
     IFState *tmp;
     HASH_ITER(hh, g_ifstates, ifstate, tmp) {
         if (interface == NULL || interface == ifstate) {
-            if (we_are_root() || is_broadcast_needed_l2(ifstate)) {
-                log_debug("%s: is needed => send", context);
+            if (ENABLE_OPTIMIZED_BROADCAST && ifstate->neighbor_count <= 4) {
+                // send a broadcast as multiple unicast packets instead of a broadcast
+                /*
+                    TODO: when is not a good idea even when there few neighbors?
+                     - when we really need to broadcast to reach unknown neihgbors (or does everybody run in promiscious mode?) 
+                */
+                Neighbor *neighbor;
+                Neighbor *tmp;
+                HASH_ITER(hh, g_neighbors, neighbor, tmp) {
+                    if (ifstate->ifindex == address_ifindex(&neighbor->address)) {
+                        send_ucast_l2(&neighbor->address, packet, packet_size);
+                        record_traffic(&ifstate->unicast_traffic, packet_size, 0);
+                    }
+                }
+            } else {
+
+            //if (we_are_root() || is_broadcast_needed_l2(ifstate)) {
+            //    log_debug("%s: is needed => send", context);
                 //log_debug("%s: is_needed: %s => send", context, str_bool(is_needed));
 
                 ifstate->send_broadcast_time = gstate.time_now;
 
                 send_bcast_l2(ifstate->ifindex, packet, packet_size);
                 record_traffic(&ifstate->broadcast_traffic, packet_size, 0);
-            } else {
-                log_debug("%s: is not needed => drop", context);
+            //} else {
+            //    log_debug("%s: is not needed => drop", context);
+            //}
             }
         }
         //send_bcast_l2_wrapper_interface(context, ifstate, packet, packet_size);
@@ -929,6 +1000,8 @@ static void send_bcast_wrapper(const char *context, const IFState *interface, vo
 
 static void send_ROOT_CREATE_periodic()
 {
+    static uint32_t send_counter = 0;
+
     if (we_are_root()) {
         if (g_root.root_send_time == 0 || (g_root.root_send_time + 1000) <= gstate.time_now) {
             g_root.root_send_time = gstate.time_now;
@@ -937,6 +1010,7 @@ static void send_ROOT_CREATE_periodic()
                 .type = TYPE_ROOT_CREATE,
                 .root_id = gstate.own_id,
                 .root_seq_num = g_root.root_seq_num++,
+                .required_send = ((send_counter++ % 4) == 0), // set true for every 4th packet
                 .hop_count = 1,
                 .sender = gstate.own_id,
                 .prev_sender = gstate.own_id
@@ -944,6 +1018,7 @@ static void send_ROOT_CREATE_periodic()
 
             log_debug("send_ROOT_CREATE_periodic send ROOT_CREATE (root_id: 0x%08x, seq_num: %d, hop_count: %u)",
                 p.root_id, p.root_seq_num, p.hop_count);
+
             send_bcast_wrapper("send_ROOT_CREATE_periodic", NULL, &p, get_size_ROOT_CREATE(&p));
         }
     }
@@ -985,8 +1060,8 @@ static void send_ROOT_STORE_periodic()
 
         if (ENABLE_OPTIMIZED_ROOT_STORE) {
             is_different = !ranges_same(&ranges, &tmp_ranges);
-            // parent changed
             if (!address_equal(&wait_address, &parent->address)) {
+                // parent changed
                 is_different = true;
                 wait_address = parent->address;
             }
@@ -1548,13 +1623,12 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
 {
     bool is_destination = flags & FLAG_IS_DESTINATION;
 
-/*
     // might be broadcast or unicast packet (e.g. per Internet)
     if (!is_destination) {
         log_trace("ROOT_CREATE: not for us => drop");
         return;
     }
-*/
+
     if (length != get_size_ROOT_CREATE(p)) {
         log_trace("ROOT_CREATE: invalid packet size => drop");
         return;
@@ -1568,9 +1642,12 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
     // might be prefix or hash?
     if (/*p->sender != p->prev_sender &&*/ p->prev_sender == gstate.own_id) {
         // we are the previous sender => that neighbor relies on our broadcasts
+        // packet will be dropped further down based on seq_num
         log_debug("ROOT_CREATE: got own packet");
         ifstate->recv_own_broadcast_time = gstate.time_now;
         memcpy(&ifstate->recv_own_broadcast_address, src, sizeof(Address));
+
+        g_recv_own_broadcast_time = gstate.time_now;
     }
 
     Neighbor *old_parent = get_parent();
@@ -1619,6 +1696,7 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
 
     if (old_parent != new_parent) {
         log_debug("handle_ROOT_CREATE: parent changed");
+
         new_parent->root.store_send_counter = 0;
         new_parent->root.store_send_time = 0;
         ifstate->neighborhood_changed_time = gstate.time_now;
@@ -1635,7 +1713,22 @@ static void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Addre
         p->hop_count = MIN(p->hop_count + 1U, UINT8_MAX);
         p->prev_sender = p->sender;
         p->sender = gstate.own_id;
-        send_bcast_wrapper("handle_ROOT_CREATE", NULL, p, get_size_ROOT_CREATE(p));
+
+        // TODO: adjust root timeout
+        // we received a ROOT_CREATE packet by us less then 10s ago
+        bool is_needed = (g_send_broadcast_time == 0)
+            || ((g_recv_own_broadcast_time + 10000) > gstate.time_now); // g_send_broadcast_time);
+
+        log_debug("handle_ROOT_CREATE: is_needed: %s, required_send: %s", str_bool(is_needed), str_bool(p->required_send));
+        if (is_needed || p->required_send) {
+            g_send_broadcast_time = gstate.time_now;
+            send_bcast_wrapper("handle_ROOT_CREATE", NULL, p, get_size_ROOT_CREATE(p));
+        }
+
+        if (p->required_send) {
+            // needed?
+            g_recv_required_broadcast_time = gstate.time_now;
+        }
     } else {
         log_trace("handle_ROOT_CREATE: got packet from %s root_id: 0x%08x, root_seq_num: %d => drop",
             str_addr(&neighbor->address), p->root_id, (int) p->root_seq_num);
@@ -2014,8 +2107,9 @@ static bool console_handler(FILE* fp, int argc, const char *argv[])
                 }
                 ifstate_count += 1;
 
-                fprintf(fp, "{\"ifname\": \"%s\", \"flood_needed\": \"%s\"}",
-                    str_ifindex(ifstate->ifindex), str_bool(is_broadcast_needed_l2(ifstate)));
+                fprintf(fp, "{\"ifname\": \"%s\"}", str_ifindex(ifstate->ifindex));
+                //fprintf(fp, "{\"ifname\": \"%s\", \"flood_needed\": \"%s\"}",
+                //    str_ifindex(ifstate->ifindex), str_bool(is_broadcast_needed_l2(ifstate)));
             }
             fprintf(fp, "],\n");
         }
