@@ -189,24 +189,27 @@ Some popular or interesting Mobile Ad-hoc mesh routing protocols.
 Interesting projects for low bandwidth networks:
 
 * [Disaster Radio](https://disaster.radio/)
-* [GoTenna](https://gotenna.com/)
 * [Meshtastic](https://meshtastic.org/)
+  * Meshtastic [Mesh Algorithm](https://meshtastic.org/docs/overview/mesh-algo/)
 * [Reticulum](https://unsigned.io/projects/reticulum/)
 * [Hyperspace](https://github.com/kurthildebrand/hyperspace)
 
 When Ad-Hoc mode or 802.11s is not stable or available:
 
 * [WiFi meshing on Android](https://github.com/UstadMobile/Meshrabiya)
-* [AP mode WiFi mesh on OpenWrt](https://radio.freifunk.net/2023/06/13/mesh-in-ap-mode/)
+* [APuP](https://blog.freifunk.net/2024/08/24/a-new-way-to-mesh-apup/) - Access Point Mirco Peering
+  * [AP mode WiFi mesh on OpenWrt](https://radio.freifunk.net/2023/06/13/mesh-in-ap-mode/)
 
 ## Other Related Links
 
 A diverse collection of interesting posts/articles/papers/videos.
 
 * "Understanding Mesh Networking", [Part I](https://web.archive.org/web/20230629104052/https://www.inthemesh.com/archive/understanding-mesh-networking-part-i/) [Part II](https://web.archive.org/web/20230629104052/https://inthemesh.com/archive/understanding-mesh-networking-part-ii/)
+* [Relayed Broadcasting in Off-Grid Mesh Networks](https://web.archive.org/web/20230331182226/https://inthemesh.com/archive/relayed-broadcasting-in-off-grid-mesh-networks/) - efficient broadcasting
+  * "ECHO: Efficient Zero-Control Network-Wide Broadcast for Mobile Multi-hop Wireless Networks"
+  * [GoTenna](https://gotenna.com/) (now for the military only..)
 * [The world in which IPv6 was a good design](https://apenwarr.ca/log/20170810)
 * [Scalability of Mobile Ad Hoc Networks: Theory vs Practice](http://dx.doi.org/10.1109/MILCOM.2010.5680385)
 * "The Scalability of Mesh Networks" [Part I](https://web.archive.org/web/20230629104052/https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/) [Part II](https://inthemesh.com/archive/the-scalability-of-mesh-networks-part-ii/)
 * [B.A.T.M.A.N. - Better Approach to Mobile Ad-Hoc Networking](https://media.ccc.de/v/cccamp07-en-2039-BATMAN_-_Better_Approach_to_Mobile_Ad-Hoc_Networking)
-* [LightKone](https://www.lightkone.eu): abstract mesh routing protocol via 5 parameters
-* [APuP](https://blog.freifunk.net/2024/08/24/a-new-way-to-mesh-apup/)
+* [LightKone](https://www.lightkone.eu): approach to describe/abstract mesh routing via 5 parameters
