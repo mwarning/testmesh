@@ -189,9 +189,8 @@ Some popular or interesting Mobile Ad-hoc mesh routing protocols.
 Interesting projects for low bandwidth networks:
 
 * [Disaster Radio](https://disaster.radio/)
-* [Meshtastic](https://meshtastic.org/)
-  * Meshtastic [Mesh Algorithm](https://meshtastic.org/docs/overview/mesh-algo/)
-* [Reticulum](https://unsigned.io/projects/reticulum/)
+* [Meshtastic](https://meshtastic.org/) ([Algorithm](https://meshtastic.org/docs/overview/mesh-algo/))
+* [Reticulum](https://unsigned.io/projects/reticulum/) ([Algorithm](https://linuxinabit.codeberg.page/blog/reticulum/))
 * [Hyperspace](https://github.com/kurthildebrand/hyperspace)
 
 When Ad-Hoc mode or 802.11s is not stable or available:
