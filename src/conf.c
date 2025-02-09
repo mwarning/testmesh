@@ -150,6 +150,33 @@ static bool conf_load_file(const char path[])
     return true;
 }
 
+enum {
+    VALUE_ON,
+    VALUE_OFF,
+    VALUE_TRUE,
+    VALUE_FALSE,
+    VALUE_AUTO,
+    VALUE_INVALID,
+};
+
+// parse common arguments values
+static int parseValue(const char *value)
+{
+    if (0 == strcmp(value, "on")) {
+        return VALUE_ON;
+    } else if (0 == strcmp(value, "off")) {
+        return VALUE_OFF;
+    } else if (0 == strcmp(value, "true")) {
+        return VALUE_TRUE;
+    } else if (0 == strcmp(value, "false")) {
+        return VALUE_FALSE;
+    } else if (0 == strcmp(value, "auto")) {
+        return VALUE_AUTO;
+    } else {
+        return VALUE_INVALID;
+    }
+}
+
 static bool conf_set(const char *opt, const char *val)
 {
     uint64_t n;
@@ -197,13 +224,17 @@ static bool conf_set(const char *opt, const char *val)
         gstate.do_fork = true;
         break;
     case oFindInterfaces:
-        if (0 == strcmp(val, "on")) {
+        switch (parseValue(val)) {
+        case VALUE_ON:
             gstate.find_interfaces = FIND_INTERFACES_ON;
-        } else if (0 == strcmp(val, "off")) {
+            break;
+        case VALUE_OFF:
             gstate.find_interfaces = FIND_INTERFACES_OFF;
-        } else if (0 == strcmp(val, "auto")) {
+            break;
+        case VALUE_AUTO:
             gstate.find_interfaces = FIND_INTERFACES_AUTO;
-        } else {
+            break;
+        default:
             log_error("Unknown value for %s %s", opt, val);
             return false;
         }
@@ -234,11 +265,14 @@ static bool conf_set(const char *opt, const char *val)
         }
         break;
     case oTunSetup:
-        if (0 == strcmp(val, "on")) {
+        switch (parseValue(val)) {
+        case VALUE_ON:
             gstate.tun_setup = true;
-        } else if (0 == strcmp(val, "off")) {
+            break;
+        case VALUE_OFF:
             gstate.tun_setup = false;
-        } else {
+            break;
+        default:
             log_error("Unknown value for %s %s", opt, val);
             return false;
         }
@@ -274,21 +308,27 @@ static bool conf_set(const char *opt, const char *val)
         gstate.disable_stdin = true;
         break;
     case oEnableIPv4:
-        if (0 == strcmp(val, "on")) {
+        switch (parseValue(val)) {
+        case VALUE_ON:
             gstate.enable_ipv4 = true;
-        } else if (0 == strcmp(val, "off")) {
+            break;
+        case VALUE_OFF:
             gstate.enable_ipv4 = false;
-        } else {
+            break;
+        default:
             log_error("Unknown value for %s %s", opt, val);
             return false;
         }
         break;
     case oEnableIPv6:
-        if (0 == strcmp(val, "on")) {
+        switch (parseValue(val)) {
+        case VALUE_ON:
             gstate.enable_ipv6 = true;
-        } else if (0 == strcmp(val, "off")) {
+            break;
+        case VALUE_OFF:
             gstate.enable_ipv6 = false;
-        } else {
+            break;
+        default:
             log_error("Unknown value for %s %s", opt, val);
             return false;
         }
