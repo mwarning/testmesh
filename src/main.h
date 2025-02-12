@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 
 #include "utils.h"
+#include "address.h"
 #include "interfaces.h"
 
 #define PROGRAM_NAME "testmesh"

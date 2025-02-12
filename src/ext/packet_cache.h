@@ -1,6 +1,8 @@
 #ifndef _PACKET_CACHE_H_
 #define _PACKET_CACHE_H_
 
+#include <stdint.h>
+
 /*
  * This is a helper for routing protocols implementations.
  */

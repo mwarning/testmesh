@@ -1,6 +1,8 @@
 #ifndef _INTERFACES_H_
 #define _INTERFACES_H_
 
+#include <inttypes.h>
+#include <stdio.h> // FILE
 #include <linux/if_ether.h>   // ETH_ALEN(6), ETH_HLEN(14), ETH_FRAME_LEN(1514), struct ethhdr
 
 enum FIND_INTERFACES {
