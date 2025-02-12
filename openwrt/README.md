@@ -32,4 +32,4 @@ Now compile/build everything:
 make -j8
 ```
 
-The images and all \*.ipk packages are now inside the `bin/` folder. Flash the `bin/<target>/<subtarget>/*-factory.bin` image for a complete setup.
+The images and packages are now inside the `bin/` folder. Flash the `bin/<target>/<subtarget>/*-factory.bin` image for a complete setup.
