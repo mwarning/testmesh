@@ -55,7 +55,7 @@ typedef struct Root {
     uint32_t root_id;
     uint16_t seq_num;
     uint16_t updated_count;
-    time_t last_updated;
+    uint64_t last_updated;
     uint32_t path_length;
     uint32_t path[ROOT_MAX_PATH_COUNT];
 } Root;
