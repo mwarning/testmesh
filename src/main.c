@@ -77,7 +77,7 @@ void protocols_print(FILE *fd)
 {
     fprintf(fd, "Valid protocols: ");
     for (size_t i = 0; i < g_protocols_len; i += 1) {
-        fprintf(fd, i ? ", %s" : "%s", g_protocols[i]->name);
+        fprintf(fd, (i ? ", %s" : "%s"), g_protocols[i]->name);
     }
     fprintf(fd, "\n");
 }
@@ -95,7 +95,7 @@ const Protocol *protocols_find(const char *protocol)
 
 void protocols_register(const Protocol *p)
 {
-    if (g_protocols_len == ARRAY_SIZE(g_protocols)) {
+    if (g_protocols_len >= ARRAY_SIZE(g_protocols)) {
         log_error("Too many protocols.");
         exit(1);
     }
