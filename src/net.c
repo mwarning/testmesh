@@ -200,7 +200,7 @@ int net_bind(const char name[], const char addr[], const int port, const char if
         goto fail;
     }
 
-    addr_port_set(address, port);
+    addr_set_port(address, port);
 
     if ((sock = net_socket(name, ifname, protocol, address->sa_family)) < 0) {
         goto fail;
