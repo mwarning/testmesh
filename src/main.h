@@ -39,10 +39,16 @@ void protocols_register(const Protocol *p);
 const Protocol *protocols_find(const char *protocol);
 void protocols_print(FILE *fd);
 
-struct state {
-    int af;
+enum FIND_INTERFACES {
+    FIND_INTERFACES_ON,
+    FIND_INTERFACES_OFF,
+    FIND_INTERFACES_AUTO
+};
 
+struct state {
     const Protocol *protocol;
+    int af; // AF_INET, AF_INET6 or AF_UNSPEC
+
     // sockets
     int sock_help; // helper socket used to communicate with the kernel
     int sock_console; // unix socket

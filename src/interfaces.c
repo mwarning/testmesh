@@ -21,11 +21,11 @@
 #include "traffic.h"
 #include "interfaces.h"
 
-
 struct interface {
     struct interface *next;
     uint32_t ifindex;
     char ifname[16];
+    enum INTERFACE_TYPE type;
     struct mac ifmac;
     int ifsock_l2;
     bool is_dynamic;    // interface was added automatically
@@ -35,7 +35,7 @@ static struct interface *g_interfaces = NULL;
 static const struct mac g_nullmac = {{0, 0, 0, 0, 0, 0}};
 
 
-const char *str_find_interfaces(enum FIND_INTERFACES value)
+const char *str_find_interfaces(int value)
 {
     switch (value) {
         case FIND_INTERFACES_ON: return "on";
@@ -43,6 +43,21 @@ const char *str_find_interfaces(enum FIND_INTERFACES value)
         case FIND_INTERFACES_AUTO: return "auto";
         default: return "<invalid>";
     }
+}
+
+enum INTERFACE_TYPE get_interface_type(const uint32_t ifindex)
+{
+    struct interface *ifa;
+
+    ifa = g_interfaces;
+    while (ifa) {
+        if (ifa->ifindex == ifindex) {
+            return ifa->type;
+        }
+        ifa = ifa->next;
+    }
+
+    return INTERFACE_TYPE_UNKNOWN;
 }
 
 // forward declaration
