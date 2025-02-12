@@ -92,8 +92,9 @@ char *str_bloom(const void *bloom, uint32_t bloom_m)
     char *buf = strbloombuf[++strbloombuf_i % 4];
 
     char *cur = buf;
-    for (size_t i = 0; i < (8 * bloom_m); ++i) {
-        uint32_t bit = (0 != BLOOM_BITTEST(((uint8_t*) bloom), i));
+    uint32_t bits = (8 * bloom_m);
+    for (size_t i = 0; i < bits; ++i) {
+        uint32_t bit = (0 != BLOOM_BITTEST(((uint8_t*) bloom), bits - 1 - i));
         cur += sprintf(cur, "%"PRIu32, bit);
     }
     return buf;
