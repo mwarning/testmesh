@@ -15,10 +15,11 @@ static Root g_root = {0};
 // for debugging
 static Neighbor *g_parent = NULL;
 
-
+// TODO: call when we become root
 void tree_init()
 {
-    g_root.tree_id = gstate.own_id; // rand(), reinitialize when we become root
+    memset(&g_root, 0, sizeof(Root));
+    g_root.tree_id = gstate.own_id; // TODO: rand(), reinitialize when we become root
 }
 
 Root *tree_get_root()
@@ -33,76 +34,76 @@ void tree_neighbor_removed(const Neighbor *neighbor)
     }
 }
 
-Neighbor *tree_get_parent(Neighbor *g_neighbors)
+Neighbor *tree_get_parent()
 {
-    Neighbor *cur = NULL;
-    Neighbor *new;
-    Neighbor *tmp;
+    Neighbor *parent = NULL;
+    Neighbor *neighbor;
+    Neighbor *neighbor_tmp;
 
     //uint64_t timeout_ms = 8200; //1200;
 
-    //log_debug("get_parent()");
     int reason = -1; // reason why we switched parent
 
-    HASH_ITER(hh, g_neighbors, new, tmp) {
-        if (!new->root_set) {
-            // ignore
+    HASH_ITER(hh, neighbors_all(), neighbor, neighbor_tmp) {
+        if (!neighbor->root_set) {
+            // Ignore neighbors that have not send us a ROOT_CREATE packet yet.
             continue;
         }
 
         //log_debug("get_parent() iter: %s tree_id: 0x%08x, root_seq_num: %d",
-        //    str_addr(&new->address), new->root.tree_id, (int) new->root.root_seq_num);
+        //    str_addr(&neighbor->address), neighbor->root.tree_id, (int) neighbor->root.root_seq_num);
 
-        if (cur == NULL) {
-            // no parent yet
-            cur = new;
+        if (parent == NULL) {
+            // No parent yet, set first one.
+            // TODO: should we set us as root?
+            parent = neighbor;
             reason = 1;
             continue;
         }
 
         // TODO: use dynamic timeout
-        //new->root.root_recv_time
-        uint64_t timeout_ms = new->root.root_next_send_ms * 2 + (new->root.root_next_send_ms / 16);
-        bool is_neighbor_overdue = (new->root.root_recv_time + timeout_ms) < gstate.time_now;
-        bool is_cur_overdue = (cur->root.root_recv_time + timeout_ms) < gstate.time_now;
+        //neighbor->root.root_recv_time
+        uint64_t timeout_ms = neighbor->root.root_next_send_ms * 2 + (neighbor->root.root_next_send_ms / 16);
+        bool is_neighbor_overdue = (neighbor->root.root_recv_time + timeout_ms) < gstate.time_now;
+        bool is_cur_overdue = (parent->root.root_recv_time + timeout_ms) < gstate.time_now;
 
-//log_debug("cur: is_overdue: %s, new: is_overdue: %s", str_bool(is_cur_overdue), str_bool(is_neighbor_overdue));
+//log_debug("parent: is_overdue: %s, neighbor: is_overdue: %s", str_bool(is_cur_overdue), str_bool(is_neighbor_overdue));
 
         if (is_neighbor_overdue != is_cur_overdue) {
             if (is_cur_overdue) {
-                // cur is overdue, but neighbor is not
-                cur = new;
+                // parent is overdue, but neighbor is not
+                parent = neighbor;
                 reason = 2;
             } else {
-                // neighbor is overdue, but cur is not => ignore
+                // neighbor is overdue, but parent is not => ignore
                 continue;
             }
         } else {
             // both are overdue or not
-            if (new->root.tree_id > cur->root.tree_id) {
-                cur = new;
+            if (neighbor->root.tree_id > parent->root.tree_id) {
+                parent = neighbor;
                 reason = 3;
-            } else if (new->root.tree_id == cur->root.tree_id) {
-                uint16_t neighbor_scope = address_scope(&new->address);
-                uint16_t cur_scope = address_scope(&cur->address);
+            } else if (neighbor->root.tree_id == parent->root.tree_id) {
+                uint16_t neighbor_scope = address_scope(&neighbor->address);
+                uint16_t cur_scope = address_scope(&parent->address);
 
                 if (neighbor_scope != cur_scope) {
                     if (neighbor_scope > cur_scope) {
                         log_debug("choose by address scope");
-                        cur = new;
+                        parent = neighbor;
                         reason = 4;
                     } else {
                         continue;
                     }
                 }
 
-                if (new->root.hop_count < cur->root.hop_count) {
-                    cur = new;
+                if (neighbor->root.hop_count < parent->root.hop_count) {
+                    parent = neighbor;
                     reason = 5;
-                } else if (new->root.hop_count == cur->root.hop_count) {
-                    int cmp = memcmp(&new->address, &cur->address, sizeof(Address));
+                } else if (neighbor->root.hop_count == parent->root.hop_count) {
+                    int cmp = memcmp(&neighbor->address, &parent->address, sizeof(Address));
                     if (cmp > 0) {
-                        cur = new;
+                        parent = neighbor;
                         reason = 6;
                     }
                 } else {
@@ -112,46 +113,47 @@ Neighbor *tree_get_parent(Neighbor *g_neighbors)
         }
     }
 
-    if (cur) {
+    if (parent) {
         // see if we are root (return NULL)
-        if (cur->root_set) {
-            uint64_t timeout_ms = cur->root.root_next_send_ms * 2 + (cur->root.root_next_send_ms / 16);
-            bool is_cur_overdue = (cur->root.root_recv_time + timeout_ms) < gstate.time_now;
+        if (parent->root_set) {
+            uint64_t timeout_ms = parent->root.root_next_send_ms * 2 + (parent->root.root_next_send_ms / 16);
+            bool is_cur_overdue = (parent->root.root_recv_time + timeout_ms) < gstate.time_now;
             if (is_cur_overdue) {
                 // we are root
-                cur = NULL;
+                parent = NULL;
                 reason = 7;
             } else {
-                if (g_root.tree_id > cur->root.tree_id) {
-                    //log_debug("get_parent() => 0x%08x > 0x%08x we are root", g_root.tree_id, cur->root.tree_id);
+                if (g_root.tree_id > parent->root.tree_id) {
+                    //log_debug("get_parent() => 0x%08x > 0x%08x we are root", g_root.tree_id, parent->root.tree_id);
                     // we are root
-                    cur = NULL;
+                    parent = NULL;
                     reason = 8;
                 }
             }
         } else {
             // we are root
-            cur = NULL;
+            parent = NULL;
             reason = 9;
         }
     }
 
-    if (g_parent != cur) {
-        if (g_parent && cur) {
+    // for debugging
+    if (g_parent != parent) {
+        if (g_parent && parent) {
             log_debug("get_parent(): parent changed (0x%08x -> 0x%08x, reason: %d, %s %s)",
-                g_parent->root.tree_id, cur->root.tree_id, reason,
-                str_since(g_parent->root.root_recv_time), str_since(cur->root.root_recv_time));
-        } else if (cur) {
-            log_debug("get_parent(): parent changed (none -> 0x%08x), reason: %d", cur->root.tree_id, reason);
+                g_parent->root.tree_id, parent->root.tree_id, reason,
+                str_since(g_parent->root.root_recv_time), str_since(parent->root.root_recv_time));
+        } else if (parent) {
+            log_debug("get_parent(): parent changed (none -> 0x%08x), reason: %d", parent->root.tree_id, reason);
         } else if (g_parent) {
             log_debug("get_parent(): parent changed (0x%08x -> none), reason: %d", g_parent->root.tree_id, reason);
         } else {
             log_debug("get_parent(): parent changed (none -> none), reason: %d", reason);
         }
-        g_parent = cur;
+        g_parent = parent;
     }
 
-    return cur;
+    return parent;
 }
 
 // used for ROOT_CREATE and PING packets only
@@ -213,7 +215,6 @@ static void send_bcast_wrapper(const char *context, /*const IFState *interface,*
 // called every time we need to consider sending a ROOT_CREATE packet
 static bool send_ROOT_CREATE()
 {
-    Neighbor *g_neighbors = neighbors_all();
     /*
     // got own packet
     ifstate->recv_own_broadcast_time = gstate.time_now;
@@ -247,7 +248,7 @@ aim:
  - if a parent changes, try to send the next
 
     */
-    Neighbor* parent = tree_get_parent(g_neighbors);
+    Neighbor* parent = tree_get_parent();
     if (parent && parent->root_set) {
         IFState *ifstate = ifstates_get(&parent->address);
         const Root* root = &parent->root;
@@ -326,6 +327,14 @@ aim:
 
 bool neighbor_is_child(const Neighbor *neighbor)
 {
+    if (neighbor->root_store_received_time > 0) {
+        return neighbor->is_child;
+    } else {
+        // is_child has not been set via a ROOT_CREATE packet
+        return false;
+    }
+
+#if 0
     const uint64_t us = neighbor->root_store_to_us_received_time;
     const uint64_t others = neighbor->root_store_to_others_received_time;
 //    const uint64_t now = gstate.time_now;
@@ -345,6 +354,7 @@ bool neighbor_is_child(const Neighbor *neighbor)
     }
 */
     return true;
+#endif
 }
 
 static void collect_ranges_from_children(Ranges *ranges)
@@ -373,8 +383,6 @@ static bool over(uint64_t time, uint64_t duration)
 
 static void send_ROOT_STORE_periodic()
 {
-    Neighbor *g_neighbors = neighbors_all();
-
 #define ROOT_STORE_MIN_SEND_INTERVAL_MS 1000
 #define ROOT_STORE_MAX_SEND_INTERVAL_MS 10000
 
@@ -383,7 +391,7 @@ static void send_ROOT_STORE_periodic()
     static uint64_t interval_ms = ROOT_STORE_MIN_SEND_INTERVAL_MS;
     static Address parent_address = {0};
 
-    Neighbor *parent = tree_get_parent(g_neighbors);
+    Neighbor *parent = tree_get_parent();
 
     if (parent) {
         ranges_clear(&ranges);
@@ -471,16 +479,11 @@ void handle_ROOT_STORE(IFState *ifstate, Neighbor *neighbor, const Address *src,
         log_warning("ROOT_STORE: failed to decompress ranges from %s", str_addr(src));
     } else {
         neighbor->ranges_set = true;
-        if (is_destination) {
-            // => neighbor is our child node
-            neighbor->root_store_to_us_received_time = gstate.time_now;
-        } else {
-            // => neighbor is not our child node
-            neighbor->root_store_to_others_received_time = gstate.time_now;
-        }
-        //store entries, this is the important part
+        neighbor->root_store_received_time = gstate.time_now;
+        neighbor->is_child = is_destination;
+
         log_debug("ROOT_STORE: got packet from %s, is_destination: %s, bytes: %d, span: %d, ranges: %s",
-            str_addr(src), str_bool(is_destination), data_size, (int) ranges_span(&neighbor->ranges),
+            str_addr(src), str_bool(neighbor->is_child), data_size, (int) ranges_span(&neighbor->ranges),
             ranges_str(&neighbor->ranges));
     }
 }
@@ -515,20 +518,19 @@ void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Address *src
 
     // might be prefix or hash?
     if (p->prev_sender == gstate.own_id) {
-        // we are the previous sender => that neighbor relies on our broadcasts
-        // packet will be dropped further down based on seq_num
+        // We are the previous sender => that neighbor relies on our broadcasts.
+        // Packet will be dropped further down based on seq_num.
         log_debug("handle_ROOT_CREATE: got own packet");
         ifstate->recv_own_broadcast_time = now;
         memcpy(&ifstate->recv_own_broadcast_address, src, sizeof(Address));
     }
 
-    // current parent or null if we are root
-    Neighbor *old_parent = tree_get_parent(neighbors_all());
-    assert(old_parent->root_set);
+    // current (potentially) parent or null if we are root
+    Neighbor *cur_parent = tree_get_parent();
 
     // drop packet if we already got this or an older packet from the current parent
-    if (old_parent && old_parent->root_set && old_parent->root.tree_id == p->tree_id
-            && !is_newer_seqnum(old_parent->root.root_seq_num, p->root_seq_num)) {
+    if (cur_parent && cur_parent->root_set && cur_parent->root.tree_id == p->tree_id
+            && !is_newer_seqnum(cur_parent->root.root_seq_num, p->root_seq_num)) {
         return;
     }
 
@@ -554,9 +556,9 @@ void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Address *src
     neighbor->root.root_next_send_ms = p->next_send_ms; // todo, consider in timeout in tree_get_parent()
     neighbor->root.parent_id = p->sender; // for debugging?
 
-    Neighbor* new_parent = tree_get_parent(neighbors_all());
+    Neighbor* new_parent = tree_get_parent();
 
-    if (old_parent != new_parent) {
+    if (cur_parent != new_parent) {
         log_debug("handle_ROOT_CREATE: parent changed");
 
         new_parent->root.store_send_counter = 0;
@@ -573,32 +575,6 @@ void handle_ROOT_CREATE(IFState *ifstate, Neighbor *neighbor, const Address *src
         if (is_send) {
             neighbor->root.root_send_time = now;
         }
-/*
-        // neighbor is parent in tree => forward
-        neighbor->root.root_send_time = gstate.time_now;
-
-        p->hop_count = MIN(p->hop_count + 1U, UINT8_MAX);
-        p->prev_sender = p->sender;
-        p->sender = gstate.own_id;
-
-        // TODO: change time?
-        //p->next_send_ms = 
-
-        // TODO: adjust root timeout
-        // we received a ROOT_CREATE packet by us less then 10s ago
-        bool is_needed = (ifstate->send_broadcast_time == 0)
-            || ((ifstate->recv_own_broadcast_time + 10000) > gstate.time_now); // g_send_broadcast_time);
-
-        log_debug("handle_ROOT_CREATE: is_needed: %s, next_send_ms: %d", str_bool(is_needed), (int) p->next_send_ms);
-        if (is_needed) { //} || p->required_send) {
-            ifstate->send_broadcast_time = gstate.time_now;
-            send_bcast_wrapper("handle_ROOT_CREATE", p);
-        }
-*/
-        //if (p->required_send) {
-        //    // needed?
-        //    ifstate->recv_required_broadcast_time = gstate.time_now;
-        //}
     } else {
         log_trace("handle_ROOT_CREATE: got packet from %s tree_id: 0x%08x, root_seq_num: %d => drop",
             str_addr(&neighbor->address), p->tree_id, (int) p->root_seq_num);
@@ -659,10 +635,3 @@ static void send_ROOT_CREATE_periodic()
         }
     }
 }*/
-
-/*
-static bool we_are_root()
-{
-    return tree_get_parent(g_neighbors) == NULL;
-}
-*/

@@ -25,8 +25,9 @@ typedef struct {
     uint64_t time_created;
     uint64_t time_updated;
 
-    uint64_t root_store_to_others_received_time;
-    uint64_t root_store_to_us_received_time;
+    //uint64_t root_store_to_others_received_time;
+    bool is_child;
+    uint64_t root_store_received_time;
 
     bool root_set;
     Root root;

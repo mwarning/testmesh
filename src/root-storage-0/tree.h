@@ -15,7 +15,7 @@ Root *tree_get_root();
 void tree_periodic();
 void tree_neighbor_removed(const Neighbor *neighbor);
 
-Neighbor *tree_get_parent(Neighbor *g_neighbors);
+Neighbor *tree_get_parent();
 
 bool neighbor_is_child(const Neighbor *neighbor);
 
