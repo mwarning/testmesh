@@ -83,6 +83,8 @@ void packet_cache_add(uint32_t id, void *data, size_t data_length)
 
     if (is_new) {
         HASH_ADD(hh, g_packet_cache, id, sizeof(uint32_t), e);
+    } else {
+        log_warning("packet_cache_add: drop stored packet for 0x%08x", id);
     }
 }
 
