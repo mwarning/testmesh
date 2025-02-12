@@ -19,6 +19,15 @@
 #include "utils.h"
 
 
+uint8_t highest_bit(uint64_t value)
+{
+    uint8_t pos = 0;
+    while (value >>= 1) {
+        ++pos;
+    }
+    return pos;
+}
+
 int decrease_ip_ttl(const void *data, size_t length)
 {
     uint8_t *buf = (uint8_t*) data;
@@ -65,7 +74,7 @@ char *bytes_to_base16(char dst[], size_t dstsize, const uint8_t src[], size_t sr
     return dst;
 }
 
-bool addr_port_set(struct sockaddr *addr, uint16_t port)
+bool addr_set_port(struct sockaddr *addr, uint16_t port)
 {
     switch (addr->sa_family) {
     case AF_INET:
@@ -155,7 +164,8 @@ bool is_newer_seqnum(uint16_t cur, uint16_t new)
     }
 }
 
-// separate a string into a list of arguments (int argc, char **argv)
+// Separate a string into a list of arguments (int argc, char **argv).
+// Modifies args!
 int setargs(const char **argv, int argv_size, char *args)
 {
     int count = 0;
@@ -237,57 +247,6 @@ ssize_t bytes_random(void *buffer, size_t size)
    close(fd);
 
    return rc;
-}
-
-bool address_is_multicast(const Address *addr)
-{
-    switch (addr->family) {
-    case AF_MAC: {
-        const uint8_t *mac = &addr->mac.addr.data[0];
-        return mac[0] == 0x01 && mac[1] == 0x00 && mac[2] == 0x5e;
-    }
-    case AF_INET6:
-        return IN6_IS_ADDR_MULTICAST(&((struct sockaddr_in6*) addr)->sin6_addr);
-    case AF_INET:
-        return IN_MULTICAST(ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr));
-    default:
-        log_error("address_is_multicast: invalid address");
-        exit(1);
-    }
-}
-
-bool address_is_broadcast(const Address *addr)
-{
-    static const uint8_t bmac[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-
-    switch (addr->family) {
-    case AF_MAC:
-        return 0 == memcmp(&addr->mac.addr, &bmac[0], sizeof(bmac));
-    case AF_INET6:
-        // there are no broadcasts in IPv6
-        return false;
-    case AF_INET:
-        return (ntohl(((struct sockaddr_in*) addr)->sin_addr.s_addr) & 0xff) == 0xff;
-    default:
-        log_error("address_is_broadcast() invalid address");
-        exit(1);
-    }
-}
-
-bool address_is_null(const Address *addr)
-{
-    static const Address null_address = {0};
-    return 0 == memcmp(&null_address, addr, sizeof(Address));
-}
-
-bool address_is_unicast(const Address *addr)
-{
-    return !address_is_broadcast(addr) && !address_is_multicast(addr);
-}
-
-bool address_equal(const Address *a, const Address *b)
-{
-    return 0 == memcmp(a, b, sizeof(Address));
 }
 
 bool hex_dump(char *dst, size_t dstlen, const void *buf, size_t buflen)
@@ -547,70 +506,14 @@ const char *str_bytes(uint64_t bytes)
     return buf;
 }
 
-const char *str_mac(const struct mac *addr)
-{
-    static char strmacbuf[4][18];
-    static size_t strmacbuf_i = 0;
-    char *buf = strmacbuf[++strmacbuf_i % 4];
-
-    sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
-            addr->data[0], addr->data[1], addr->data[2],
-            addr->data[3], addr->data[4], addr->data[5]);
-
-    return buf;
-}
-
-const char *str_addr(const Address *addr)
-{
-    static char straddrbuf[4][INET6_ADDRSTRLEN + 8]; // +8 for "[]:<port>"
-    static size_t straddrbuf_i = 0;
-    char *buf = straddrbuf[++straddrbuf_i % 4];
-
-    switch (addr->family) {
-    case AF_INET6:
-    case AF_INET:
-        return str_addr_storage_buf(buf, (struct sockaddr*) addr);
-    case AF_MAC: {
-        const struct mac *a = &addr->mac.addr;
-        snprintf(buf, INET6_ADDRSTRLEN + 8,
-            "%02x:%02x:%02x:%02x:%02x:%02x",
-            a->data[0], a->data[1], a->data[2],
-            a->data[3], a->data[4], a->data[5]);
-        return buf;
-    }
-    default:
-        return NULL;
-    }
-}
-
-static bool addr_is_linklocal_ipv4(const struct in_addr *addr)
+bool addr_is_linklocal_ipv4(const struct in_addr *addr)
 {
     return ((addr->s_addr & 0x0000ffff) == 0x0000fea9);
 }
 
-static bool addr_is_linklocal_ipv6(const struct in6_addr *addr)
+bool addr_is_linklocal_ipv6(const struct in6_addr *addr)
 {
     return (addr->s6_addr[0] == 0xfe) && ((addr->s6_addr[1] & 0xC0) == 0x80);
-}
-
-uint32_t address_ifindex(const Address *addr)
-{
-    switch (addr->family) {
-    case AF_INET6:
-        if (addr_is_linklocal_ipv6(&addr->ip6.sin6_addr)) {
-            return addr->ip6.sin6_flowinfo;
-        }
-        return 0;
-    case AF_INET:
-        if (addr_is_linklocal_ipv4(&addr->ip4.sin_addr)) {
-            return 0; // no interface available for IPv4?
-        }
-        return 0;
-    case AF_MAC:
-        return addr->mac.ifindex;
-    default:
-        return 0;
-    }
 }
 
 const char *str_addr6(const struct sockaddr_in6 *addr)
@@ -618,6 +521,14 @@ const char *str_addr6(const struct sockaddr_in6 *addr)
     static char straddr6buf[4][INET6_ADDRSTRLEN + 8];
     static size_t straddr6buf_i = 0;
     char *buf = straddr6buf[++straddr6buf_i % 4];
+    return str_addr_storage_buf(buf, (struct sockaddr*) addr);
+}
+
+const char *str_addr4(const struct sockaddr_in *addr)
+{
+    static char straddr4buf[4][INET_ADDRSTRLEN + 8];
+    static size_t straddr4buf_i = 0;
+    char *buf = straddr4buf[++straddr4buf_i % 4];
     return str_addr_storage_buf(buf, (struct sockaddr*) addr);
 }
 
@@ -675,61 +586,6 @@ uint32_t addr_cmp_subnet(const struct sockaddr *addr1, const struct sockaddr *ad
     }
 
     return common_bits(p1, p2, subnet_len);
-}
-
-/*
-Highjack IPv6 multicast scope definition:
-0x0     reserved
-0x1     interface-local     Interface-local scope spans only a single interface on a node, and is useful only for loopback transmission of multicast.
-0x2     link-local  Link-local scope spans the same topological region as the corresponding unicast scope.
-0x3     realm-local     Realm-local scope is defined as larger than link-local, automatically determined by network topology and must not be larger than the following scopes.[15]
-0x4     admin-local     Admin-local scope is the smallest scope that must be administratively configured, i.e., not automatically derived from physical connectivity or other, non-multicast-related configuration.
-0x5     site-local  Site-local scope is intended to span a single site belonging to an organisation.
-0x8     organization-local  Organization-local scope is intended to span all sites belonging to a single organization.
-0xe     global  Global scope spans all reachable nodes on the internet - it is unbounded.
-0xf     reserved
-For unicast addresses, two scopes are defined: link-local and global.
-
-https://en.wikipedia.org/wiki/IPv6_address#Address_scopes
-*/
-
-uint16_t address_scope(const Address *addr)
-{
-    switch (addr->family) {
-    case AF_MAC:
-        return 0x1;
-    case AF_INET: {
-        const struct in_addr *a = &((const struct sockaddr_in *) addr)->sin_addr;
-        if (addr_is_linklocal_ipv4(a)) {
-            return 0x02;
-        }
-        const uint8_t *address = (const uint8_t*) &addr->ip4.sin_addr;
-        if ((address[0] == 192 && address[0] == 168) || (address[0] == 10)) {
-            return 0x03;
-        } else {
-            return 0x0E;
-        }
-    }
-    case AF_INET6: {
-        const struct in6_addr *a = &((const struct sockaddr_in6 *) addr)->sin6_addr;
-        if (addr_is_linklocal_ipv6(a)) {
-            return 0x02;
-        }
-        return 0x01;
-        //sin6_addr.s6_addr[]
-/*
-        //const uint8_t *address = (const uint8_t*) &addr->ip6.sin6_addr;
-        return (a[0] == 0xFF) ||
-            (a[0] == 0xFE && (a[1] & 0xC0) == 0x80) ||
-            (memcmp(a, zeroes, 15) == 0 &&
-            (a[15] == 0 || a[15] == 1)) ||
-            (memcmp(a, v4prefix, 12) == 0);
-*/
-    }
-    default:
-        log_error("address_scope() invalid address");
-        exit(1);
-    }
 }
 
 bool addr_is_localhost(const struct sockaddr *addr)
@@ -824,6 +680,15 @@ bool parse_hex(uint64_t *ret, const char *val, int bytes)
     *ret = strtoul(val + 2, &end, 16);
     return (val + len) == end;
 }
+
+/*
+bool parse_number(uint64_t *ret, const char *val, int bytes)
+{
+    char *end = NULL;
+    *ret = strtoul(val, &end, 10);
+    return (val + len) == end && ;
+}
+*/
 
 /*
 * Parse/Resolve various string representations of
