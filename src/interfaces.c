@@ -142,7 +142,7 @@ static bool set_promisc_mode(const char *ifname)
     ifopts.ifr_flags |= IFF_PROMISC;
     int rc2 = ioctl(gstate.sock_help, SIOCSIFFLAGS, &ifopts);
 
-    return (rc1 == 0 && rc2 == 0) ? 0 : 1;
+    return (rc1 == 0 && rc2 == 0);
 }
 
 static bool setup_raw_socket(int *sock_ret, const char *ifname, uint32_t ifindex)
@@ -207,7 +207,7 @@ static bool interface_setup(struct interface *ifa)
     }
 
     if (gstate.protocol->ext_handler_l2) {
-        if (set_promisc_mode(ifname)) {
+        if (!set_promisc_mode(ifname)) {
             if (!quiet)
                 log_warning("failed to set interface into promisc mode: %s", ifname);
             return false;
