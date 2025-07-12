@@ -437,17 +437,17 @@ static const char *_str_time(uint64_t ms, bool is_negative)
     milliseconds = ms;
 
     if (years > 0) {
-        snprintf(buf, 64, "%s%zuy%zud", prefix, years, days);
+        snprintf(buf, 64, "%s%zuy%02zud", prefix, years, days);
     } else if (days > 0) {
-        snprintf(buf, 64, "%s%zud%zuh", prefix, days, hours);
+        snprintf(buf, 64, "%s%zud%02zuh", prefix, days, hours);
     } else if (hours > 0) {
-        snprintf(buf, 64, "%s%zuh%zum", prefix, hours, minutes);
+        snprintf(buf, 64, "%s%zuh%02zum", prefix, hours, minutes);
     } else if (minutes > 0) {
-        snprintf(buf, 64, "%s%zum%zus", prefix, minutes, seconds);
+        snprintf(buf, 64, "%s%zum%02zus", prefix, minutes, seconds);
     } else if (seconds > 0) {
-        snprintf(buf, 64, "%s%zus%zums", prefix, seconds, milliseconds);
+        snprintf(buf, 64, "%s%zus%03zums", prefix, seconds, milliseconds);
     } else {
-        snprintf(buf, 64, "%s%zums", prefix, milliseconds);
+        snprintf(buf, 64, "%s%03zums", prefix, milliseconds);
     }
 
     return buf;
