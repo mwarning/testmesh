@@ -30,6 +30,7 @@ typedef struct {
 const option_t *find_option(const option_t options[], const char name[]);
 int setargs(const char **argv, int argv_size, char *args);
 
+// note: value 0 will return 1
 uint8_t highest_bit(uint64_t value);
 int decrease_ip_ttl(const void *data, size_t length);
 bool match(const char *argv[], const char *pattern); // matches a single argument
@@ -42,7 +43,9 @@ bool is_newer_seqnum(uint16_t cur, uint16_t new);
 bool parse_hex(uint64_t *ret, const char *val, int bytes);
 char *bytes_to_base16(char dst[], size_t dstsize, const uint8_t src[], size_t srcsize);
 
+// get milliseconds since startup
 uint64_t time_millis_now();
+// get milliseconds resolution
 uint32_t time_millis_resolution();
 
 const char *str_af(int af);

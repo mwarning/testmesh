@@ -21,11 +21,15 @@
 
 uint8_t highest_bit(uint64_t value)
 {
+    // 0 is undefined for __builtin_clzll!
+    return  __builtin_clzll(value | 1);
+/*
     uint8_t pos = 0;
     while (value >>= 1) {
         ++pos;
     }
     return pos;
+*/
 }
 
 int decrease_ip_ttl(const void *data, size_t length)
